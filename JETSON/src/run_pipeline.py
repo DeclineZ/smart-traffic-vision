@@ -51,7 +51,6 @@ def main():
     jetson_dir = os.path.dirname(script_dir)  # JETSON
     root_dir = os.path.dirname(jetson_dir)  # traffic (project root)
     
-    logger.info(f"Script dir: {script_dir}")
     logger.info(f"Root directory resolved to: {root_dir}")
 
     parser = argparse.ArgumentParser(description="Run Jetson TRT Pipeline with SORT")

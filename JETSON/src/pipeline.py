@@ -26,7 +26,7 @@ from trt_pipeline.tools import (
 class Pipeline:
     def __init__(self, config_path: str, engine_path: str, save_crop: bool = False, root_dir: str = None):
         self.logger = get_logger("JetsonPipeline")
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu")
         self.logger.info(f"Device: {self.device}")
 
         self.config = initial_config(config_path, root_dir=root_dir)
@@ -59,7 +59,7 @@ class Pipeline:
         # Resource monitoring
         self.process = psutil.Process()
         self.timing_stats = defaultdict(list)
-        self.resource_log_interval = 30  # Log every 30 frames
+        self.resource_log_interval = 100
 
     def initial_tracker(self, config):
         """Initialize tracker with configuration parameters.
