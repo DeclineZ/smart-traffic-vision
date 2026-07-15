@@ -1,3 +1,4 @@
+*venv*
 video
 image
 yolo*
@@ -16,3 +17,4 @@ yolov7/
 runs/
 */data/*
 result_test_skip.zip
+temp/*

@@ -28,6 +28,7 @@ PyYAML==5.4.1                     # Config file parsing
 tqdm==4.62.3                      # Progress bars
 Pillow==8.4.0                     # Image operations (PIL)
 pytz==2025.2                      # Timezone handling (result logging)
+psutil==5.8.0                     # System and process resource monitoring
 
 # ============================================================================
 # OPTIONAL PACKAGES (Install only if needed for advanced features)

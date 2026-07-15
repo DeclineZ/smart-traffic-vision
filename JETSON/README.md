@@ -1,102 +1,84 @@
-# Jetson Nano Deployment Package
+# JETSON Deployment
 
-⚠️ **IMPORTANT:** This is ONLY for Jetson Nano deployment. Your main development environment can continue using boxmot trackers (ByteTrack, OcSort, etc.)
+Directory structure for Jetson Nano deployment.
 
-**Status:** ✅ Ready for Deployment  
-**Date:** February 3, 2026  
-**Target:** Jetson Nano (CUDA 10.2, Python 3.6.9)
+## 📁 Structure
 
----
-
-## 📁 Files in This Directory
-
-| File | Purpose |
-|------|---------|
-| **[requirements.txt](requirements.txt)** | All dependencies optimized for Jetson Nano |
-| **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** | Complete setup and verification guide |
-| **[CODE_CHANGES.md](CODE_CHANGES.md)** | Required code modifications |
-
----
+```
+JETSON/
+├── docs/                          # Documentation
+│   ├── README.md                  # Original README
+│   ├── DEPLOYMENT_GUIDE.md        # Deployment instructions
+│   ├── TESTING_GUIDE.md           # Testing procedures
+│   ├── CODE_CHANGES.md            # Change log
+│   └── CROSS_PLATFORM_GUIDE.md    # Windows ↔ Jetson development
+│
+├── config/                        # Configuration & dependencies
+│   ├── requirements.txt           # Shared dependencies
+│   ├── requirements2.txt          # Jetson-specific dependencies
+│   └── requirements_windows.txt   # Windows development dependencies
+│
+├── src/                           # Source code
+│   ├── pipeline.py                # Main pipeline
+│   ├── run_pipeline.py            # Pipeline entry point
+│   ├── sort.py                    # Tracking/sorting logic
+│   └── platform_config.py         # Cross-platform configuration
+│
+├── venv/                          # Virtual environment (ignore in git)
+└── README.md                      # This file
+```
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### On Windows (Development)
 ```bash
-cd JETSON
-pip install -r requirements.txt
+pip install -r config/requirements_windows.txt
+cd src
+python run_pipeline.py
 ```
 
-### 2. Apply Code Changes (JETSON ONLY)
-**⚠️ Only make these changes on Jetson Nano, NOT on your development machine!**
-
-See [CODE_CHANGES.md](CODE_CHANGES.md) for details:
-- Comment out `ultralytics` and `boxmot` imports in `pipelineV7.py`
-- Comment out `boxmot` import in `trt_pipeline/tracking.py`
-- Use `--type sort` when running (other trackers won't work on Jetson)
-
-### 3. Verify Installation
+### On Jetson (Deployment)
 ```bash
-python -c  (on Jetson Nano)
-```bash
-cd ..
-python main.py tracking --config config/config_test.json --type sort
+pip install -r config/requirements2.txt
+cd src
+python run_pipeline.py
 ```
 
-**Note:** On Jetson, you can ONLY use `--type sort`. Other trackers (ByteTrack, OcSort, etc.) require boxmot which isn't available.bash
-cd ..
-python main.py tracking --config config/config_test.json --type sort
+## 📖 Documentation
+
+- 👉 **Start here**: [docs/README.md](docs/README.md)
+- Deploy: [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
+- Test: [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)
+- Dev: [docs/CROSS_PLATFORM_GUIDE.md](docs/CROSS_PLATFORM_GUIDE.md)
+- Changes: [docs/CODE_CHANGES.md](docs/CODE_CHANGES.md)
+
+## 💡 Key Files
+
+- **src/platform_config.py** - Use this to write cross-platform code
+- **config/requirements_windows.txt** - Windows development setup
+- **config/requirements2.txt** - Jetson production setup
+
+## 🔗 Platform Detection
+
+In any Python file, use `platform_config`:
+
+```python
+from src.platform_config import IS_JETSON, DEVICE
+
+if IS_JETSON:
+    # Jetson-specific code (GPIO, TensorRT)
+    pass
+else:
+    # Windows development code
+    pass
+
+# Device-agnostic
+model = model.to(DEVICE)  # Works on both platforms
 ```
 
----
+## ✅ Workflow
 
-## ✅ What's Included
-
-**13 Core Dependencies** (all Jetson-compatible):
-- PyTorch 1.10.0 + TorchVision 0.11.1
-- OpenCV 4.5.3, NumPy 1.19.4
-- TensorRT 8.2.1.8
-- Tracking: filterpy, scipy
-- Utilities: shapely, PyYAML, tqdm, Pillow, pytz
-
-**Removed** (incompatible):
-- ❌ ultralytics (requires newer numpy)
-- ❌ boxmot (not available for Jetson)
-
----
-
-## 📊 Expected Performance
-
-- **Inference Speed:** 15-30 FPS (model dependent)
-- **Memory Usage:** < 3GB RAM
-- **Model Load:** < 2 seconds
-- **Tracking:** SORT (Kalman-based, real-time)
-
----
-
-## 🆘 Troubleshooting
-
-**Import errors?**
-- Verify numpy version: `python -c "import numpy; print(numpy.__version__)"` → Must be 1.19.4
-
-**CUDA not found?**
-- Check: `python -c "import torch; print(torch.cuda.is_available())"` → Must be True
-
-**Model loading fails?**
-- Ensure `yolov7/` folder exists in parent directory
-- Check model file: `models/yolov7.pt` or `models/yolov7-tiny.engine`
-
-**More help:** See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) Section 12
-
----
-
-## 📝 Summary of Changes
-
-From original requirements:
-- **Before:** 15+ packages, including incompatible ultralytics/boxmot
-- **After:** 13 core packages, all Jetson-compatible
-- **Code changes:** 2 files (remove 4 lines total)
-- **Result:** Clean, optimized inference pipeline
-
----
-
-**Ready to deploy!** 🎯
+1. **Develop on Windows** → Use `requirements_windows.txt`
+2. **Test locally** → All core logic
+3. **Push to Jetson** → Git pull + `pip install -r config/requirements2.txt`
+4. **Deploy** → `python src/run_pipeline.py`
