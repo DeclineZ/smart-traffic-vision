@@ -1,30 +1,119 @@
 {
-    "video": "C:/Users/Auto/Downloads/south_evening.avi",
-    "output": "./output/south_evening",
-    "tracking": [
-        {
-            "name": "left_lane",
-            "lane": "[(1002, 249), (1180, 289), (79, 555), (4, 333)]",
-            "line": "[(762, 261), (1095, 313)]",
-            "desc": "come from Chaingmai"
-        },
-        {
-            "name": "right_lane",
-            "lane": "[(1317, 275), (1553, 322), (1467, 1040), (14, 576)]",
-            "line": "[(167, 531), (1617, 945)]",
-            "desc": "come from bankok"
-        }
-    ],
+  "_comment": "=== TrafficTracker Complete Configuration Template ===",
+  "_version": "1.0",
+  "_description": "Standard configuration file for traffic tracking across multiple cameras",
+
+  "camera_info": {
+    "camera_id": "CAM-001",
+    "location": "South Intersection",
+    "intersection_id": "INT-001",
+    "description": "Main entrance from Bangkok"
+  },
+
+  "video": {
+    "path": "C:/Users/Auto/Downloads/south_evening.avi",
     "skip": 0,
-    "scale": 25,
-    "density": [
-        {
-            "name": "zone_1",
-            "lane": "[(711, 267), (1042, 329), (1195, 283), (1081, 250)]"
-        },
-        {
-            "name": "zone_2",
-            "lane": "[(1347, 266), (1549, 310), (1540, 425), (1098, 345)]"
-        }
+    "_skip_note": "Number of frames to skip between processing (0 = process every frame)",
+    "max_frames": 0,
+    "_max_frames_note": "Maximum frames to process (null for entire video)"
+  },
+
+  "model": {
+    "engine_path": "models/yolov7-tiny.engine",
+    "input_shape": [1, 3, 640, 640],
+    "device": "cuda:0",
+    "_device_note": "Use 'cuda:0' for GPU or 'cpu' for CPU processing"
+  },
+
+  "tracker": {
+    "type": "ByteTrack",
+    "_type_note": "Tracker type: ByteTrack, BotSort, DeepOCSort, etc.",
+    "params": {
+      "min_conf": 0.3,
+      "track_thresh": 0.5,
+      "match_thresh": 0.7,
+      "track_buffer": 25,
+      "frame_rate": 25
+    }
+  },
+
+  "classes": {
+    "_description": "Vehicle class mapping from model output",
+    "dict_class": {
+      "1": "bicycle",
+      "2": "car",
+      "3": "motorcycle",
+      "5": "bus",
+      "7": "truck"
+    }
+  },
+
+  "output": {
+    "base_dir": "./output/south_upstream",
+    "save_crop": false,
+    "_save_crop_note": "Save cropped images of detected vehicles",
+    "data_output_path": "output/south_upstream/data.json",
+    "_data_output_path_note": "Path to save API payload data"
+  },
+
+  "tracking": {
+    "_description": "Vehicle crossing detection zones for lane counting",
+    "zones": [
+      {
+        "name": "right_lane",
+        "lane": "[(1317, 275), (1553, 322), (1467, 1040), (14, 576)]",
+        "line": "[(167, 531), (1617, 945)]",
+        "desc": "Traffic coming from Bangkok"
+      }
     ]
+  },
+
+  "lane_metrics": {
+    "_description": "Lane-specific metrics configuration for API publishing",
+    "enabled": true,
+    "publish_interval_frames": 50,
+    "_publish_interval_note": "Publish metrics every N frames",
+    
+    "lanes": {
+      "N1-UP": {
+        "direction": "N",
+        "description": "North Lane 1 Upstream",
+        "polygon": [[1386, 398], [1601, 434], [1622, 1066], [505, 1061]]
+      },
+      "N2-UP": {
+        "direction": "N",
+        "description": "North Lane 2 Upstream",
+        "polygon": [[6, 817], [1171, 358], [1398, 405], [692, 1058]]
+      },
+      "N3-UP": {
+        "direction": "N",
+        "description": "North Lane 3 Upstream",
+        "polygon": [[994, 317], [1209, 375], [42, 845], [6, 533]]
+      }
+    }
+  },
+
+  "density": {
+    "_description": "Road density estimation configuration",
+    "enabled": true,
+    "base_road_image": "trt_pipeline/base_road.png",
+    "_base_road_note": "Path to empty road reference image",
+    "zone_coordinates": [[1358, 279], [1548, 321], [1526, 412], [1115, 336]],
+    "_zone_note": "Polygon coordinates for density calculation area (null to disable)"
+  },
+
+  "websocket": {
+    "enabled": true,
+    "uri": "redis://localhost:6379",
+    "topic": "traffic_south_1"
+  },
+
+  "processing": {
+    "opencv_threads": 0,
+    "_opencv_threads_note": "Number of OpenCV threads (0 = auto)",
+    "use_opencl": false,
+    "_use_opencl_note": "Enable OpenCV OpenCL acceleration",
+    "video_queue_size": 2,
+    "_video_queue_note": "Video stream queue size for frame buffering"
+  }
 }

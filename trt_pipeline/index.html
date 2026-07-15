@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=DM+Sans:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #111318;
+  --s1:       #16181f;
+  --s2:       #1c1f28;
+  --s3:       #22263000;
+  --b1:       #252a35;
+  --b2:       #2e3445;
+  --blue:     #4f8ef7;
+  --blue-bg:  rgba(79,142,247,0.1);
+  --green:    #34d399;
+  --amber:    #fbbf24;
+  --red:      #f87171;
+  --purple:   #a78bfa;
+  --orange:   #fb923c;
+  --t1:       #e4e8f0;
+  --t2:       #8b93a8;
+  --t3:       #4a5168;
+  --mono:     'DM Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --r:        8px;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--t1); font-family: var(--sans); font-size: 13px; line-height: 1.5; overflow: hidden; }
+
+/* ── Layout ─────────────────────────────── */
+.app { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: 48px 1fr; height: 100vh; }
+
+/* ── Topbar ─────────────────────────────── */
+.topbar {
+  grid-column: 1/-1;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 18px;
+  background: var(--s1);
+  border-bottom: 1px solid var(--b1);
+}
+.t-title { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; color: var(--t1); }
+.t-div { width: 1px; height: 18px; background: var(--b2); margin: 0 2px; }
+.t-chip {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--blue); background: var(--blue-bg);
+  padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(79,142,247,0.2);
+}
+.t-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.t-meta { font-family: var(--mono); font-size: 11px; color: var(--t3); }
+
+/* ── Sidebar ─────────────────────────────── */
+.sidebar {
+  background: var(--s1); border-right: 1px solid var(--b1);
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--b2); }
+
+.sb { padding: 14px 14px 12px; border-bottom: 1px solid var(--b1); }
+.sb-hd { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t3); margin-bottom: 10px; }
+
+.field { margin-bottom: 8px; }
+.field label { display: block; font-size: 11px; color: var(--t3); margin-bottom: 3px; }
+.field input, .field textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--b2); border-radius: 6px;
+  color: var(--t1); font-family: var(--mono); font-size: 12px;
+  padding: 6px 9px; outline: none; transition: border-color 0.15s; resize: none;
+}
+.field input:focus, .field textarea:focus { border-color: var(--blue); }
+
+.btn {
+  display: block; width: 100%; padding: 7px 10px; margin-bottom: 5px;
+  border-radius: 6px; border: 1px solid var(--b2); background: var(--s2);
+  color: var(--t2); font-family: var(--sans); font-size: 12px; font-weight: 500;
+  cursor: pointer; text-align: center; transition: all 0.12s;
+}
+.btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: #3b7de8; border-color: #3b7de8; color: #fff; }
+
+/* Status */
+.status-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); transition: background 0.3s; flex-shrink: 0; }
+.dot.on { background: var(--green); }
+.st-text { font-size: 12px; color: var(--t2); }
+.st-count { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--t3); }
+
+/* Topic list */
+.topic-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 8px; border-radius: 5px; cursor: pointer;
+  color: var(--t2); font-size: 12px; transition: all 0.1s; margin-bottom: 2px;
+}
+.topic-item:hover { background: var(--s2); color: var(--t1); }
+.topic-item.active { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(79,142,247,0.2); }
+.topic-n { font-family: var(--mono); font-size: 10px; color: var(--t3); }
+.topic-item.active .topic-n { color: rgba(79,142,247,0.6); }
+.no-topics { font-size: 11px; color: var(--t3); }
+
+/* ── Main ─────────────────────────────────── */
+.main { overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.main::-webkit-scrollbar { width: 3px; }
+.main::-webkit-scrollbar-thumb { background: var(--b2); }
+
+.sec-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; }
+
+/* Vehicle cards */
+.cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+.vc {
+  background: var(--s1); border: 1px solid var(--b1); border-radius: var(--r);
+  padding: 13px 14px;
+}
+.vc-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.vc-label { font-size: 11px; color: var(--t2); }
+.vc-icon { font-size: 15px; line-height: 1; }
+.vc-val { font-family: var(--mono); font-size: 28px; font-weight: 400; color: var(--t1); line-height: 1; transition: color 0.2s; }
+.vc-delta { font-family: var(--mono); font-size: 11px; color: var(--t3); margin-top: 4px; }
+.vc-delta.up { color: var(--green); }
+.vc-bar { height: 2px; background: var(--b1); border-radius: 1px; margin-top: 8px; overflow: hidden; }
+.vc-bar-fill { height: 100%; border-radius: 1px; transition: width 0.4s ease; }
+
+/* Grid layouts */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* Panels */
+.panel { background: var(--s1); border: 1px solid var(--b1); border-radius: var(--r); overflow: hidden; }
+.ph { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--b1); }
+.ph-title { font-size: 12px; font-weight: 500; color: var(--t2); }
+.pb { padding: 14px; }
+.pb0 { padding: 0; }
+
+/* Chart */
+.cw { position: relative; }
+.cw.h170 { height: 170px; }
+.cw.h100 { height: 100px; }
+
+/* Density */
+.d-big { font-family: var(--mono); font-size: 40px; font-weight: 300; color: var(--t1); text-align: center; padding: 10px 0 6px; letter-spacing: -0.02em; }
+.d-track { height: 3px; background: var(--b1); border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
+.d-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.5s ease; }
+.d-sub { text-align: center; font-size: 10px; color: var(--t3); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* GPU */
+.gpu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.gpu-row:last-child { margin-bottom: 0; }
+.gpu-name { font-family: var(--mono); font-size: 10px; color: var(--t3); width: 44px; flex-shrink: 0; }
+.gpu-track { flex: 1; height: 3px; background: var(--b1); border-radius: 2px; overflow: hidden; }
+.gpu-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.5s ease, background 0.3s; }
+.gpu-pct { font-family: var(--mono); font-size: 11px; color: var(--t2); width: 32px; text-align: right; flex-shrink: 0; }
+.gpu-empty { font-size: 11px; color: var(--t3); }
+
+/* Log */
+.log {
+  height: 192px; overflow-y: auto; padding: 8px 12px;
+  display: flex; flex-direction: column-reverse;
+  font-family: var(--mono); font-size: 11px; line-height: 1.7;
+  background: var(--bg);
+}
+.log::-webkit-scrollbar { width: 3px; }
+.log::-webkit-scrollbar-thumb { background: var(--b2); }
+.ll { display: flex; gap: 8px; align-items: baseline; }
+.l-ts { color: var(--t3); flex-shrink: 0; }
+.l-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; letter-spacing: 0.04em; }
+.tag-UPDATE     { background: rgba(79,142,247,0.13); color: #7aaeff; }
+.tag-HEARTBEAT  { background: rgba(52,211,153,0.1);  color: #34d399; }
+.tag-CONNECT    { background: rgba(251,191,36,0.1);  color: #fbbf24; }
+.tag-DISCONNECT { background: rgba(248,113,113,0.1); color: #f87171; }
+.tag-TOPICS     { background: rgba(167,139,250,0.1); color: #a78bfa; }
+.l-topic { color: var(--t3); flex-shrink: 0; }
+.l-body  { color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+.btn-xs {
+  padding: 3px 9px; font-size: 11px; border-radius: 5px;
+  border: 1px solid var(--b2); background: transparent;
+  color: var(--t3); cursor: pointer; font-family: var(--sans);
+  transition: all 0.12s;
+}
+.btn-xs:hover { border-color: var(--blue); color: var(--blue); }
+
+@keyframes flash { 0%{ color: var(--blue); } 100%{ color: var(--t1); } }
+.flash { animation: flash 0.4s ease; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <span class="t-title">Traffic Monitor</span>
+    <div class="t-div"></div>
+    <span class="t-chip" id="topicChip">no topic</span>
+    <div class="t-right">
+      <span class="t-meta" id="hFrame">frame —</span>
+      <span class="t-meta" id="hClock"></span>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+
+    <div class="sb">
+      <div class="sb-hd">Connection</div>
+      <div class="field"><label>WebSocket URI</label><input id="wsUri" value="ws://localhost:8765"></div>
+      <button class="btn primary" id="btnConnect">Connect</button>
+      <button class="btn" id="btnDisc" disabled>Disconnect</button>
+      <div class="status-row">
+        <div class="dot" id="dot"></div>
+        <span class="st-text" id="stText">Offline</span>
+        <span class="st-count" id="msgCnt">0 msg</span>
+      </div>
+    </div>
+
+    <div class="sb">
+      <div class="sb-hd">Topic</div>
+      <div class="field"><input id="topicIn" value="traffic_south_1" placeholder="topic name"></div>
+      <button class="btn" id="btnSub">Subscribe</button>
+    </div>
+
+    <div class="sb" style="flex:1">
+      <div class="sb-hd">Live Topics</div>
+      <div id="topicList"><div class="no-topics">None discovered</div></div>
+    </div>
+
+  </aside>
+
+  <main class="main">
+
+    <div>
+      <div class="sec-label">Vehicle Counts</div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <div class="g2">
+      <div class="panel">
+        <div class="ph"><span class="ph-title">Road Density</span></div>
+        <div class="pb">
+          <div class="d-big" id="dNum">—</div>
+          <div class="d-track"><div class="d-fill" id="dBar" style="width:0%"></div></div>
+          <div class="d-sub">occupancy index</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph"><span class="ph-title">GPU Utilisation</span></div>
+        <div class="pb"><div id="gpuBars"><div class="gpu-empty">Awaiting data</div></div></div>
+      </div>
+    </div>
+
+    <div class="g2">
+      <div class="panel">
+        <div class="ph"><span class="ph-title">Vehicle Trend</span></div>
+        <div class="pb"><div class="cw h170"><canvas id="tChart"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <div class="ph">
+          <span class="ph-title">Interface Log</span>
+          <button class="btn-xs" id="btnExport">Export</button>
+        </div>
+        <div class="log" id="logEl"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────
+const VEH    = ['bicycle','car','motorcycle','bus','truck'];
+const COLORS = { bicycle:'#4f8ef7', car:'#34d399', motorcycle:'#fbbf24', bus:'#fb923c', truck:'#a78bfa' };
+const ICONS  = { bicycle:'🚲', car:'🚗', motorcycle:'🏍', bus:'🚌', truck:'🚛' };
+const HIST   = 60;
+
+// ── State ──────────────────────────────────────────────────
+let ws = null, activeTopic = null, msgCount = 0, logs = [];
+const totals  = Object.fromEntries(VEH.map(v=>[v,0]));
+const history = Object.fromEntries(VEH.map(v=>[v,Array(HIST).fill(0)]));
+const topics  = new Map(); // topic → { count, last }
+
+// ── Clock ──────────────────────────────────────────────────
+setInterval(()=>{ document.getElementById('hClock').textContent = new Date().toLocaleTimeString('en-GB'); }, 500);
+
+// ── Build cards ────────────────────────────────────────────
+(function buildCards(){
+  document.getElementById('cards').innerHTML = VEH.map(v=>`
+    <div class="vc">
+      <div class="vc-row">
+        <span class="vc-label">${v}</span>
+        <span class="vc-icon">${ICONS[v]}</span>
+      </div>
+      <div class="vc-val" id="cv-${v}">0</div>
+      <div class="vc-delta" id="cd-${v}">+0 this interval</div>
+      <div class="vc-bar"><div class="vc-bar-fill" id="cb-${v}" style="width:0%;background:${COLORS[v]}"></div></div>
+    </div>`).join('');
+})();
+
+// ── Trend chart ────────────────────────────────────────────
+const tCtx = document.getElementById('tChart').getContext('2d');
+const tChart = new Chart(tCtx, {
+  type: 'line',
+  data: {
+    labels: Array(HIST).fill(''),
+    datasets: VEH.map(v=>({
+      label: v, data: history[v].slice(),
+      borderColor: COLORS[v], backgroundColor: COLORS[v]+'14',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true,
+    }))
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 200 },
+    interaction: { mode:'index', intersect: false },
+    plugins: {
+      legend: { position:'top', labels: { color:'#4a5168', font:{ family:'DM Mono', size:10 }, boxWidth:9, padding:12 } },
+      tooltip: { backgroundColor:'#1c1f28', borderColor:'#252a35', borderWidth:1, padding:10,
+        titleFont:{ family:'DM Mono', size:10 }, bodyFont:{ family:'DM Mono', size:11 },
+        titleColor:'#8b93a8', bodyColor:'#e4e8f0' }
+    },
+    scales: {
+      x: { display: false },
+      y: { grid:{ color:'#1c1f28' }, ticks:{ color:'#4a5168', font:{ family:'DM Mono', size:10 } }, border:{ color:'#252a35' } }
+    }
+  }
+});
+
+// ── WebSocket ──────────────────────────────────────────────
+function setStatus(on, text){
+  document.getElementById('dot').className    = 'dot'+(on?' on':'');
+  document.getElementById('stText').textContent = text;
+  document.getElementById('btnConnect').disabled =  on;
+  document.getElementById('btnDisc').disabled    = !on;
+}
+
+function connect(){
+  if(ws) ws.close();
+  const uri = document.getElementById('wsUri').value.trim();
+  ws = new WebSocket(uri);
+  ws.onopen    = ()=>{ setStatus(true,'Connected'); addLog('CONNECT','system',`→ ${uri}`); autoSub(); };
+  ws.onclose   = ()=>{ setStatus(false,'Offline');  addLog('DISCONNECT','system','closed'); };
+  ws.onerror   = ()=>{ setStatus(false,'Error');    addLog('DISCONNECT','system','error'); };
+  ws.onmessage = e=>{ try{ handle(JSON.parse(e.data)); }catch{} };
+}
+
+function autoSub(){
+  const t = document.getElementById('topicIn').value.trim();
+  if(t) doSubscribe(t);
+}
+
+function doSubscribe(topic){
+  if(!ws || ws.readyState!==1) return;
+  activeTopic = topic;
+  ws.send(JSON.stringify({ type:'SUBSCRIBE', topic }));
+  document.getElementById('topicChip').textContent = topic;
+  addLog('CONNECT', topic, 'subscribed');
+  renderTopics();
+  // Also request known topics list
+  ws.send(JSON.stringify({ type:'LIST_TOPICS' }));
+}
+
+function switchTopic(t){
+  document.getElementById('topicIn').value = t;
+  VEH.forEach(v=>{ totals[v]=0; history[v].fill(0); });
+  document.getElementById('dNum').textContent='—';
+  document.getElementById('dBar').style.width='0%';
+  document.getElementById('hFrame').textContent='frame —';
+  tChart.data.datasets.forEach(ds=>ds.data.fill(0));
+  tChart.update('none');
+  VEH.forEach(v=>{
+    document.getElementById(`cv-${v}`).textContent='0';
+    document.getElementById(`cd-${v}`).textContent='+0 this interval';
+    document.getElementById(`cb-${v}`).style.width='0%';
+  });
+  doSubscribe(t);
+}
+
+function handle(msg){
+  msgCount++;
+  document.getElementById('msgCnt').textContent = msgCount+' msg';
+
+  const { type, topic, payload } = msg;
+
+  // Discovery from TOPICS reply or any message
+  if(type === 'TOPICS' && Array.isArray(payload)){
+    payload.forEach(t=>{ if(!topics.has(t)) topics.set(t,{count:0,last:Date.now()}); });
+    renderTopics();
+  }
+
+  if(topic && topic!=='system'){
+    const e = topics.get(topic)||{count:0,last:0};
+    e.count++; e.last=Date.now();
+    topics.set(topic, e);
+    renderTopics();
+  }
+
+  const body = payload ? JSON.stringify(payload).slice(0,100) : '';
+  addLog(type||'?', topic||'—', body);
+
+  if(type==='UPDATE' && topic===activeTopic && payload) applyUpdate(payload);
+}
+
+function applyUpdate(p){
+  const counts = p.vehicle_counts || {};
+  const maxC   = Math.max(1, ...Object.values(counts));
+
+  if(p.frame!=null) document.getElementById('hFrame').textContent = `frame ${String(p.frame).padStart(6,'0')}`;
+
+  VEH.forEach(v=>{
+    const cnt = counts[v]??0;
+    totals[v]+=cnt; history[v].push(cnt); history[v].shift();
+
+    const el = document.getElementById(`cv-${v}`);
+    el.textContent = totals[v].toLocaleString();
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+
+    const dl = document.getElementById(`cd-${v}`);
+    dl.textContent = `+${cnt} this interval`;
+    dl.className   = 'vc-delta'+(cnt>0?' up':'');
+
+    document.getElementById(`cb-${v}`).style.width = Math.round(cnt/maxC*100)+'%';
+  });
+
+  tChart.data.datasets.forEach((ds,i)=>{ ds.data = history[VEH[i]].slice(); });
+  tChart.update('none');
+
+  if(p.density!=null){
+    const pct = Math.min(100, Math.round(p.density*100));
+    document.getElementById('dNum').textContent = pct+'%';
+    document.getElementById('dBar').style.width = pct+'%';
+  }
+
+  if(p.gpu && typeof p.gpu==='object') renderGPU(p.gpu);
+}
+
+function renderGPU(gpu){
+  document.getElementById('gpuBars').innerHTML = Object.entries(gpu).map(([k,v])=>{
+    const pct = Math.min(100,Math.round(v));
+    const col = pct>90?'var(--red)':pct>70?'var(--amber)':'var(--blue)';
+    return `<div class="gpu-row">
+      <span class="gpu-name">${k}</span>
+      <div class="gpu-track"><div class="gpu-fill" style="width:${pct}%;background:${col}"></div></div>
+      <span class="gpu-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTopics(){
+  const el = document.getElementById('topicList');
+  if(!topics.size){ el.innerHTML='<div class="no-topics">None discovered</div>'; return; }
+  el.innerHTML = [...topics.entries()].map(([t,i])=>`
+    <div class="topic-item ${t===activeTopic?'active':''}" onclick="switchTopic('${t}')">
+      <span>${t}</span><span class="topic-n">${i.count}</span>
+    </div>`).join('');
+}
+
+// ── Log ────────────────────────────────────────────────────
+function addLog(type, topic, body){
+  const ts = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  logs.unshift({ts,type,topic,body});
+  if(logs.length>300) logs.pop();
+  document.getElementById('logEl').innerHTML = logs.slice(0,80).map(l=>`
+    <div class="ll">
+      <span class="l-ts">${l.ts}</span>
+      <span class="l-tag tag-${l.type}">${l.type}</span>
+      <span class="l-topic">${esc(l.topic)}</span>
+      <span class="l-body">${esc(l.body)}</span>
+    </div>`).join('');
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Export log ─────────────────────────────────────────────
+document.getElementById('btnExport').onclick = ()=>{
+  const txt = logs.map(l=>`[${l.ts}] [${l.type}] ${l.topic}  ${l.body}`).join('\n');
+  const bkk = new Date(Date.now() + 7*60*60*1000);
+  const name = bkk.toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
+  Object.assign(document.createElement('a'),{
+    href: URL.createObjectURL(new Blob([txt],{type:'text/plain'})),
+    download: `traffic-log_${name}_UTC+7.txt`
+  }).click();
+};
+
+// ── Wiring ─────────────────────────────────────────────────
+document.getElementById('btnConnect').onclick = connect;
+document.getElementById('btnDisc').onclick    = ()=>{ if(ws) ws.close(); };
+document.getElementById('btnSub').onclick     = ()=>{ const t=document.getElementById('topicIn').value.trim(); if(t) switchTopic(t); };
+document.getElementById('topicIn').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('btnSub').click(); });
+
+// Stale topic cleanup
+setInterval(()=>{
+  const now=Date.now();
+  topics.forEach((v,k)=>{ if(now-v.last>60000) topics.delete(k); });
+  renderTopics();
+}, 30000);
+</script>
+</body>
+</html>

@@ -25,101 +25,108 @@ from zoneinfo import ZoneInfo
 #     }
 # },
 
-class LanePayload:
-    def __init__(self, lane_id, direction, max_frames=50):
-        self.lane_id = lane_id
-        self.direction = direction
-        self.max_frames = max_frames
+class LaneMetricsManager:
+    def __init__(self, lane_config):
+        self.lanes = {}
+        self._init_lanes(lane_config)
 
-        self.reset_window()
+    def _init_lanes(self, lane_config):
+        """
+        Initialize full internal lane structure.
+        """
+        for lane_id, cfg in lane_config.items():
+            self.lanes[lane_id] = {
+                "direction": cfg["direction"],
+                "polygon": cfg["polygon"],
+                "vehicles": self._empty_vehicle_state()
+            }
 
-        self.density = {"score": 0.0, "level": 0}
-
-    def update_density(self, score, level):
-        self.density["score"] = float(score)
-        self.density["level"] = int(level)
-
-    def append_confident(self, cars, motorbike):
-        self._conf_cars.append(cars)
-        self._conf_motorbike.append(motorbike)
-        self._frame_counter += 1
-
-    def add_moving(self, cars, motorbike):
-        self._moving_cars += cars
-        self._moving_motorbike += motorbike
-
-    def ready(self):
-        return self._frame_counter >= self.max_frames
-
-    def finalize_window(self):
-        def mean(x):
-            return sum(x) / len(x) if x else 0.0
-
-        confident = {
-            "cars": mean(self._conf_cars),
-            "motorbike": mean(self._conf_motorbike),
-        }
-
-        moving = {
-            "cars": self._moving_cars,
-            "motorbike": self._moving_motorbike,
-        }
-
-        self.reset_window()
-
+    def _empty_vehicle_state(self):
         return {
-            "laneId": self.lane_id,
-            "direction": self.direction,
-            "vehicles": {
-                "density": self.density,
-                "confident": confident,
-                "moving": moving,
+            "density": {
+                "score": 0.0,
+                "level": 0
+            },
+            "confident": {
+                "car": [],
+                "motorbike": []
+            },
+            "moving": {
+                "car": [],       # list of track ids seen this interval
+                "motorbike": []
             },
         }
 
-    def reset_window(self):
-        self._conf_cars = []
-        self._conf_motorbike = []
-        self._moving_cars = 0
-        self._moving_motorbike = 0
-        self._frame_counter = 0
+    def update_vehicle(self, lane_id, vehicle_type, confidence, vehicle_id):
+        self.lanes[lane_id]["vehicles"]["confident"][vehicle_type].append(float(confidence))
+        self.lanes[lane_id]["vehicles"]["moving"][vehicle_type].append(int(vehicle_id))
 
-class Payload:
-    def __init__(self, intersection_id, camera_id):
+    def reset(self):
+        for lane_id in self.lanes:
+            self.lanes[lane_id]["vehicles"] = self._empty_vehicle_state()
+
+    def snapshot(self, density):
+        result = {}
+
+        for lane_id, data in self.lanes.items():
+            vehicles = data["vehicles"]
+
+            car_conf = vehicles["confident"]["car"]
+            bike_conf = vehicles["confident"]["motorbike"]
+
+            avg_car = sum(car_conf) / len(car_conf) if car_conf else 0.0
+            avg_bike = sum(bike_conf) / len(bike_conf) if bike_conf else 0.0
+
+            if 0 <= density < 0.2: level = 1
+            elif 0.2 <= density < 0.4: level = 2
+            elif 0.4 <= density < 0.6: level = 3
+            elif 0.6 <= density < 0.8: level = 4
+            else: level = 5
+
+            car_ids = vehicles["moving"]["car"]
+            bike_ids = vehicles["moving"]["motorbike"]
+
+            result[lane_id] = {
+                "direction": data["direction"],
+                "vehicles": {
+                    "density": {
+                        "score": round(density, 3),
+                        "level": level,
+                    },
+                    "confident": {
+                        "car": round(avg_car, 3),
+                        "motorbike": round(avg_bike, 3),
+                    },
+                    "moving": {
+                        "car": {
+                            "count": len(car_ids),
+                            "ids": car_ids,
+                        },
+                        "motorbike": {
+                            "count": len(bike_ids),
+                            "ids": bike_ids,
+                        },
+                    }
+                }
+            }
+
+        return result
+
+class PayloadBuilder:
+    def __init__(self, intersection_id, camera_id, timezone="Asia/Bangkok"):
         self.intersection_id = intersection_id
         self.camera_id = camera_id
-        self.meta = {}
-        self.lanes = {}
+        self.timezone = timezone
 
-    def get_lane(self, lane_id, direction):
-        if lane_id not in self.lanes:
-            self.lanes[lane_id] = LanePayload(lane_id, direction)
-        return self.lanes[lane_id]
-
-    def set_meta(self, frame_id):
-        self.meta = {"frameId": frame_id}
-
-    def collect_ready_lanes(self):
-        ready = []
-        for lane in self.lanes.values():
-            if lane.ready():
-                ready.append(lane.finalize_window())
-        return ready
-
-    def build(self):
-        lanes = self.collect_ready_lanes()
-
-        if not lanes:
-            return None
-
+    def build(self, frame_idx, lanes_snapshot):
         return {
             "intersectionId": self.intersection_id,
             "cameraId": self.camera_id,
-            "timestamp": datetime.now(ZoneInfo("Asia/Bangkok")).isoformat(timespec="milliseconds"),
-            "meta": self.meta,
-            "lanes": lanes,
+            "timestamp": datetime.now(
+                ZoneInfo(self.timezone)
+            ).isoformat(timespec="milliseconds"),
+            "meta": {
+                "frameId": f"frame_{frame_idx}"
+            },
+            "lanes": lanes_snapshot
         }
-
-    def build_json(self):
-        data = self.build()
-        return json.dumps(data, indent=2) if data else None

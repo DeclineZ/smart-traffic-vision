@@ -1,0 +1,22 @@
+{
+  "video": {
+    "path": "",
+    "skip": 1,
+    "_skip_note": "Number of frames to skip between processing (1 = process every frame)",
+    "max_frames": null,
+    "_max_frames_note": "Maximum frames to process (null for entire video)"
+  },
+  "output": {
+    "base_dir": "output/",
+    "save_crop": true,
+    "save_annotated": true,
+    "_save_annotated_note": "Save full frame with bounding boxes drawn"
+  },
+  "processing": {
+    "opencv_threads": 0,
+    "use_opencl": false,
+    "video_queue_size": 2,
+    "confidence_threshold": 0.5,
+    "_confidence_note": "Minimum confidence score to count as a face detection"
+  }
+}

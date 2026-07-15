@@ -1,10 +1,54 @@
 import gc
-import json
 import os
 import ast
-import logging
 import torch
+import json
+import logging
+import cv2 as cv
+import numpy as np
 from shapely.geometry import Polygon
+
+class RoadDensityEstimator:
+    def __init__(self, base_image, coordinates):
+        """
+        base_image: BGR image (empty road)
+        coordinates: list of (x, y) polygon points
+        """
+        self.coordinates = np.array(coordinates, dtype=np.int32)
+
+        # Precompute mask once
+        self.mask = np.zeros(base_image.shape[:2], dtype=np.uint8)
+        cv.fillPoly(self.mask, [self.coordinates], 255)
+
+        # Store base segmented grayscale road
+        self.base_road = self._segment(base_image)
+
+        # Precompute base histogram once
+        self.base_hist = cv.calcHist(
+            [self.base_road], [0], None, [256], [1, 255]
+        ).flatten()
+
+        self.base_hist_sum = np.sum(self.base_hist) + 1e-6
+
+    def _segment(self, frame):
+        road_segment = cv.bitwise_and(frame, frame, mask=self.mask)
+        return cv.cvtColor(road_segment, cv.COLOR_BGR2GRAY)
+
+    def calculate(self, current_frame):
+        """
+        Calculate density score (0.0 - 1.0)
+        """
+        current_road = self._segment(current_frame)
+
+        current_hist = cv.calcHist(
+            [current_road], [0], None, [256], [1, 255]
+        ).flatten()
+
+        hist_diff = np.maximum(self.base_hist - current_hist, 0)
+
+        density = np.sum(hist_diff) / self.base_hist_sum
+
+        return float(round(density, 4))
 
 def get_logger(name: str, level=logging.INFO):
     logger = logging.getLogger(name)
@@ -28,21 +72,34 @@ def cleanup():
     gc.collect()
 
 def initial_config(config_path: str):
+    """
+    Load and parse configuration file.
+    
+    Args:
+        config_path: Path to JSON configuration file
+        
+    Returns:
+        dict: Parsed configuration
+    """
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
         
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
-    except json.JSONDecodeError:
-        raise ValueError(f"Invalid JSON format in config file: {config_path}")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format in config file: {config_path}\nError: {e}")
 
-    required_keys = ["video", "tracking", "density", "output", "scale", "skip"]
-    missing_keys = [key for key in required_keys if key not in config]
-    if missing_keys:
-        raise KeyError(f"Missing required configuration keys: {missing_keys}")
+    # Check required sections
+    required_sections = ["camera_info", "video", "model", "tracker", "classes", 
+                        "output", "tracking", "lane_metrics", "density", "processing"]
+    missing = [s for s in required_sections if s not in config]
+    if missing:
+        raise KeyError(f"Missing required configuration sections: {missing}")
 
-    os.makedirs(config["output"], exist_ok=True)
+    # Ensure output directory exists
+    output_dir = config["output"]["base_dir"]
+    os.makedirs(output_dir, exist_ok=True)
 
     return config
 
@@ -60,6 +117,10 @@ def initial_lane_data(tracking_zone: list, dict_class: dict):
     }
 
 def parse_zones(zones):
+    """
+    Parse tracking zones from configuration.
+    Handles both string and list coordinate formats.
+    """
     parsed_zones = []
     for zone in zones:
         parsed_zone = zone.copy()
@@ -104,7 +165,9 @@ def save_lane_data(lane_data, path):
         json.dump(out, f, indent=2)
 
 def save_performance_data(config, total, preprocess_times, infer_times, tracking_times):
-    with open(os.path.join(config['output'], "performance.json"), "w") as f:
+    output_dir = config["output"]["base_dir"]
+    
+    with open(os.path.join(output_dir, "performance.json"), "w") as f:
         json.dump({
             "total_time": total,
             "preprocess_time": preprocess_times,
