@@ -1,20 +1,95 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C extensions
+*.obj
+*.o
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
 *venv*
-video
-image
-yolo*
-output
-__pycache__
-preprocess
-light-effectss
+conda-env/
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Model weights, checkpoints, & TensorRT engines (Download/Export separately)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.plan
+*.tflite
+*.uff
+*.trt
 resnet_checkpoint.pth
 resnet_features.json
-*.log
-*.csv
-.env
-models/
-.vscode/
 yolov7/
+yolov8/
+yolo11/
 runs/
+
+# Video & Raw Media Files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flv
+video/
+videos/
+frame/
+frames/
+image/
+images/
+preprocess/
+
+# Output directories & benchmark caches
+output/
+outputs/
+temp/
+scratch/
 */data/*
 result_test_skip.zip
-temp/*
+*.csv
