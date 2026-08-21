@@ -6,14 +6,15 @@ import cv2 as cv
 import os
 import time
 import json
+from collections import deque
 from tools import (
     get_logger, cleanup, initial_config, initial_lane_data, to_original_coords,
     parse_zones, side_of_line, save_lane_data, RoadDensityEstimator
 )
 from shapely.geometry import Point, Polygon
 from shapely import contains
-from payload import LaneMetricsManager, PayloadBuilder
-from publisher import WSPublisher
+from payload import LaneMetricsManager, PayloadBuilder, classify_vehicle
+from publisher import MQTTPublisher
 
 try:
     import pynvml
@@ -78,6 +79,7 @@ class TrafficTracker:
         self.tracking_zone = parse_zones(self.config["tracking"]["zones"])
         self.lane_data     = initial_lane_data(self.tracking_zone, self.dict_class)
         self.track_memory  = {}
+        self.track_history = {}  # track_id -> deque of (frame_idx, point)
 
         metrics_config  = self.config["lane_metrics"]
         camera_info     = self.config["camera_info"]
@@ -96,6 +98,9 @@ class TrafficTracker:
         }
         self.metrics = LaneMetricsManager(self.lane_config)
 
+        # Queued movement threshold (pixels per frame below which vehicle is considered queued)
+        self.queue_speed_threshold = float(metrics_config.get("queue_speed_threshold", 2.0))
+
         density_config        = self.config["density"]
         self.density_estimator = None
         if density_config.get("enabled", False):
@@ -109,15 +114,32 @@ class TrafficTracker:
             else:
                 self.logger.warning(f"Base road image not found: {base_image_path}")
 
-        ws_config         = self.config.get("websocket", {})
-        self.ws_publisher = None
-        if ws_config.get("enabled", False):
-            self.ws_publisher = WSPublisher(
-                uri=ws_config.get("uri", "redis://localhost:6379"),
-                topic=ws_config.get("topic", "traffic"),
+        # MQTT Publisher initialization (with fallback to legacy websocket/redis config)
+        mqtt_config = self.config.get("mqtt")
+        if mqtt_config is None:
+            # Fallback to legacy websocket config key if present
+            legacy_ws = self.config.get("websocket", {})
+            if legacy_ws.get("enabled", False):
+                mqtt_config = {
+                    "enabled": True,
+                    "broker_url": legacy_ws.get("uri", "mqtt://localhost:1883"),
+                    "topic": legacy_ws.get("topic", "traffic/counts"),
+                }
+            else:
+                mqtt_config = {"enabled": False}
+
+        self.mqtt_publisher = None
+        if mqtt_config.get("enabled", False):
+            self.mqtt_publisher = MQTTPublisher(
+                broker_url=mqtt_config.get("broker_url", "mqtt://localhost:1883"),
+                topic=mqtt_config.get("topic", "traffic/counts"),
+                username=mqtt_config.get("username"),
+                password=mqtt_config.get("password"),
+                qos=mqtt_config.get("qos", 1),
+                keepalive=mqtt_config.get("keepalive", 60),
             )
-            self.ws_publisher.start()
-            self.logger.info(f"WSPublisher → topic: {ws_config.get('topic', 'traffic')}")
+            self.mqtt_publisher.start()
+            self.logger.info(f"MQTTPublisher active → target topic: {self.mqtt_publisher.topic}")
 
         self._vehicle_counts: dict[str, int] = {v: 0 for v in self.dict_class.values()}
 
@@ -133,6 +155,27 @@ class TrafficTracker:
                     self.save_dir[(lane_name, cls, lane_id)] = path
 
         self.logger.info("TrafficTracker initialized successfully")
+
+    def _is_track_queued(self, track_id: int, current_point: tuple[float, float], current_frame: int) -> bool:
+        """Determine if a vehicle is stationary/queued based on recent displacement."""
+        if track_id not in self.track_history:
+            self.track_history[track_id] = deque(maxlen=15)
+            self.track_history[track_id].append((current_frame, current_point))
+            return False
+
+        history = self.track_history[track_id]
+        history.append((current_frame, current_point))
+
+        if len(history) < 3:
+            return False
+
+        # Calculate average displacement per frame over recent observations
+        first_frame, first_pt = history[0]
+        frame_diff = max(1, current_frame - first_frame)
+        total_dist = float(np.linalg.norm(np.array(current_point) - np.array(first_pt)))
+        speed_px_per_frame = total_dist / frame_diff
+
+        return speed_px_per_frame < self.queue_speed_threshold
 
     def run(self):
         processing_config = self.config["processing"]
@@ -154,6 +197,7 @@ class TrafficTracker:
 
         total_start = time.perf_counter()
         frame_count = 0
+        last_interval_time = time.perf_counter()
 
         while True:
             item = stream.read()
@@ -211,6 +255,18 @@ class TrafficTracker:
                 centroid      = Point(cxo, cyo)
                 current_point = (cxo, cyo)
 
+                # Determine if vehicle is queued vs moving inside any lane polygon
+                is_queued = self._is_track_queued(track_id, current_point, frame_idx)
+
+                for lane_id, lane_cfg in self.metrics.lanes.items():
+                    if contains(lane_cfg["polygon"], centroid):
+                        self.metrics.register_vehicle(
+                            lane_id=lane_id,
+                            track_id=track_id,
+                            vehicle_class=class_id,
+                            is_queued=is_queued,
+                        )
+
                 if track_id not in self.track_memory:
                     self.track_memory[track_id] = current_point
                     continue
@@ -235,35 +291,43 @@ class TrafficTracker:
                         })
                         self._vehicle_counts[self.dict_class[class_id]] += 1
 
-                        for lane_id, lane_cfg in self.metrics.lanes.items():
-                            if contains(lane_cfg["polygon"], centroid):
-                                vehicle_type = "motorbike" if class_id == 3 else "car"
-                                self.metrics.update_vehicle(lane_id, vehicle_type, conf, track_id) # add track_id to moving list
-
-                                if self.save_crop:
-                                    crop = frame_bgr[y1c:y2c, x1c:x2c]
+                        if self.save_crop:
+                            crop = frame_bgr[y1c:y2c, x1c:x2c]
+                            for lane_id, lane_cfg in self.metrics.lanes.items():
+                                if contains(lane_cfg["polygon"], centroid):
                                     save_path = os.path.join(
                                         self.save_dir[(lane_name, self.dict_class[class_id], lane_id)],
                                         f"frame_{frame_idx}_id_{track_id}.jpg"
                                     )
                                     self.image_saver.save(save_path, crop)
-                                break
+                                    break
 
                 self.track_memory[track_id] = current_point
 
+            # Periodic publish to MQTT
             if frame_idx % self.publish_interval_frames == 0:
-                density        = self.density_estimator.calculate(frame_bgr) if self.density_estimator else 0
-                lanes_snapshot = self.metrics.snapshot(density)
+                density = self.density_estimator.calculate(frame_bgr) if self.density_estimator else 0.0
+                lanes_snapshot = self.metrics.snapshot()
                 self.metrics.reset()
 
-                if self.ws_publisher:
-                    self.ws_publisher.publish({
-                        "frame":          frame_idx,
-                        "vehicle_counts": dict(self._vehicle_counts),
-                        "density":        density,
-                        "gpu":            _get_gpu_util(),
-                        "timestamp":      time.time(),
-                    })
+                now = time.perf_counter()
+                fps = self.publish_interval_frames / max(1e-5, now - last_interval_time)
+                last_interval_time = now
+
+                meta = {
+                    "fps": round(fps, 2),
+                    "density": round(density, 3),
+                    "gpu": _get_gpu_util(),
+                }
+
+                payload = self.payload_builder.build(
+                    frame_idx=frame_idx,
+                    lanes_snapshot=lanes_snapshot,
+                    meta=meta,
+                )
+
+                if self.mqtt_publisher:
+                    self.mqtt_publisher.publish(payload)
 
                 self._vehicle_counts = {v: 0 for v in self.dict_class.values()}
 
@@ -276,8 +340,8 @@ class TrafficTracker:
         cleanup()
         self.image_saver.stop()
 
-        if self.ws_publisher:
-            self.ws_publisher.stop()
+        if self.mqtt_publisher:
+            self.mqtt_publisher.stop()
 
         save_lane_data(self.lane_data, os.path.join(self.config["output"]["base_dir"], "lane_data.json"))
         self.logger.info("Outputs saved successfully.")

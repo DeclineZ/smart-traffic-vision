@@ -20,6 +20,7 @@ tqdm==4.62.3
 
 # Utilities
 PyYAML==5.4.1
+paho-mqtt>=1.6.1
 requests==2.18.4
 six==1.11.0
 dataclasses==0.8

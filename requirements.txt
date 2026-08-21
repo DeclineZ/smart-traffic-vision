@@ -65,6 +65,7 @@ onnxsim==0.4.36
 onnxslim==0.1.80
 opencv-python==4.11.0.86
 packaging 
+paho-mqtt>=2.0.0
 pandas==2.3.3
 parso 
 pillow==11.3.0

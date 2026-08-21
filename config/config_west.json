@@ -1,0 +1,87 @@
+{
+  "_comment": "=== West Soi Approach (CAM_46) Configuration ===",
+  "camera_info": {
+    "camera_id": "CAM-04",
+    "location": "West Soi Entrance",
+    "intersection_id": "INT-001",
+    "description": "Incoming soi traffic approaching intersection from West"
+  },
+  "video": {
+    "path": "./videos/cam46_west.avi",
+    "skip": 0,
+    "max_frames": 0
+  },
+  "model": {
+    "engine_path": "models/yolov7-tiny.engine",
+    "input_shape": [1, 3, 640, 640],
+    "device": "cuda:0"
+  },
+  "tracker": {
+    "type": "ByteTrack",
+    "params": {
+      "min_conf": 0.3,
+      "track_thresh": 0.5,
+      "match_thresh": 0.7,
+      "track_buffer": 25,
+      "frame_rate": 25
+    }
+  },
+  "classes": {
+    "dict_class": {
+      "1": "bicycle",
+      "2": "car",
+      "3": "motorcycle",
+      "5": "bus",
+      "7": "truck"
+    }
+  },
+  "output": {
+    "base_dir": "./output/west_approach",
+    "save_crop": false,
+    "data_output_path": "output/west_approach/data.json"
+  },
+  "tracking": {
+    "zones": [
+      {
+        "name": "west_soi_lane",
+        "lane": "[(100, 200), (1200, 200), (1100, 1070), (50, 1070)]",
+        "line": "[(80, 600), (1150, 600)]",
+        "desc": "West Soi inbound flow"
+      }
+    ]
+  },
+  "lane_metrics": {
+    "enabled": true,
+    "publish_interval_frames": 50,
+    "queue_speed_threshold": 2.0,
+    "lanes": {
+      "W1": {
+        "direction": "W",
+        "description": "West Lane 1 (Inbound Approach 1)",
+        "polygon": [[1229, 50], [5, 590], [75, 955], [1303, 67]]
+      },
+      "W2": {
+        "direction": "W",
+        "description": "West Lane 2 (Inbound Approach 2)",
+        "polygon": [[1301, 67], [1381, 79], [954, 1072], [293, 1035]]
+      }
+    }
+  },
+  "density": {
+    "enabled": false
+  },
+  "mqtt": {
+    "enabled": true,
+    "broker_url": "mqtt://localhost:1883",
+    "topic": "traffic/counts",
+    "username": "",
+    "password": "",
+    "qos": 1,
+    "keepalive": 60
+  },
+  "processing": {
+    "opencv_threads": 0,
+    "use_opencl": false,
+    "video_queue_size": 2
+  }
+}
