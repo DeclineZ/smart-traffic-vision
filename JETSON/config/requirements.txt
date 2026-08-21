@@ -24,6 +24,7 @@ scipy==1.5.4                      # Linear sum assignment (data association)
 # Geometric Operations & Utilities
 # ============================================================================
 shapely==1.8.0                    # Polygon/lane operations
+paho-mqtt>=1.6.1                  # MQTT messaging for traffic count streaming
 PyYAML==5.4.1                     # Config file parsing
 tqdm==4.62.3                      # Progress bars
 Pillow==8.4.0                     # Image operations (PIL)

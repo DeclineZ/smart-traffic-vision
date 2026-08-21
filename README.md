@@ -1,62 +1,149 @@
-# Traffic Monitoring Pipeline
+# 🚦 Smart Traffic Vision — Multi-Camera Tracking & MQTT Streaming
 
-This project is a traffic monitoring pipeline that utilizes YOLO for object detection, SORT for tracking, and various techniques for density estimation and heatmap generation. The system processes video footage to detect, track, and analyze traffic patterns while providing outputs such as tracked objects, density maps, and heatmaps.
+An AI-powered multi-camera traffic monitoring and tracking subsystem. It processes 4 simultaneous camera feeds (**North, South, East, West**), detects and tracks vehicles in real-time using YOLO and SORT, calculates lane-by-lane queued and moving vehicle counts, and streams atomic telemetry to an MQTT broker for adaptive traffic signal control.
 
-The implementation is optimized for real-time performance on Jetson Nano using multi-threading to efficiently handle video processing and analysis.
+---
 
-## Features
-- **Object Detection**: Uses YOLO for detecting vehicles (cars, bicycles, motorcycles, buses, trucks).
-- **Object Tracking**: Implements SORT algorithm for tracking vehicles across frames.
-- **Density Estimation**: Analyzes traffic congestion using histogram-based density calculation.
-- **Heatmap Generation**: Generates heatmaps based on object movement patterns.
-- **Data Export**: Saves results such as images, CSV files, and tracked object data.
+## 🌟 Key Features
 
-## Installation
+- **Multi-Camera Orchestration**: Runs 4 video streams in parallel with shared GPU memory optimization.
+- **YOLO & SORT Tracking**: Robust vehicle detection and tracking across cars, motorcycles, buses, and trucks.
+- **Lane-by-Lane Queue & Flow Metrics**: Point-in-polygon geometry checks to categorize vehicles as `queued` vs `moving`.
+- **Integrated MQTT Publisher**: Publishes aggregated intersection payloads (`INT-001`) to `traffic/counts` every 2 seconds.
+- **2×2 Live HUD Window**: Synchronized visual grid with colored bounding boxes, track IDs, class badges, confidence scores, and lane boundary polygons.
+- **GPU Accelerated**: Optimized for NVIDIA GPUs (RTX series, Jetson, and CUDA 12+).
 
-### Prerequisites
-- Python 3.11.11
-- CUDA-capable GPU and matching NVIDIA drivers
+---
 
-### 1) Download YOLOv7 weights
-Grab the official `yolov7.pt` (or your preferred checkpoint) and place it at the project root:
-```sh
-curl -L -o yolov7.pt https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt
+## 🚀 Quick Start Guide
+
+### 1. Prerequisites & Environment Setup
+Make sure you have [uv](https://github.com/astral-sh/uv) or Python 3.11+ installed:
+
+```bash
+# Clone the repository (refactor/websocket-to-mqtt branch)
+cd smart-traffic-vision
+
+# Install dependencies
+uv pip install -r requirements.txt
 ```
 
-### 2) Clone YOLOv7
-Fetch the YOLOv7 repo next to this project (already present in this workspace as `yolov7/`):
-```sh
-git clone https://github.com/WongKinYiu/yolov7.git
+> **GPU Note**: For CUDA GPU acceleration, ensure PyTorch with CUDA is installed (e.g. `uv pip install torch torchvision --pre --index-url https://download.pytorch.org/whl/nightly/cu128`).
+
+---
+
+### 2. Start the MQTT Broker
+The system requires an MQTT broker listening on port `1883`.
+
+- **Option A (Production / Mosquitto)**:
+  ```bash
+  mosquitto -v -p 1883
+  ```
+- **Option B (Lightweight Built-in Python Broker)**:
+  ```bash
+  uv run python run_broker.py
+  ```
+
+---
+
+### 3. Launch the Multi-Camera Vision Runner
+
+Run all 4 intersection feeds with real-time visual display:
+
+```bash
+# Standard run (YOLOv8 Nano, auto-device)
+uv run python run_multi_camera.py --all --display
+
+# High-accuracy run (YOLOv8 Medium with 0.15 threshold for smaller motorbikes)
+uv run python run_multi_camera.py --all --display --model yolov8m.pt --conf 0.15
+
+# Headless mode (maximum FPS, no GUI window — ideal for background servers)
+uv run python run_multi_camera.py --all --model yolov8s.pt
 ```
 
-### 3) Install dependencies
-Create and activate a virtual environment (recommended):
-```sh
-python -m venv venv
-venv\Scripts\activate  # On macOS/Linux: source venv/bin/activate
+---
+
+## ⚙️ CLI Options & Arguments (`run_multi_camera.py`)
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--all` | Flag | `True` | Run all 4 camera streams simultaneously (`north`, `south`, `east`, `west`). |
+| `--camera` | `str` | `all` | Select a single camera approach: `north`, `south`, `east`, `west`, or `all`. |
+| `--display` | Flag | `False` | Opens the 2×2 live OpenCV monitoring window with visual overlays. |
+| `--model` | `str` | `yolov8n.pt` | YOLO weights path/name (`yolov8n.pt`, `yolov8s.pt`, `yolov8m.pt`). |
+| `--conf` | `float` | `0.20` | Confidence detection threshold (e.g. `0.15` for small/distant motorcycles). |
+| `--device` | `str` | `auto` | Compute device (`cuda:0`, `cuda`, `cpu`). |
+| `--fps` | `float` | `25.0` | Target processing frame rate per stream. |
+| `--pub-interval`| `float` | `2.0` | MQTT broadcast interval in seconds. |
+
+---
+
+## 🎯 Lane & Polygon Calibration
+
+To customize or fine-tune lane polygons to match road geometry:
+
+```bash
+# Run the polygon segmentor on any camera video
+uv run python main.py segment --video videos/cam03_east.avi --n 1
 ```
 
-Install project and YOLOv7 requirements:
-```sh
-pip install -r requirements.txt
-pip install -r yolov7/requirements.txt
+1. **Left-Click** corner points around the lane boundaries in **clockwise or counter-clockwise perimeter order**.
+2. Press **`q`** when finished to output the coordinate array.
+3. Paste the coordinates into the `"polygon"` field in the corresponding JSON config:
+   - `config/config_north.json` (`N1`, `N2`, `N3`)
+   - `config/config_south.json` (`S1`, `S2`, `S3`)
+   - `config/config_east.json` (`E1`)
+   - `config/config_west.json` (`W1`, `W2`)
+
+---
+
+## 📡 MQTT Telemetry Contract
+
+The multi-camera runner publishes consolidated JSON snapshots to `traffic/counts` every 2 seconds:
+
+```json
+{
+  "intersection_id": "INT-001",
+  "camera_id": "MULTI-CAM",
+  "frame_idx": 42,
+  "timestamp": 1787280724.668,
+  "lanes": [
+    {
+      "lane_id": "N1",
+      "direction": "N",
+      "count": 5,
+      "queued_count": 2,
+      "moving_count": 3,
+      "vehicles": {
+        "queued": { "cars": 2, "motorbike": 0 },
+        "moving": { "cars": 3, "motorbike": 0 }
+      }
+    },
+    { "lane_id": "S1", "direction": "S", "count": 8, "vehicles": { ... } },
+    { "lane_id": "E1", "direction": "E", "count": 2, "vehicles": { ... } },
+    { "lane_id": "W1", "direction": "W", "count": 1, "vehicles": { ... } }
+  ]
+}
 ```
 
-### 4) Create or adjust a config
-Use the provided sample at [config/config_test.json](config/config_test.json) and update paths/zones as needed for your video.
+---
 
-### 5) Run the YOLOv7 pipeline
-```sh
-python main.py tracking --config config/config_test.json
+## 📂 Project Structure
+
 ```
-
-## Output Files
-- **Tracked Vehicles**: `output_directory/<lane>/<vehicle_class>/`
-- **Density Analysis**: `output_directory/density/`
-- **Heatmaps**: `output_directory/heatmap/`
-- **CSV Reports**: `output_directory/tracking_data.csv`
-
-## Troubleshooting
-- Ensure the correct YOLO model is downloaded and compatible with your setup.
-- Verify that CUDA is available using `torch.cuda.is_available()`.
-- Check for missing dependencies using `pip check`.
+smart-traffic-vision/
+├── config/
+│   ├── config_north.json       # North approach lane definitions & MQTT settings
+│   ├── config_south.json       # South approach lane definitions
+│   ├── config_east.json        # East approach lane definitions
+│   └── config_west.json        # West approach lane definitions
+├── trt_pipeline/
+│   ├── payload.py              # JSON payload schemas & metrics aggregation
+│   ├── publisher.py            # Thread-safe MQTT client wrapper
+│   ├── tools.py                # Config loader & system utilities
+│   └── tracking.py             # SORT Kalman filter tracking
+├── videos/                     # 1080p sample intersection recordings
+├── run_multi_camera.py         # 🌟 Main entrypoint for 4-camera tracking & streaming
+├── run_broker.py               # Lightweight local MQTT broker (for testing)
+└── main.py                     # Legacy single-camera & polygon segmentor CLI
+```

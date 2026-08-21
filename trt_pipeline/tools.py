@@ -1,7 +1,10 @@
 import gc
 import os
 import ast
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 import json
 import logging
 import cv2 as cv
@@ -65,7 +68,7 @@ def get_logger(name: str, level=logging.INFO):
     return logger
 
 def cleanup():
-    if torch.cuda.is_available():
+    if torch is not None and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
 

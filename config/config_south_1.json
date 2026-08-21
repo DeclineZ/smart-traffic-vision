@@ -102,10 +102,14 @@
     "_zone_note": "Polygon coordinates for density calculation area (null to disable)"
   },
 
-  "websocket": {
+  "mqtt": {
     "enabled": true,
-    "uri": "redis://localhost:6379",
-    "topic": "traffic_south_1"
+    "broker_url": "mqtt://localhost:1883",
+    "topic": "traffic/counts",
+    "username": "",
+    "password": "",
+    "qos": 1,
+    "keepalive": 60
   },
 
   "processing": {

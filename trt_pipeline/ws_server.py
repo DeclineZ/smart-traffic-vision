@@ -1,65 +1,110 @@
 """
-WebSocket bridge: subscribes to Redis channels and forwards to browser clients.
-Also accepts SUBSCRIBE messages from browsers to register interest in topics.
+WebSocket bridge: subscribes to MQTT topics and forwards to browser clients.
+Accepts SUBSCRIBE and LIST_TOPICS messages from browser clients.
 
-Redis channel naming: traffic:<topic>
-Each message on the channel is a JSON-serialized envelope:
-  { "type": "UPDATE"|"HEARTBEAT", "topic": str, "payload": dict, "timestamp": float }
+Default MQTT topic subscription: traffic/#
+Relays raw or wrapped MQTT envelopes to WebSocket clients.
 """
+
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 import time
-import redis.asyncio as aioredis
+from urllib.parse import urlparse
+
+import paho.mqtt.client as mqtt
 import websockets
 from websockets.server import WebSocketServerProtocol
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("WSBridge")
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-WS_HOST   = os.getenv("WS_HOST", "0.0.0.0")
-WS_PORT   = int(os.getenv("WS_PORT", 8765))
-CHANNEL_PREFIX = "traffic:"
+MQTT_URL = os.getenv("MQTT_URL", "mqtt://localhost:1883")
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "traffic/#")
+WS_HOST = os.getenv("WS_HOST", "0.0.0.0")
+WS_PORT = int(os.getenv("WS_PORT", 8765))
 
 # topic -> set of WebSocket clients
 _subscribers: dict[str, set[WebSocketServerProtocol]] = {}
-# topic -> last cached message (for replay on subscribe)
+# topic -> last cached message
 _last_msg: dict[str, str] = {}
+# Thread-safe event loop reference
+_loop: asyncio.AbstractEventLoop | None = None
 
 
-def _add_subscriber(topic: str, ws: WebSocketServerProtocol):
+def _add_subscriber(topic: str, ws: WebSocketServerProtocol) -> None:
     _subscribers.setdefault(topic, set()).add(ws)
 
 
-def _remove_subscriber(ws: WebSocketServerProtocol):
+def _remove_subscriber(ws: WebSocketServerProtocol) -> None:
     for subs in _subscribers.values():
         subs.discard(ws)
 
 
-async def _broadcast(topic: str, raw: str):
+async def _broadcast(topic: str, raw: str) -> None:
     _last_msg[topic] = raw
     subs = _subscribers.get(topic, set())
-    if not subs:
+    # Also forward to wildcard subscribers
+    wildcard_subs = _subscribers.get("traffic/#", set()) | _subscribers.get("#", set())
+    all_subs = subs | wildcard_subs
+
+    if not all_subs:
         return
-    await asyncio.gather(*[ws.send(raw) for ws in subs], return_exceptions=True)
+    await asyncio.gather(*[ws.send(raw) for ws in all_subs], return_exceptions=True)
 
 
-async def redis_listener():
-    """Subscribes to all traffic:* channels on Redis and fans out to WS clients."""
-    redis = aioredis.from_url(REDIS_URL, decode_responses=True)
-    pubsub = redis.pubsub()
-    await pubsub.psubscribe(f"{CHANNEL_PREFIX}*")
-    logger.info(f"Redis listener subscribed to {CHANNEL_PREFIX}*")
+def on_mqtt_message(client, userdata, msg):
+    """Callback from Paho MQTT thread when a message is received."""
+    topic = msg.topic
+    payload_str = msg.payload.decode("utf-8", errors="ignore")
 
-    async for message in pubsub.listen():
-        if message["type"] != "pmessage":
-            continue
-        channel: str = message["channel"]          # e.g. "traffic:south_1"
-        topic = channel.removeprefix(CHANNEL_PREFIX)
-        raw   = message["data"]
-        await _broadcast(topic, raw)
+    envelope = json.dumps({
+        "type": "UPDATE",
+        "topic": topic,
+        "payload": json.loads(payload_str) if payload_str.startswith("{") else payload_str,
+        "timestamp": time.time(),
+    })
+
+    if _loop and _loop.is_running():
+        asyncio.run_coroutine_threadsafe(_broadcast(topic, envelope), _loop)
+
+
+def start_mqtt_listener() -> mqtt.Client:
+    """Initialize and start background MQTT client subscription."""
+    parsed = urlparse(MQTT_URL if "://" in MQTT_URL else f"mqtt://{MQTT_URL}")
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 1883
+    username = parsed.username or os.getenv("MQTT_USERNAME")
+    password = parsed.password or os.getenv("MQTT_PASSWORD")
+
+    try:
+        client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            client_id=f"ws_bridge_{os.getpid()}",
+        )
+    except AttributeError:
+        client = mqtt.Client(client_id=f"ws_bridge_{os.getpid()}")
+
+    if username:
+        client.username_pw_set(username, password)
+
+    def on_connect(client, userdata, flags, reason_code, properties=None):
+        rc = getattr(reason_code, "value", reason_code)
+        if rc == 0:
+            logger.info(f"MQTT Connected → subscribing to {MQTT_TOPIC}")
+            client.subscribe(MQTT_TOPIC)
+        else:
+            logger.error(f"MQTT connection failed with code: {reason_code}")
+
+    client.on_connect = on_connect
+    client.on_message = on_mqtt_message
+
+    client.connect_async(host, port, keepalive=60)
+    client.loop_start()
+    return client
 
 
 async def ws_handler(ws: WebSocketServerProtocol):
@@ -87,7 +132,6 @@ async def ws_handler(ws: WebSocketServerProtocol):
                     continue
                 _add_subscriber(topic, ws)
                 logger.info(f"{remote} subscribed to '{topic}'")
-                # Replay last cached message so client isn't blank
                 if topic in _last_msg:
                     await ws.send(_last_msg[topic])
 
@@ -106,12 +150,20 @@ async def ws_handler(ws: WebSocketServerProtocol):
 
 
 async def main():
+    global _loop
+    _loop = asyncio.get_running_loop()
+
     logger.info(f"Starting WS bridge on ws://{WS_HOST}:{WS_PORT}")
-    logger.info(f"Redis: {REDIS_URL}")
-    await asyncio.gather(
-        redis_listener(),
-        websockets.serve(ws_handler, WS_HOST, WS_PORT),
-    )
+    logger.info(f"MQTT Broker URL: {MQTT_URL}")
+
+    mqtt_client = start_mqtt_listener()
+
+    try:
+        async with websockets.serve(ws_handler, WS_HOST, WS_PORT):
+            await asyncio.Future()  # run forever
+    finally:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
 
 
 if __name__ == "__main__":

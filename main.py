@@ -1,6 +1,4 @@
 import argparse
-from pipelineV11 import Pipeline
-from pipelineV7 import PipelineV7
 from segmentor import RoadSegmenter
 
 def main():
@@ -32,9 +30,11 @@ def main():
             raise ValueError("Tracking algorithm must be 'sort', 'BoostTrack', 'BotSort', 'HybridSort', 'StrongSort', 'DeepOcSort', 'ByteTrack', or 'OcSort'")
         
         if args.pipeline == "yolov11":
+            from pipelineV11 import Pipeline
             pipline = Pipeline(args.config)
             pipline.run()
         elif args.pipeline == "yolov7":
+            from pipelineV7 import PipelineV7
             pipline = PipelineV7(args.config, tracking_algorithm=args.type)
             pipline.run()
         else:

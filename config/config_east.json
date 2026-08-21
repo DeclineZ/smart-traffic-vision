@@ -1,0 +1,82 @@
+{
+  "_comment": "=== East Soi Approach (CAM_03) Configuration ===",
+  "camera_info": {
+    "camera_id": "CAM-03",
+    "location": "East Soi Entrance",
+    "intersection_id": "INT-001",
+    "description": "Incoming soi traffic approaching intersection from East"
+  },
+  "video": {
+    "path": "./videos/cam03_east.avi",
+    "skip": 0,
+    "max_frames": 0
+  },
+  "model": {
+    "engine_path": "models/yolov7-tiny.engine",
+    "input_shape": [1, 3, 640, 640],
+    "device": "cuda:0"
+  },
+  "tracker": {
+    "type": "ByteTrack",
+    "params": {
+      "min_conf": 0.3,
+      "track_thresh": 0.5,
+      "match_thresh": 0.7,
+      "track_buffer": 25,
+      "frame_rate": 25
+    }
+  },
+  "classes": {
+    "dict_class": {
+      "1": "bicycle",
+      "2": "car",
+      "3": "motorcycle",
+      "5": "bus",
+      "7": "truck"
+    }
+  },
+  "output": {
+    "base_dir": "./output/east_approach",
+    "save_crop": false,
+    "data_output_path": "output/east_approach/data.json"
+  },
+  "tracking": {
+    "zones": [
+      {
+        "name": "east_soi_lane",
+        "lane": "[(700, 300), (1150, 320), (1600, 1070), (400, 1070)]",
+        "line": "[(450, 750), (1550, 750)]",
+        "desc": "East Soi inbound flow"
+      }
+    ]
+  },
+  "lane_metrics": {
+    "enabled": true,
+    "publish_interval_frames": 50,
+    "queue_speed_threshold": 2.0,
+    "lanes": {
+      "E1": {
+        "direction": "E",
+        "description": "East Lane 1 (Curved Inbound Approach)",
+        "polygon": [[580, 1068], [962, 791], [1085, 532], [1027, 376], [1168, 390], [1315, 526], [1404, 705], [1367, 1064]]
+      }
+    }
+  },
+  "density": {
+    "enabled": false
+  },
+  "mqtt": {
+    "enabled": true,
+    "broker_url": "mqtt://localhost:1883",
+    "topic": "traffic/counts",
+    "username": "",
+    "password": "",
+    "qos": 1,
+    "keepalive": 60
+  },
+  "processing": {
+    "opencv_threads": 0,
+    "use_opencl": false,
+    "video_queue_size": 2
+  }
+}
