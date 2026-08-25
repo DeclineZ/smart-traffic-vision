@@ -6,14 +6,13 @@ This guide explains how to use the automated hardware benchmarking suite (`bench
 
 ## Table of Contents
 - [1. Overview & Architecture](#1-overview--architecture)
-- [2. Quickstart Guide](#2-quickstart-guide)
-- [3. Running on Different Hardware Platforms](#3-running-on-different-hardware-platforms)
-- [4. CLI Flags & Configuration Options](#4-cli-flags--configuration-options)
-- [5. How the Benchmark Works Under the Hood](#5-how-the-benchmark-works-under-the-hood)
-- [6. Benchmarking Real RTSP Cameras](#6-benchmarking-real-rtsp-cameras)
-- [7. How to Read & Interpret Benchmark Results](#7-how-to-read--interpret-benchmark-results)
-- [8. 8-Camera Feasibility & Hardware Procurement Specs](#8-8-camera-feasibility--hardware-procurement-specs)
-- [9. Generated Output Artifacts](#9-generated-output-artifacts)
+- [2. Benchmark Execution Modes](#2-benchmark-execution-modes)
+- [3. CLI Flags & Configuration Options](#3-cli-flags--configuration-options)
+- [4. How the Benchmark Works Under the Hood](#4-how-the-benchmark-works-under-the-hood)
+- [5. Benchmarking Real RTSP Cameras](#5-benchmarking-real-rtsp-cameras)
+- [6. How to Read & Interpret Benchmark Results](#6-how-to-read--interpret-benchmark-results)
+- [7. 8-Camera Feasibility & Hardware Procurement Specs](#7-8-camera-feasibility--hardware-procurement-specs)
+- [8. Generated Output Artifacts](#8-generated-output-artifacts)
 
 ---
 
@@ -66,54 +65,43 @@ flowchart TD
 
 ---
 
-## 2. Quickstart Guide
+## 2. Benchmark Execution Modes
 
-Ensure your virtual environment is active with dependencies installed:
+Ensure your virtual environment is active with dependencies installed before running:
+
+### A. Quick Verification Test (~15 seconds)
+A fast sanity check to verify that your GPU, CUDA environment, and RTSP ingestion pipelines are running properly:
 
 ```bash
-# 1. Quick verification test (1 & 2 cameras, 4 seconds)
 python benchmark_hardware.py --streams 1 2 --duration 4 --models yolov8n.pt
-
-# 2. Recommended 8-camera batched benchmark with frame skip=1 and chart generation
-python benchmark_hardware.py --streams 1 2 4 8 --duration 8 --models yolov8n.pt yolov8s.pt --mode batched --frame-skips 0 1 --save-plots
-
-# 3. Dedicated 8-camera stress test
-python benchmark_hardware.py --streams 8 --mode batched --target-fps 15.0 --duration 15 --save-plots
 ```
 
 ---
 
-## 3. Running on Different Hardware Platforms
+### B. Full Production Hardware Sizing Benchmark (The Works)
+The comprehensive benchmark that tests **everything** to determine whether your machine can run 8 cameras smoothly at 25 FPS:
+- Tests scaling across **1, 2, 4, and 8 camera feeds**.
+- Compares **Batched vs. Threaded** pipeline architectures (`--mode both`).
+- Evaluates **Frame Skipping** optimization (`--frame-skips 0 1`).
+- Opens the **Live Multi-Camera Visual HUD** (`--display`) to measure real UI drawing overhead.
+- Targets **25.0 FPS per camera** (`--target-fps 25.0`).
+- Generates **4-panel performance visualization charts** (`--save-plots`).
 
-### A. Development Laptops & Workstations (NVIDIA GeForce RTX 3050 / 3060 / 4060 / 5060)
-- Run in **Batched Mode** (`--mode batched`) with `--target-fps 15.0` or `20.0`.
-- Frame skip of `skip=1` is recommended for 8 streams.
 ```bash
-python benchmark_hardware.py --streams 1 2 4 8 --models yolov8n.pt --mode batched --frame-skips 0 1 --save-plots
-```
-
-### B. High-End Workstations & Servers (RTX 4070 / 4080 / 4090 / RTX A4000 / A5000)
-- Can easily handle 8–16 cameras with larger models (`yolov8s.pt` or `yolov8m.pt`) at full 25–30 FPS with `skip=0`.
-```bash
-python benchmark_hardware.py --streams 4 8 12 16 --models yolov8s.pt yolov8m.pt --mode batched --target-fps 25.0 --save-plots
-```
-
-### C. NVIDIA Jetson Edge Devices (Orin Nano / Orin NX / AGX Orin)
-- Use TensorRT FP16 models if exported, or `yolov8n.pt` with `--mode batched` and `--frame-skips 1`.
-- Monitor thermal throttling and power draw (Watts) closely in the report.
-```bash
-python benchmark_hardware.py --streams 4 8 --models yolov8n.pt --mode batched --frame-skips 1 --target-fps 15.0
-```
-
-### D. CPU-Only Systems (No Dedicated GPU)
-- The profiler automatically detects CPU-only environments and benchmarks multithreaded CPU inference.
-```bash
-python benchmark_hardware.py --streams 1 2 4 --models yolov8n.pt --duration 5
+python benchmark_hardware.py \
+  --streams 1 2 4 8 \
+  --models yolov8n.pt yolov8s.pt \
+  --mode both \
+  --frame-skips 0 1 \
+  --target-fps 25.0 \
+  --duration 8 \
+  --display \
+  --save-plots
 ```
 
 ---
 
-## 4. CLI Flags & Configuration Options
+## 3. CLI Flags & Configuration Options
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -134,7 +122,7 @@ python benchmark_hardware.py --streams 1 2 4 --models yolov8n.pt --duration 5
 
 ---
 
-## 5. How the Benchmark Works Under the Hood
+## 4. How the Benchmark Works Under the Hood
 
 ### 1. Baseline Calibration
 Before running tests, the tool samples the idle machine for 1.5 seconds to establish baseline CPU, RAM, VRAM, and power draw. This ensures metrics isolate the exact cost of the vision pipeline.
@@ -154,7 +142,7 @@ For every single processed frame across all cameras, exact timestamps are logged
 
 ---
 
-## 6. Benchmarking Real RTSP Cameras
+## 5. Benchmarking Real RTSP Cameras
 
 To benchmark physical IP cameras over your local network:
 
@@ -175,7 +163,7 @@ The benchmark will measure network ingestion latency, frame drops caused by netw
 
 ---
 
-## 7. How to Read & Interpret Benchmark Results
+## 6. How to Read & Interpret Benchmark Results
 
 When a benchmark run completes, you will see three summary tables in your terminal and in the generated Markdown report:
 
@@ -208,7 +196,7 @@ The tool provides an automated verdict grade:
 
 ---
 
-## 8. 8-Camera Feasibility & Hardware Procurement Specs
+## 7. 8-Camera Feasibility & Hardware Procurement Specs
 
 ### Sizing Rules of Thumb:
 1. **Throughput Target**: 8 Cameras @ 15 FPS = **120 Aggregate FPS** (or 8 @ 20 FPS = **160 Aggregate FPS**).
@@ -242,7 +230,7 @@ The tool provides an automated verdict grade:
 
 ---
 
-## 9. Generated Output Artifacts
+## 8. Generated Output Artifacts
 
 All benchmark runs automatically export timestamped reports to `benchmark/hardware-results/`:
 
