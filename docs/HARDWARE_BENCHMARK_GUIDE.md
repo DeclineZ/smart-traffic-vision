@@ -196,7 +196,7 @@ The tool provides an automated verdict grade:
 
 ---
 
-## 7. 8-Camera Feasibility & Hardware Procurement Specs
+## 7. 8-Camera Feasibility Sizing Rules
 
 ### Sizing Rules of Thumb:
 1. **Throughput Target**: 8 Cameras @ 15 FPS = **120 Aggregate FPS** (or 8 @ 20 FPS = **160 Aggregate FPS**).
@@ -206,35 +206,13 @@ The tool provides an automated verdict grade:
 3. **CPU Cores Formula**:
    $$\text{CPU Threads} = (8 \text{ streams} \times 1.0\text{ thread/decode}) + 4\text{ threads (MQTT + DB + Controller)} \approx \mathbf{12+\text{ Logical Threads}}$$
 
-### Recommended Hardware Procurement Tiers:
-
-```
-[TIER 1: OPTIMAL EDGE WORKSTATION / PC (Recommended for 8 Cameras @ 15-20 FPS)]
-  • GPU     : NVIDIA GeForce RTX 4060 8GB / RTX 5060 Laptop/Desktop (Batched FP16)
-  • CPU     : Intel Core i5-13400 / 14400 (10 Cores: 6P+4E, 16 Threads) or AMD Ryzen 5 7600
-  • RAM     : 16 GB DDR4 / DDR5 (Dual Channel)
-  • Storage : 500 GB NVMe M.2 SSD
-  • Network : Dual Gigabit / 2.5GbE LAN (~32 Mbps bandwidth for 8x 1080p RTSP feeds)
-  • Est. Cost: ~$650 - $750 USD (22,000 - 26,000 THB)
-
-[TIER 2: INDUSTRIAL EDGE APPLIANCE (Outdoor Traffic Control Cabinet / Fanless)]
-  • Platform: NVIDIA Jetson Orin NX 16GB (100 TOPS) or Orin Nano 8GB (40 TOPS)
-  • Pipeline: TensorRT Engine + DeepStream / Batched Inference + Frame Skip=1
-  • Power   : 15W - 25W low-power industrial DC power supply
-  • Form Factor: Rugged Aluminum Enclosure (IP65 / Fanless)
-
-[TIER 3: ENTERPRISE SERVER (16+ Cameras or Multi-Intersection / YOLOv8m)]
-  • GPU     : NVIDIA GeForce RTX 4070 Ti Super 16GB / RTX 4080 / RTX A4000
-  • CPU     : Intel Core i7-14700 / AMD Ryzen 7 7700X (32 GB DDR5 RAM)
-```
-
 ---
 
 ## 8. Generated Output Artifacts
 
 All benchmark runs automatically export timestamped reports to `benchmark/hardware-results/`:
 
-1. **`BENCHMARK_REPORT_<timestamp>.md`**: Executive markdown report with baseline hardware specs, scaling matrices, feasibility verdicts, and procurement specifications.
+1. **`BENCHMARK_REPORT_<timestamp>.md`**: Executive markdown report with baseline hardware specs, scaling matrices, and feasibility verdicts.
 2. **`benchmark_summary_<timestamp>.csv`**: Flat CSV data file ready for importing into Excel, Google Sheets, or Pandas.
 3. **`benchmark_results_<timestamp>.json`**: Structured JSON containing full high-frequency time-series telemetry (CPU, GPU %, VRAM MB, power, temp over time).
 4. **`benchmark_analysis_<timestamp>.png`**: 4-panel Matplotlib visualization chart:

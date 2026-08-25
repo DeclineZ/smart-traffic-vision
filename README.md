@@ -162,7 +162,7 @@ To benchmark multi-camera performance (1 to 8+ feeds) and profile GPU/VRAM/CPU r
 python benchmark_hardware.py --streams 1 2 4 8 --duration 8 --models yolov8n.pt yolov8s.pt --mode batched --frame-skips 0 1 --save-plots
 ```
 
-For complete benchmarking instructions, platform guides (RTX PCs, Servers, Jetson Orin), and hardware procurement specifications, see the **[Hardware Benchmark & Sizing Guide](docs/HARDWARE_BENCHMARK_GUIDE.md)**.
+For complete benchmarking instructions, platform options, and hardware sizing rules, see the **[Hardware Benchmark & Sizing Guide](docs/HARDWARE_BENCHMARK_GUIDE.md)**.
 
 ---
 

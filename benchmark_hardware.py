@@ -1131,28 +1131,6 @@ class ReportGenerator:
         print(f" [★] Primary Bottlenecks : {', '.join(feasibility['bottlenecks'])}")
         print("=" * 95)
 
-        # Procurement Specifications
-        print("""
-### 3. Recommended Deployment & Procurement Specs:
------------------------------------------------------------------------------------------------
-[TIER 1: OPTIMAL EDGE BOX / WORKSTATION (Target: 8 Cameras @ 15-25 FPS)]
-  • GPU     : NVIDIA GeForce RTX 4060 8GB / RTX 5060 Laptop/Desktop (TensorRT FP16 enabled)
-  • CPU     : Intel Core i5-13400 / 14400 (10 Cores, 16 Threads) or AMD Ryzen 5 7600
-  • RAM     : 16 GB - 32 GB DDR4/DDR5 (Dual Channel)
-  • Storage : 500 GB - 1 TB NVMe M.2 SSD (for OS, PostgreSQL incident DB, and video logs)
-  • Network : Dual Gigabit / 2.5GbE LAN (handles 8x 1080p RTSP feeds @ ~32 Mbps total)
-
-[TIER 2: INDUSTRIAL EDGE APPLIANCE (Outdoor Traffic Cabinet / Fanless)]
-  • Platform: NVIDIA Jetson Orin Nano 8GB (40 TOPS) or Orin NX 16GB (100 TOPS)
-  • Pipeline: TensorRT Engine + DeepStream / Batched Inference + Frame Skip=1
-  • Power   : 15W - 25W low-power industrial DC power input
-
-[TIER 3: ENTERPRISE INTERSECTION SERVER (Target: 16+ Cameras or Multi-Model YOLOv8m)]
-  • GPU     : NVIDIA RTX 4070 Ti Super 16GB / RTX 4080 / RTX A4000
-  • CPU     : Intel Core i7-14700 / AMD Ryzen 7 7700X (32 GB DDR5 RAM)
------------------------------------------------------------------------------------------------
-""")
-
     @staticmethod
     def export_json(data: Dict[str, Any], filepath: str):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
