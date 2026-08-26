@@ -190,6 +190,7 @@ class HardwareProfiler:
             "core_max_util_pct": float(np.max(core_means)),
             "core_min_util_pct": float(np.min(core_means)),
             "core_load_std_pct": float(np.std(core_means)),
+            "per_core_util_pct": [round(float(c), 1) for c in core_means],
             # RAM Metrics
             "avg_process_ram_mb": float(np.mean(proc_ram)),
             "peak_process_ram_mb": float(np.max(proc_ram)),
@@ -917,6 +918,10 @@ def run_single_test(
         "avg_process_cpu_pct": round(hw_metrics["avg_process_cpu_pct"], 1),
         "avg_system_cpu_pct": round(hw_metrics["avg_system_cpu_pct"], 1),
         "peak_system_cpu_pct": round(hw_metrics["peak_system_cpu_pct"], 1),
+        "core_max_util_pct": round(hw_metrics.get("core_max_util_pct", 0.0), 1),
+        "core_min_util_pct": round(hw_metrics.get("core_min_util_pct", 0.0), 1),
+        "core_load_std_pct": round(hw_metrics.get("core_load_std_pct", 0.0), 1),
+        "per_core_cpu_pct": hw_metrics.get("per_core_util_pct", []),
         "avg_process_ram_mb": round(hw_metrics["avg_process_ram_mb"], 1),
         "peak_process_ram_mb": round(hw_metrics["peak_process_ram_mb"], 1),
         "delta_process_ram_mb": round(hw_metrics["delta_process_ram_mb"], 1),
@@ -1103,6 +1108,21 @@ class ReportGenerator:
             print(f"{name_str:<23} | {dec:<8.2f} | {inf:<10.2f} | {trk:<8.2f} | {vis:<8.2f} | {e2e:<.2f}")
         print("-" * 95)
 
+        # Per-Core CPU Distribution
+        rep_run = next((r for r in reversed(benchmark_results) if r["streams"] == 8), benchmark_results[-1])
+        per_core = rep_run.get("per_core_cpu_pct", [])
+        if per_core:
+            print(f"\n### 3. Per-Core Logical CPU Load Distribution ({rep_run['model']} - {rep_run['streams']} Cams, {rep_run['mode'].upper()}):")
+            print("-" * 95)
+            col_lines = []
+            for i in range(0, len(per_core), 4):
+                chunk = per_core[i : i + 4]
+                col_str = " | ".join([f"Core {i+idx:02d}: {pct:>5.1f}%" for idx, pct in enumerate(chunk)])
+                col_lines.append(col_str)
+            print("\n".join(col_lines))
+            print(f" [★] Core Peak: {rep_run.get('core_max_util_pct', 0.0):.1f}% | Core Min: {rep_run.get('core_min_util_pct', 0.0):.1f}% | Load Imbalance (Std): {rep_run.get('core_load_std_pct', 0.0):.1f}%")
+            print("-" * 95)
+
         # 8-Camera Sizing Verdict
         print("\n" + "=" * 95)
         print(
@@ -1232,6 +1252,25 @@ class ReportGenerator:
                 f"**{r['fps_per_camera']:.1f}** | **{r['total_fps']:.1f}** | {r['avg_gpu_util_pct']:.1f}% | "
                 f"{r['peak_vram_mb']:.0f} | {r['avg_system_cpu_pct']:.1f}% | {r['peak_process_ram_mb']:.0f} | {r.get('drop_rate_pct', 0.0):.1f}% |"
             )
+
+        # 4. Per-Core CPU Load Distribution
+        rep_run = next((r for r in reversed(results) if r["streams"] == 8), results[-1])
+        per_core = rep_run.get("per_core_cpu_pct", [])
+        if per_core:
+            md.append(f"\n## 4. Per-Core CPU Load Distribution ({rep_run['model']} - {rep_run['streams']} Streams, {rep_run['mode'].upper()})\n")
+            md.append("| Core | Load % | Core | Load % | Core | Load % | Core | Load % |")
+            md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+            for i in range(0, len(per_core), 4):
+                row_parts = []
+                for idx in range(4):
+                    if i + idx < len(per_core):
+                        row_parts.append(f"**Core {i+idx}** | {per_core[i+idx]:.1f}%")
+                    else:
+                        row_parts.append(" | ")
+                md.append("| " + " | ".join(row_parts) + " |")
+            md.append(f"\n- **Peak Single-Core Load:** `{rep_run.get('core_max_util_pct', 0.0):.1f}%`")
+            md.append(f"- **Minimum Core Load:** `{rep_run.get('core_min_util_pct', 0.0):.1f}%`")
+            md.append(f"- **Core Load Imbalance (Std Dev):** `{rep_run.get('core_load_std_pct', 0.0):.1f}%` (Exposes single-thread Python bottleneck)\n")
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write("\n".join(md))

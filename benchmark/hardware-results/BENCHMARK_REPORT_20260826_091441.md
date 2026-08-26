@@ -1,6 +1,6 @@
 # Smart Traffic Vision - Multi-Camera Hardware Benchmark & Sizing Report
 
-**Generated On:** 2026-08-25 22:40:39
+**Generated On:** 2026-08-26 09:14:41
 
 ## 1. System Hardware Baseline
 
@@ -15,11 +15,11 @@
 > **Verdict:** **[C / FAIL] - INSUFFICIENT (Cannot sustain target 8-camera FPS without frame drops or severe latency)**
 
 - **Target Throughput:** 8 Cameras @ 15.0 FPS = **120 Total FPS**
-- **Achieved Throughput:** **9.6 FPS/cam** (Total: **77.0 FPS**)
-- **GPU Utilization & Headroom:** **17.2%** load (Headroom: **82.8%**)
-- **VRAM Footprint & Free Space:** **2539 MB** / 8151 MB (Headroom: **5.48 GB**)
-- **CPU Utilization & Headroom:** **38.0%** load (Headroom: **62.0%**)
-- **Frame Drop Rate:** **28.46%**
+- **Achieved Throughput:** **6.5 FPS/cam** (Total: **52.3 FPS**)
+- **GPU Utilization & Headroom:** **15.9%** load (Headroom: **84.1%**)
+- **VRAM Footprint & Free Space:** **1919 MB** / 8151 MB (Headroom: **6.09 GB**)
+- **CPU Utilization & Headroom:** **34.9%** load (Headroom: **65.1%**)
+- **Frame Drop Rate:** **52.32%**
 - **Max Safe Stream Capacity:** **17 Camera Streams** @ 15.0 FPS
 - **Identified Bottlenecks:** None (Hardware operates with healthy margin across all subsystems)
 
@@ -27,5 +27,7 @@
 
 | Model | Streams | Mode | Skip | Display | FPS/Cam | Total FPS | GPU % | VRAM (MB) | CPU % | RAM (MB) | Drops |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `yolov8n.pt` | 4 | batched | 0 | YES | **13.3** | **53.1** | 13.2% | 2447 | 25.6% | 2360 | 5.3% |
-| `yolov8n.pt` | 8 | batched | 0 | YES | **9.6** | **77.0** | 17.2% | 2539 | 38.0% | 3090 | 28.5% |
+| `yolov8n.pt` | 4 | threaded | 0 | YES | **14.3** | **57.1** | 15.9% | 1965 | 21.4% | 2311 | 0.2% |
+| `yolov8n.pt` | 8 | threaded | 0 | YES | **6.5** | **52.3** | 15.9% | 1919 | 34.9% | 3067 | 52.3% |
+| `yolov8s.pt` | 4 | threaded | 0 | YES | **14.3** | **57.2** | 22.4% | 1998 | 19.8% | 1402 | 0.0% |
+| `yolov8s.pt` | 8 | threaded | 0 | YES | **7.0** | **56.0** | 22.7% | 2030 | 30.1% | 2183 | 49.6% |
