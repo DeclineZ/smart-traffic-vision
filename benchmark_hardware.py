@@ -454,7 +454,8 @@ class ThreadedCameraWorker(threading.Thread):
         self.model_lock = model_lock or threading.Lock()
 
         self.simulator = RTSPStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
-        self.tracker = Sort(max_age=25, min_hits=2, iou_threshold=0.3)
+        min_hits = 1 if self.skip_frames > 0 else 2
+        self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
 
         self.latency_tracker = StageLatencyTracker()
@@ -463,6 +464,7 @@ class ThreadedCameraWorker(threading.Thread):
         self.inferred_frames = 0
         self.skipped_frames_count = 0
         self.last_dets = np.empty((0, 5))
+        self.last_tracked: np.ndarray = np.empty((0, 5))
         self.latest_frame: Optional[np.ndarray] = None
 
     def run(self):
@@ -486,8 +488,6 @@ class ThreadedCameraWorker(threading.Thread):
             # 2. Preprocess & 3. Inference
             t_pre = 0.0
             t_inf = 0.0
-
-            dets_arr = np.empty((0, 5))
 
             if should_run_yolo:
                 t_pre0 = time.perf_counter()
@@ -517,14 +517,18 @@ class ThreadedCameraWorker(threading.Thread):
                 dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
                 self.last_dets = dets_arr
                 self.inferred_frames += 1
+
+                # 4. Tracking (SORT)
+                t_trk0 = time.perf_counter()
+                tracked_objs = self.tracker.update(dets_arr)
+                self.last_tracked = tracked_objs
+                t_trk = (time.perf_counter() - t_trk0) * 1000.0
             else:
                 self.skipped_frames_count += 1
-                dets_arr = np.empty((0, 5))
-
-            # 4. Tracking (SORT)
-            t_trk0 = time.perf_counter()
-            tracked_objs = self.tracker.update(dets_arr)
-            t_trk = (time.perf_counter() - t_trk0) * 1000.0
+                # On skipped frames, maintain smooth tracking persistence from previous frame
+                t_trk0 = time.perf_counter()
+                tracked_objs = self.last_tracked
+                t_trk = (time.perf_counter() - t_trk0) * 1000.0
 
             # 5. Spatial Analytics (Polygon containment)
             t_ana0 = time.perf_counter()
@@ -599,7 +603,9 @@ class BatchedCameraPipeline:
         self.simulators = [
             RTSPStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
         ]
-        self.trackers = [Sort(max_age=25, min_hits=2, iou_threshold=0.3) for _ in range(self.num_streams)]
+        min_hits = 1 if self.skip_frames > 0 else 2
+        self.trackers = [Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3) for _ in range(self.num_streams)]
+        self.last_tracked: List[np.ndarray] = [np.empty((0, 5)) for _ in range(self.num_streams)]
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
 
         self.latency_tracker = StageLatencyTracker()
@@ -662,23 +668,34 @@ class BatchedCameraPipeline:
             # 3. Fan-out to Trackers & Analytics
             t_trk0 = time.perf_counter()
             tracked_list = []
-            for idx in range(self.num_streams):
-                dets_arr = np.empty((0, 5))
-                if should_run_yolo and idx < len(results) and len(results[idx].boxes):
-                    dets = []
-                    for box in results[idx].boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = float(box.conf[0])
-                        dets.append([x1, y1, x2, y2, conf])
-                    dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
+            if should_run_yolo:
+                for idx in range(self.num_streams):
+                    dets_arr = np.empty((0, 5))
+                    if idx < len(results) and len(results[idx].boxes):
+                        dets = []
+                        for box in results[idx].boxes:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            conf = float(box.conf[0])
+                            dets.append([x1, y1, x2, y2, conf])
+                        dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
 
-                tracked = self.trackers[idx].update(dets_arr)
-                tracked_list.append(tracked)
+                    tracked = self.trackers[idx].update(dets_arr)
+                    self.last_tracked[idx] = tracked
+                    tracked_list.append(tracked)
 
-                # Geometry
-                for obj in tracked:
-                    cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                    _ = self.test_poly.contains(Point(cx, cy))
+                    # Geometry
+                    for obj in tracked:
+                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
+                        _ = self.test_poly.contains(Point(cx, cy))
+            else:
+                for idx in range(self.num_streams):
+                    tracked = self.last_tracked[idx]
+                    tracked_list.append(tracked)
+
+                    # Geometry
+                    for obj in tracked:
+                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
+                        _ = self.test_poly.contains(Point(cx, cy))
 
             t_trk_ana = (time.perf_counter() - t_trk0) * 1000.0
 
