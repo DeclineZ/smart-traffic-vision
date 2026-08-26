@@ -88,15 +88,7 @@ The comprehensive benchmark that tests **everything** to determine whether your 
 - Generates **4-panel performance visualization charts** (`--save-plots`).
 
 ```bash
-python benchmark_hardware.py \
-  --streams 1 2 4 8 \
-  --models yolov8n.pt yolov8s.pt \
-  --mode both \
-  --frame-skips 0 1 \
-  --target-fps 25.0 \
-  --duration 8 \
-  --display \
-  --save-plots
+python benchmark_hardware.py --streams 1 2 4 8 --models yolov8n.pt yolov8s.pt --mode both --frame-skips 0 1 --target-fps 25.0 --duration 8 --display --save-plots
 ```
 
 ---
