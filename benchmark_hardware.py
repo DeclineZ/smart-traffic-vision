@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import json
 import os
 import queue
@@ -14,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2 as cv
 import numpy as np
 import psutil
+import shapely
 import torch
 from shapely.geometry import Point, Polygon
 from ultralytics import YOLO
@@ -22,6 +24,13 @@ from ultralytics import YOLO
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from algorithm.sort import Sort
+from export_trt import export_yolo_to_tensorrt
+from nvcodec import (
+    NVDECStreamSimulator,
+    NVENCVideoWriter,
+    is_nvdec_available,
+    is_nvenc_available,
+)
 
 # Optional NVML for zero-overhead C-level GPU metrics
 try:
@@ -44,12 +53,13 @@ COCO_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
 # ==============================================================================
-# 1. HARDWARE PROFILER (Direct NVML + psutil)
+# 1. HARDWARE PROFILER (Direct NVML + psutil + NVENC / NVDEC Monitoring)
 # ==============================================================================
 class HardwareProfiler:
     """
     High-frequency background hardware sampler measuring:
     - GPU Core Compute Utilization (%) & Memory Controller Bus Utilization (%)
+    - GPU Dedicated Silicon Video Engines: NVENC (Encoder %) & NVDEC (Decoder %)
     - Dedicated VRAM Used (MB / GB) & PyTorch Allocated / Reserved VRAM
     - GPU Temperature (°C) & Power Draw (Watts)
     - Process CPU % & System Total CPU % & Per-Core CPU Distribution (Min, Max, Std)
@@ -83,6 +93,8 @@ class HardwareProfiler:
 
         self.gpu_util_samples: List[float] = []
         self.gpu_mem_bus_samples: List[float] = []
+        self.gpu_encoder_samples: List[float] = []
+        self.gpu_decoder_samples: List[float] = []
         self.vram_used_mb_samples: List[float] = []
         self.torch_vram_alloc_mb_samples: List[float] = []
         self.torch_vram_res_mb_samples: List[float] = []
@@ -94,7 +106,7 @@ class HardwareProfiler:
     def capture_baseline(self, duration: float = 1.0) -> Dict[str, float]:
         """Samples idle hardware baseline before workload runs."""
         print("   [~] Calibrating baseline idle hardware load...")
-        b_cpu, b_proc_ram, b_gpu, b_vram, b_pwr = [], [], [], [], []
+        b_cpu, b_proc_ram, b_gpu, b_vram, b_pwr, b_enc, b_dec = [], [], [], [], [], [], []
         t_end = time.perf_counter() + duration
 
         # Prime psutil cpu measurement
@@ -109,15 +121,22 @@ class HardwareProfiler:
                     rates = pynvml.nvmlDeviceGetUtilizationRates(self.nvml_handle)
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
                     pwr = pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0
+                    enc = pynvml.nvmlDeviceGetEncoderUtilization(self.nvml_handle)
+                    dec = pynvml.nvmlDeviceGetDecoderUtilization(self.nvml_handle)
+
                     b_gpu.append(rates.gpu)
                     b_vram.append(mem.used / (1024 * 1024))
                     b_pwr.append(pwr)
+                    b_enc.append(enc[0])
+                    b_dec.append(dec[0])
                 except Exception:
                     pass
             elif torch.cuda.is_available():
                 b_vram.append(torch.cuda.memory_allocated(self.gpu_index) / (1024 * 1024))
                 b_gpu.append(0.0)
                 b_pwr.append(0.0)
+                b_enc.append(0.0)
+                b_dec.append(0.0)
             time.sleep(0.05)
 
         self.baseline_metrics = {
@@ -126,6 +145,8 @@ class HardwareProfiler:
             "baseline_gpu_pct": float(np.mean(b_gpu)) if b_gpu else 0.0,
             "baseline_vram_mb": float(np.mean(b_vram)) if b_vram else 0.0,
             "baseline_power_w": float(np.mean(b_pwr)) if b_pwr else 0.0,
+            "baseline_encoder_pct": float(np.mean(b_enc)) if b_enc else 0.0,
+            "baseline_decoder_pct": float(np.mean(b_dec)) if b_dec else 0.0,
         }
         return self.baseline_metrics
 
@@ -147,6 +168,8 @@ class HardwareProfiler:
         self.system_ram_pct_samples.clear()
         self.gpu_util_samples.clear()
         self.gpu_mem_bus_samples.clear()
+        self.gpu_encoder_samples.clear()
+        self.gpu_decoder_samples.clear()
         self.vram_used_mb_samples.clear()
         self.torch_vram_alloc_mb_samples.clear()
         self.torch_vram_res_mb_samples.clear()
@@ -168,6 +191,8 @@ class HardwareProfiler:
         sys_ram_gb = np.array(self.system_ram_gb_samples) if self.system_ram_gb_samples else np.zeros(1)
         gpu_util = np.array(self.gpu_util_samples) if self.gpu_util_samples else np.zeros(1)
         gpu_mem_bus = np.array(self.gpu_mem_bus_samples) if self.gpu_mem_bus_samples else np.zeros(1)
+        gpu_enc = np.array(self.gpu_encoder_samples) if self.gpu_encoder_samples else np.zeros(1)
+        gpu_dec = np.array(self.gpu_decoder_samples) if self.gpu_decoder_samples else np.zeros(1)
         vram_used = np.array(self.vram_used_mb_samples) if self.vram_used_mb_samples else np.zeros(1)
         torch_vram = np.array(self.torch_vram_alloc_mb_samples) if self.torch_vram_alloc_mb_samples else np.zeros(1)
         gpu_temp = np.array(self.gpu_temp_samples) if self.gpu_temp_samples else np.zeros(1)
@@ -197,12 +222,18 @@ class HardwareProfiler:
             "delta_process_ram_mb": float(np.max(proc_ram) - self.baseline_metrics.get("baseline_ram_mb", 0.0)),
             "avg_system_ram_gb": float(np.mean(sys_ram_gb)),
             "peak_system_ram_gb": float(np.max(sys_ram_gb)),
-            # GPU Metrics
+            # GPU Core & Memory
             "avg_gpu_util_pct": float(np.mean(gpu_util)),
             "peak_gpu_util_pct": float(np.max(gpu_util)),
             "p95_gpu_util_pct": float(np.percentile(gpu_util, 95)),
             "avg_gpu_mem_bus_pct": float(np.mean(gpu_mem_bus)),
             "peak_gpu_mem_bus_pct": float(np.max(gpu_mem_bus)),
+            # Hardware Video Codecs (NVENC / NVDEC)
+            "avg_gpu_encoder_pct": float(np.mean(gpu_enc)),
+            "peak_gpu_encoder_pct": float(np.max(gpu_enc)),
+            "avg_gpu_decoder_pct": float(np.mean(gpu_dec)),
+            "peak_gpu_decoder_pct": float(np.max(gpu_dec)),
+            # VRAM & Thermals
             "avg_vram_mb": float(np.mean(vram_used)),
             "peak_vram_mb": float(np.max(vram_used)),
             "delta_vram_mb": float(np.max(vram_used) - self.baseline_metrics.get("baseline_vram_mb", 0.0)),
@@ -218,6 +249,8 @@ class HardwareProfiler:
                 "system_cpu": [float(x) for x in self.system_cpu_samples],
                 "gpu_util": [float(x) for x in self.gpu_util_samples],
                 "gpu_mem_bus": [float(x) for x in self.gpu_mem_bus_samples],
+                "gpu_encoder": [float(x) for x in self.gpu_encoder_samples],
+                "gpu_decoder": [float(x) for x in self.gpu_decoder_samples],
                 "vram_mb": [float(x) for x in self.vram_used_mb_samples],
                 "process_ram_mb": [float(x) for x in self.process_ram_mb_samples],
                 "gpu_temp_c": [float(x) for x in self.gpu_temp_samples],
@@ -251,9 +284,13 @@ class HardwareProfiler:
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
                     temp = pynvml.nvmlDeviceGetTemperature(self.nvml_handle, pynvml.NVML_TEMPERATURE_GPU)
                     pwr = pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0
+                    enc = pynvml.nvmlDeviceGetEncoderUtilization(self.nvml_handle)
+                    dec = pynvml.nvmlDeviceGetDecoderUtilization(self.nvml_handle)
 
                     self.gpu_util_samples.append(float(rates.gpu))
                     self.gpu_mem_bus_samples.append(float(rates.memory))
+                    self.gpu_encoder_samples.append(float(enc[0]))
+                    self.gpu_decoder_samples.append(float(dec[0]))
                     self.vram_used_mb_samples.append(float(mem.used / (1024 * 1024)))
                     self.gpu_temp_samples.append(float(temp))
                     self.gpu_power_w_samples.append(float(pwr))
@@ -262,6 +299,8 @@ class HardwareProfiler:
             elif torch.cuda.is_available():
                 self.gpu_util_samples.append(0.0)
                 self.gpu_mem_bus_samples.append(0.0)
+                self.gpu_encoder_samples.append(0.0)
+                self.gpu_decoder_samples.append(0.0)
                 self.vram_used_mb_samples.append(torch.cuda.memory_allocated(self.gpu_index) / (1024 * 1024))
                 self.gpu_temp_samples.append(0.0)
                 self.gpu_power_w_samples.append(0.0)
@@ -274,7 +313,7 @@ class HardwareProfiler:
 
 
 # ==============================================================================
-# 2. RTSP STREAM SIMULATOR & LIVE INGESTION
+# 2. RTSP STREAM SIMULATOR (Software Decoding Fallback)
 # ==============================================================================
 class RTSPStreamSimulator:
     """
@@ -367,7 +406,73 @@ class RTSPStreamSimulator:
 
 
 # ==============================================================================
-# 3. STAGE LATENCY TRACKER
+# 3. HIGH-PERFORMANCE TRACKER WRAPPER (BoxMOT ByteTrack / BoTSORT / Sort)
+# ==============================================================================
+class TrackerWrapper:
+    """
+    Unified high-performance tracker interface supporting:
+    - ByteTrack (via BoxMOT - vectorized NumPy/SIMD Kalman association)
+    - BoTSORT (via BoxMOT)
+    - Sort (Legacy CPU Kalman filter)
+    """
+
+    def __init__(self, tracker_type: str = "bytetrack", skip_frames: int = 0):
+        self.tracker_type = tracker_type.lower()
+        min_hits = 1 if skip_frames > 0 else 2
+
+        if self.tracker_type == "sort":
+            self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
+        elif self.tracker_type == "botsort":
+            from boxmot.trackers.bbox.botsort import BoTSORT
+
+            self.tracker = BoTSORT(
+                track_high_thresh=0.30,
+                track_low_thresh=0.12,
+                new_track_thresh=0.40,
+                track_buffer=40,
+                match_thresh=0.8,
+            )
+        else:  # default bytetrack
+            from boxmot.trackers.bbox.bytetrack import ByteTrack
+
+            self.tracker = ByteTrack(
+                track_thresh=0.25,
+                det_thresh=0.15,
+                match_thresh=0.8,
+                track_buffer=40,
+                min_hits=min_hits,
+                frame_rate=25,
+            )
+
+    def update(self, dets_arr: np.ndarray, frame: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Updates object trajectories.
+        dets_arr format: [N, 5] (x1, y1, x2, y2, conf) or [N, 6] (x1, y1, x2, y2, conf, cls)
+        Returns: [M, >=5] array where columns 0:5 are [x1, y1, x2, y2, track_id]
+        """
+        if len(dets_arr) == 0:
+            return np.empty((0, 5))
+
+        if self.tracker_type == "sort":
+            return self.tracker.update(dets_arr[:, :5])
+        else:
+            if dets_arr.shape[1] < 6:
+                # Add default class 2 (car) if class column is missing
+                cls_col = np.full((len(dets_arr), 1), 2.0)
+                dets_6 = np.hstack([dets_arr[:, :5], cls_col])
+            else:
+                dets_6 = dets_arr[:, :6]
+
+            # BoxMOT expects dummy frame if not provided
+            if frame is None:
+                frame = np.zeros((360, 640, 3), dtype=np.uint8)
+
+            res = self.tracker.update(dets_6, frame)
+            return res if len(res) else np.empty((0, 5))
+
+
+# ==============================================================================
+# 4. STAGE LATENCY TRACKER
 # ==============================================================================
 class StageLatencyTracker:
     """Collects microsecond-accurate latency measurements for each pipeline stage."""
@@ -425,7 +530,7 @@ class StageLatencyTracker:
 
 
 # ==============================================================================
-# 4. WORKER: THREADED PIPELINE (Independent Camera Workers)
+# 5. WORKER: THREADED PIPELINE (Independent Camera Workers)
 # ==============================================================================
 class ThreadedCameraWorker(threading.Thread):
     def __init__(
@@ -441,6 +546,9 @@ class ThreadedCameraWorker(threading.Thread):
         is_paced: bool = True,
         display: bool = False,
         model_lock: Optional[threading.Lock] = None,
+        tracker_name: str = "bytetrack",
+        use_nvdec: bool = False,
+        nvenc_writer: Optional[NVENCVideoWriter] = None,
     ):
         super().__init__(daemon=True)
         self.stream_id = stream_id
@@ -452,10 +560,16 @@ class ThreadedCameraWorker(threading.Thread):
         self.skip_frames = skip_frames
         self.display = display
         self.model_lock = model_lock or threading.Lock()
+        self.nvenc_writer = nvenc_writer
 
-        self.simulator = RTSPStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
-        min_hits = 1 if self.skip_frames > 0 else 2
-        self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
+        # Video ingestion (NVDEC hardware acceleration or OpenCV fallback)
+        if use_nvdec:
+            self.simulator = NVDECStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
+        else:
+            self.simulator = RTSPStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
+
+        # High-performance Vectorized Tracker
+        self.tracker = TrackerWrapper(tracker_type=tracker_name, skip_frames=skip_frames)
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
 
         self.latency_tracker = StageLatencyTracker()
@@ -463,7 +577,7 @@ class ThreadedCameraWorker(threading.Thread):
         self.processed_frames = 0
         self.inferred_frames = 0
         self.skipped_frames_count = 0
-        self.last_dets = np.empty((0, 5))
+        self.last_dets = np.empty((0, 6))
         self.last_tracked: np.ndarray = np.empty((0, 5))
         self.latest_frame: Optional[np.ndarray] = None
 
@@ -508,43 +622,48 @@ class ThreadedCameraWorker(threading.Thread):
 
                     t_inf = (time.perf_counter() - t_infer0) * 1000.0
 
-                dets = []
+                # Vectorized Detection Extraction (Single CUDA-Host transfer, no Python for-loops)
                 if len(results) and len(results[0].boxes):
-                    for box in results[0].boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = float(box.conf[0])
-                        dets.append([x1, y1, x2, y2, conf])
-                dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
+                    boxes = results[0].boxes
+                    dets_arr = torch.cat(
+                        [boxes.xyxy, boxes.conf.unsqueeze(1), boxes.cls.unsqueeze(1)], dim=1
+                    ).cpu().numpy()
+                else:
+                    dets_arr = np.empty((0, 6))
+
                 self.last_dets = dets_arr
                 self.inferred_frames += 1
 
-                # 4. Tracking (SORT)
+                # 4. Tracking (BoxMOT ByteTrack / BoTSORT / Sort)
                 t_trk0 = time.perf_counter()
-                tracked_objs = self.tracker.update(dets_arr)
+                tracked_objs = self.tracker.update(dets_arr, frame)
                 self.last_tracked = tracked_objs
                 t_trk = (time.perf_counter() - t_trk0) * 1000.0
             else:
                 self.skipped_frames_count += 1
-                # On skipped frames, maintain smooth tracking persistence from previous frame
                 t_trk0 = time.perf_counter()
                 tracked_objs = self.last_tracked
                 t_trk = (time.perf_counter() - t_trk0) * 1000.0
 
-            # 5. Spatial Analytics (Polygon containment)
+            # 5. Vectorized Spatial Analytics (Shapely C-level polygon test, no Point object creation)
             t_ana0 = time.perf_counter()
-            for obj in tracked_objs:
-                cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                _ = self.test_poly.contains(Point(cx, cy))
+            if len(tracked_objs) > 0:
+                cxs = (tracked_objs[:, 0] + tracked_objs[:, 2]) * 0.5
+                cys = (tracked_objs[:, 1] + tracked_objs[:, 3]) * 0.5
+                _ = shapely.contains_xy(self.test_poly, cxs, cys)
             t_ana = (time.perf_counter() - t_ana0) * 1000.0
 
-            # 6. UI Drawing & Visual HUD (if display is enabled)
+            # 6. UI Drawing & Visual HUD (and NVENC encoding if active)
             t_vis0 = time.perf_counter()
-            if self.display:
+            if self.display or self.nvenc_writer:
                 vis = cv.resize(frame, (640, 360))
                 scale_x, scale_y = 640 / frame.shape[1], 360 / frame.shape[0]
 
                 # Draw polygon
-                poly_pts = np.array([[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords], dtype=np.int32)
+                poly_pts = np.array(
+                    [[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords],
+                    dtype=np.int32,
+                )
                 cv.polylines(vis, [poly_pts], True, (0, 255, 0), 2)
 
                 # Draw bounding boxes
@@ -553,10 +672,16 @@ class ThreadedCameraWorker(threading.Thread):
                     bx1, by1 = int(ox1 * scale_x), int(oy1 * scale_y)
                     bx2, by2 = int(ox2 * scale_x), int(oy2 * scale_y)
                     cv.rectangle(vis, (bx1, by1), (bx2, by2), (0, 255, 255), 2)
-                    cv.putText(vis, f"#{int(otrack_id)}", (bx1, max(15, by1 - 5)), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    cv.putText(
+                        vis, f"#{int(otrack_id)}", (bx1, max(15, by1 - 5)), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
+                    )
 
                 cv.putText(vis, f"CAM {self.stream_id:02d}", (15, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 self.latest_frame = vis
+
+                if self.nvenc_writer:
+                    self.nvenc_writer.write(vis)
+
             t_vis = (time.perf_counter() - t_vis0) * 1000.0
 
             # End-to-End Latency
@@ -571,12 +696,12 @@ class ThreadedCameraWorker(threading.Thread):
 
 
 # ==============================================================================
-# 5. WORKER: BATCHED PIPELINE (High-Throughput Centralized Batching)
+# 6. WORKER: BATCHED PIPELINE (High-Throughput Centralized Batching)
 # ==============================================================================
 class BatchedCameraPipeline:
     """
     Centralized batching engine: pulls frames from N cameras and feeds
-    batch tensor [B, 3, H, W] into YOLO in a single forward pass.
+    batch tensor into YOLO / TensorRT in a single forward pass.
     """
 
     def __init__(
@@ -590,6 +715,9 @@ class BatchedCameraPipeline:
         target_fps: float = 25.0,
         is_paced: bool = True,
         display: bool = False,
+        tracker_name: str = "bytetrack",
+        use_nvdec: bool = False,
+        nvenc_writer: Optional[NVENCVideoWriter] = None,
     ):
         self.stream_sources = stream_sources
         self.num_streams = len(stream_sources)
@@ -599,12 +727,21 @@ class BatchedCameraPipeline:
         self.imgsz = imgsz
         self.skip_frames = skip_frames
         self.display = display
+        self.nvenc_writer = nvenc_writer
 
-        self.simulators = [
-            RTSPStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+        # Simulators (NVDEC hardware decode or OpenCV fallback)
+        if use_nvdec:
+            self.simulators = [
+                NVDECStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+            ]
+        else:
+            self.simulators = [
+                RTSPStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+            ]
+
+        self.trackers = [
+            TrackerWrapper(tracker_type=tracker_name, skip_frames=skip_frames) for _ in range(self.num_streams)
         ]
-        min_hits = 1 if self.skip_frames > 0 else 2
-        self.trackers = [Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3) for _ in range(self.num_streams)]
         self.last_tracked: List[np.ndarray] = [np.empty((0, 5)) for _ in range(self.num_streams)]
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
 
@@ -665,43 +802,44 @@ class BatchedCameraPipeline:
                 t_inf = (time.perf_counter() - t_inf0) * 1000.0
                 self.inferred_batches += 1
 
-            # 3. Fan-out to Trackers & Analytics
+            # 3. Vectorized Fan-out to Trackers & Analytics
             t_trk0 = time.perf_counter()
             tracked_list = []
             if should_run_yolo:
                 for idx in range(self.num_streams):
-                    dets_arr = np.empty((0, 5))
                     if idx < len(results) and len(results[idx].boxes):
-                        dets = []
-                        for box in results[idx].boxes:
-                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                            conf = float(box.conf[0])
-                            dets.append([x1, y1, x2, y2, conf])
-                        dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
+                        b = results[idx].boxes
+                        dets_arr = torch.cat(
+                            [b.xyxy, b.conf.unsqueeze(1), b.cls.unsqueeze(1)], dim=1
+                        ).cpu().numpy()
+                    else:
+                        dets_arr = np.empty((0, 6))
 
-                    tracked = self.trackers[idx].update(dets_arr)
+                    tracked = self.trackers[idx].update(dets_arr, frames[idx])
                     self.last_tracked[idx] = tracked
                     tracked_list.append(tracked)
 
-                    # Geometry
-                    for obj in tracked:
-                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                        _ = self.test_poly.contains(Point(cx, cy))
+                    # Vectorized Polygon Containment
+                    if len(tracked) > 0:
+                        cxs = (tracked[:, 0] + tracked[:, 2]) * 0.5
+                        cys = (tracked[:, 1] + tracked[:, 3]) * 0.5
+                        _ = shapely.contains_xy(self.test_poly, cxs, cys)
             else:
                 for idx in range(self.num_streams):
                     tracked = self.last_tracked[idx]
                     tracked_list.append(tracked)
 
-                    # Geometry
-                    for obj in tracked:
-                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                        _ = self.test_poly.contains(Point(cx, cy))
+                    # Vectorized Polygon Containment
+                    if len(tracked) > 0:
+                        cxs = (tracked[:, 0] + tracked[:, 2]) * 0.5
+                        cys = (tracked[:, 1] + tracked[:, 3]) * 0.5
+                        _ = shapely.contains_xy(self.test_poly, cxs, cys)
 
             t_trk_ana = (time.perf_counter() - t_trk0) * 1000.0
 
-            # 4. Visual Rendering & Multi-Camera Display Grid
+            # 4. Visual Rendering & Multi-Camera Display Grid (with NVENC support)
             t_vis0 = time.perf_counter()
-            if self.display:
+            if self.display or self.nvenc_writer:
                 vis_frames = []
                 for idx in range(self.num_streams):
                     f = frames[idx]
@@ -709,7 +847,10 @@ class BatchedCameraPipeline:
                     scale_x, scale_y = 480 / f.shape[1], 270 / f.shape[0]
 
                     # Draw poly
-                    poly_pts = np.array([[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords], dtype=np.int32)
+                    poly_pts = np.array(
+                        [[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords],
+                        dtype=np.int32,
+                    )
                     cv.polylines(vis, [poly_pts], True, (0, 255, 0), 2)
 
                     # Draw boxes
@@ -718,7 +859,9 @@ class BatchedCameraPipeline:
                         bx1, by1 = int(ox1 * scale_x), int(oy1 * scale_y)
                         bx2, by2 = int(ox2 * scale_x), int(oy2 * scale_y)
                         cv.rectangle(vis, (bx1, by1), (bx2, by2), (0, 255, 255), 2)
-                        cv.putText(vis, f"#{int(otrack_id)}", (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                        cv.putText(
+                            vis, f"#{int(otrack_id)}", (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1
+                        )
 
                     cv.putText(vis, f"CAM {idx+1:02d}", (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                     vis_frames.append(vis)
@@ -729,20 +872,20 @@ class BatchedCameraPipeline:
                 elif len(vis_frames) == 2:
                     grid = np.hstack(vis_frames)
                 elif len(vis_frames) == 4:
-                    top = np.hstack(vis_frames[:2])
-                    bot = np.hstack(vis_frames[2:])
-                    grid = np.vstack([top, bot])
+                    grid = np.vstack([np.hstack(vis_frames[:2]), np.hstack(vis_frames[2:])])
                 elif len(vis_frames) == 8:
-                    row1 = np.hstack(vis_frames[:4])
-                    row2 = np.hstack(vis_frames[4:])
-                    grid = np.vstack([row1, row2])
+                    grid = np.vstack([np.hstack(vis_frames[:4]), np.hstack(vis_frames[4:])])
                 else:
                     grid = vis_frames[0]
 
-                cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
-                cv.waitKey(1)
-            t_vis = (time.perf_counter() - t_vis0) * 1000.0
+                if self.nvenc_writer:
+                    self.nvenc_writer.write(grid)
 
+                if self.display:
+                    cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
+                    cv.waitKey(1)
+
+            t_vis = (time.perf_counter() - t_vis0) * 1000.0
             t_e2e = (time.perf_counter() - np.mean(capture_times)) * 1000.0
 
             self.latency_tracker.record(
@@ -765,7 +908,7 @@ class BatchedCameraPipeline:
 
 
 # ==============================================================================
-# 6. BENCHMARK RUNNER & EXPERIMENT ORCHESTRATOR
+# 7. BENCHMARK RUNNER & EXPERIMENT ORCHESTRATOR
 # ==============================================================================
 def run_single_test(
     model_name: str,
@@ -779,16 +922,34 @@ def run_single_test(
     display: bool = False,
     imgsz: int = 640,
     device: str = "cuda:0",
+    tracker_name: str = "bytetrack",
+    conf: float = 0.15,
+    use_tensorrt: bool = False,
+    use_nvenc: bool = False,
+    use_nvdec: bool = False,
     profiler: Optional[HardwareProfiler] = None,
 ) -> Dict[str, Any]:
+    # Resolve model format (auto-compile TensorRT engine if requested)
+    actual_model_path = model_name
+    if use_tensorrt and model_name.endswith(".pt"):
+        engine_path = model_name.replace(".pt", ".engine")
+        if not os.path.exists(engine_path):
+            print(f"   [!] TensorRT engine not found for {model_name}. Building dynamic engine...")
+            export_yolo_to_tensorrt(model_name, dynamic=True, batch=8, imgsz=imgsz)
+        actual_model_path = engine_path
+
+    model_engine_type = "TRT (FP16)" if actual_model_path.endswith(".engine") else "PyTorch"
+
     print(f"\n   ----------------------------------------------------------------------")
     print(
-        f"   ▶ Running: {model_name} | {n_streams} Camera Stream(s) | Mode: {pipeline_mode.upper()} | Skip: {skip_frames} | Display HUD: {display} | Paced: {is_paced}"
+        f"   ▶ Running: {actual_model_path} [{model_engine_type}] | {n_streams} Cams | "
+        f"Mode: {pipeline_mode.upper()} | Tracker: {tracker_name.upper()} | "
+        f"NVENC: {use_nvenc} | NVDEC: {use_nvdec} | Skip: {skip_frames} | Display: {display}"
     )
     print(f"   ----------------------------------------------------------------------")
 
-    # Load Model
-    model = YOLO(model_name)
+    # Load Model (Ultralytics AutoBackend handles .pt and .engine seamlessly)
+    model = YOLO(actual_model_path)
 
     # Prepare stream sources
     sources = [video_sources[i % len(video_sources)] for i in range(n_streams)]
@@ -803,6 +964,29 @@ def run_single_test(
         _ = model(dummy, verbose=False, device=device, imgsz=imgsz)
     if "cuda" in device and torch.cuda.is_available():
         torch.cuda.synchronize()
+
+    # Hardware NVENC Video Writer
+    nvenc_writer: Optional[NVENCVideoWriter] = None
+    if use_nvenc:
+        # Determine grid size
+        if n_streams == 1:
+            gw, gh = 480, 270
+        elif n_streams == 2:
+            gw, gh = 960, 270
+        elif n_streams == 4:
+            gw, gh = 960, 540
+        elif n_streams == 8:
+            gw, gh = 1920, 540
+        else:
+            gw, gh = 640, 360
+
+        nvenc_writer = NVENCVideoWriter(
+            output_path=None,  # Null sink for benchmark throughput
+            width=gw,
+            height=gh,
+            fps=target_fps,
+            preset="p1",
+        )
 
     # Start Profiling
     profiler.start()
@@ -826,14 +1010,18 @@ def run_single_test(
                 skip_frames=skip_frames,
                 target_fps=target_fps,
                 is_paced=is_paced,
-                display=display,
+                display=display or use_nvenc,
                 model_lock=model_lock,
+                tracker_name=tracker_name,
+                conf=conf,
+                use_nvdec=use_nvdec,
+                nvenc_writer=None,
             )
             workers.append(w)
             w.start()
 
-        # Run duration with optional display pump
-        if display:
+        # Run duration with optional display / NVENC pump
+        if display or use_nvenc:
             t_end_loop = time.perf_counter() + duration_sec
             while time.perf_counter() < t_end_loop:
                 frames = [w.latest_frame for w in workers if w.latest_frame is not None]
@@ -848,11 +1036,17 @@ def run_single_test(
                         grid = np.vstack([np.hstack(frames[:4]), np.hstack(frames[4:])])
                     else:
                         grid = frames[0]
-                    cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
-                    if cv.waitKey(1) & 0xFF == ord("q"):
-                        break
-                time.sleep(0.02)
-            cv.destroyAllWindows()
+
+                    if nvenc_writer:
+                        nvenc_writer.write(grid)
+
+                    if display:
+                        cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
+                        if cv.waitKey(1) & 0xFF == ord("q"):
+                            break
+                time.sleep(0.01)
+            if display:
+                cv.destroyAllWindows()
         else:
             time.sleep(duration_sec)
 
@@ -892,6 +1086,10 @@ def run_single_test(
             target_fps=target_fps,
             is_paced=is_paced,
             display=display,
+            tracker_name=tracker_name,
+            conf=conf,
+            use_nvdec=use_nvdec,
+            nvenc_writer=nvenc_writer,
         )
         pipeline.run_for(duration_sec)
         t_elapsed = time.perf_counter() - t_start
@@ -902,13 +1100,20 @@ def run_single_test(
         total_ingested = sum(sim.frames_ingested for sim in pipeline.simulators)
         latencies_summary = pipeline.latency_tracker.compute_summary()
 
+    if nvenc_writer:
+        nvenc_writer.release()
+
     # Calculate throughput
     total_fps = total_processed / max(1e-5, t_elapsed)
     fps_per_camera = total_fps / max(1, n_streams)
     drop_rate_pct = (total_dropped / max(1, total_ingested)) * 100.0
 
     result = {
-        "model": model_name,
+        "model": actual_model_path,
+        "engine_type": model_engine_type,
+        "tracker": tracker_name,
+        "nvenc": use_nvenc,
+        "nvdec": use_nvdec,
         "streams": n_streams,
         "mode": pipeline_mode,
         "skip_frames": skip_frames,
@@ -925,6 +1130,10 @@ def run_single_test(
         "avg_gpu_util_pct": round(hw_metrics["avg_gpu_util_pct"], 1),
         "peak_gpu_util_pct": round(hw_metrics["peak_gpu_util_pct"], 1),
         "avg_gpu_mem_bus_pct": round(hw_metrics["avg_gpu_mem_bus_pct"], 1),
+        "avg_gpu_encoder_pct": round(hw_metrics.get("avg_gpu_encoder_pct", 0.0), 1),
+        "peak_gpu_encoder_pct": round(hw_metrics.get("peak_gpu_encoder_pct", 0.0), 1),
+        "avg_gpu_decoder_pct": round(hw_metrics.get("avg_gpu_decoder_pct", 0.0), 1),
+        "peak_gpu_decoder_pct": round(hw_metrics.get("peak_gpu_decoder_pct", 0.0), 1),
         "avg_vram_mb": round(hw_metrics["avg_vram_mb"], 1),
         "peak_vram_mb": round(hw_metrics["peak_vram_mb"], 1),
         "delta_vram_mb": round(hw_metrics["delta_vram_mb"], 1),
@@ -951,8 +1160,9 @@ def run_single_test(
     # Print summary
     print(
         f"   ✔ Completed: {fps_per_camera:.1f} FPS/cam (Total: {total_fps:.1f} FPS) | "
-        f"GPU: {hw_metrics['avg_gpu_util_pct']:.1f}% | VRAM: {hw_metrics['peak_vram_mb']:.0f} MB | "
-        f"CPU: {hw_metrics['avg_system_cpu_pct']:.1f}% | Latency (E2E P50): {latencies_summary.get('e2e_ms', {}).get('p50', 0.0):.1f} ms | "
+        f"GPU: {hw_metrics['avg_gpu_util_pct']:.1f}% | NVENC: {hw_metrics.get('avg_gpu_encoder_pct', 0.0):.1f}% | "
+        f"VRAM: {hw_metrics['peak_vram_mb']:.0f} MB | CPU: {hw_metrics['avg_system_cpu_pct']:.1f}% | "
+        f"Latency (E2E P50): {latencies_summary.get('e2e_ms', {}).get('p50', 0.0):.1f} ms | "
         f"Drops: {drop_rate_pct:.1f}%"
     )
 
@@ -960,7 +1170,7 @@ def run_single_test(
 
 
 # ==============================================================================
-# 7. FEASIBILITY & 8-CAMERA HARDWARE SIZING ANALYZER
+# 8. FEASIBILITY & 8-CAMERA HARDWARE SIZING ANALYZER
 # ==============================================================================
 class FeasibilityAnalyzer:
     """
@@ -1033,7 +1243,6 @@ class FeasibilityAnalyzer:
         if not bottlenecks:
             bottlenecks.append("None (Hardware operates with healthy margin across all subsystems)")
 
-        cost_per_stream_fps = actual_total_fps / max(1, best_run["streams"])
         cost_per_stream_gpu = max(5.0, gpu_util / max(1, best_run["streams"]))
         cost_per_stream_cpu = max(4.0, cpu_util / max(1, best_run["streams"]))
         cost_per_stream_vram = max(150.0, (vram_mb - 800.0) / max(1, best_run["streams"]))
@@ -1067,7 +1276,7 @@ class FeasibilityAnalyzer:
 
 
 # ==============================================================================
-# 8. VISUALIZATION & MULTI-FORMAT REPORT GENERATOR
+# 9. VISUALIZATION & MULTI-FORMAT REPORT GENERATOR
 # ==============================================================================
 class ReportGenerator:
     @staticmethod
@@ -1076,9 +1285,9 @@ class ReportGenerator:
         feasibility: Dict[str, Any],
         system_info: Dict[str, Any],
     ):
-        print("\n" + "=" * 95)
-        print("🚦 SMART TRAFFIC VISION - MULTI-CAMERA BENCHMARK & SIZING REPORT")
-        print("=" * 95)
+        print("\n" + "=" * 105)
+        print("🚦 SMART TRAFFIC VISION - PRODUCTION HARDWARE BENCHMARK & SIZING REPORT")
+        print("=" * 105)
         print(f" • Host Hardware  : {system_info.get('gpu_name', 'N/A')}")
         print(
             f" • CPU Architecture: {system_info.get('cpu_physical', 0)} Physical Cores / {system_info.get('cpu_logical', 0)} Logical Threads"
@@ -1087,65 +1296,71 @@ class ReportGenerator:
             f" • Memory Capacity : {system_info.get('system_ram_gb', 0.0):.1f} GB System RAM | {system_info.get('vram_total_gb', 0.0):.1f} GB Dedicated VRAM"
         )
         print(f" • PyTorch / CUDA  : PyTorch {torch.__version__} (CUDA: {torch.version.cuda})")
-        print("=" * 95)
+        print("=" * 105)
 
         # Results Table
         print("\n### 1. Multi-Camera Scalability & Resource Demand Matrix:")
-        print("-" * 95)
+        print("-" * 105)
         header = (
-            f"{'Model':<10} | {'Streams':<7} | {'Mode':<8} | {'Skip':<4} | {'Display':<7} | "
-            f"{'FPS/Cam':<9} | {'Total FPS':<9} | {'GPU %':<6} | {'VRAM(MB)':<8} | {'CPU %':<6} | {'Drops'}"
+            f"{'Model':<15} | {'Streams':<7} | {'Mode':<8} | {'Tracker':<9} | {'NVENC':<5} | "
+            f"{'FPS/Cam':<9} | {'Total FPS':<9} | {'GPU %':<6} | {'ENC %':<6} | {'VRAM(MB)':<8} | {'CPU %':<6} | {'Drops'}"
         )
         print(header)
-        print("-" * 95)
+        print("-" * 105)
 
         for r in benchmark_results:
-            disp_str = "YES" if r.get("display") else "NO"
+            nv_str = "YES" if r.get("nvenc") else "NO"
+            m_name = os.path.basename(r["model"])
             row = (
-                f"{r['model']:<10} | {r['streams']:<7} | {r['mode']:<8} | {r['skip_frames']:<4} | {disp_str:<7} | "
+                f"{m_name:<15} | {r['streams']:<7} | {r['mode']:<8} | {r.get('tracker', 'sort'):<9} | {nv_str:<5} | "
                 f"{r['fps_per_camera']:<9.1f} | {r['total_fps']:<9.1f} | {r['avg_gpu_util_pct']:<6.1f} | "
-                f"{r['peak_vram_mb']:<8.0f} | {r['avg_system_cpu_pct']:<6.1f} | {r.get('drop_rate_pct', 0.0):.1f}%"
+                f"{r.get('avg_gpu_encoder_pct', 0.0):<6.1f} | {r['peak_vram_mb']:<8.0f} | {r['avg_system_cpu_pct']:<6.1f} | {r.get('drop_rate_pct', 0.0):.1f}%"
             )
             print(row)
-        print("-" * 95)
+        print("-" * 105)
 
         # Stage Latency Breakdown Table
         print("\n### 2. Stage-by-Stage Latency Breakdown (Averaged Across Streams):")
-        print("-" * 95)
-        print(f"{'Model / Streams':<23} | {'Decode':<8} | {'Inference':<10} | {'SORT':<8} | {'Render':<8} | {'E2E P50 (ms)'}")
-        print("-" * 95)
+        print("-" * 105)
+        print(
+            f"{'Model / Streams':<25} | {'Decode':<8} | {'Inference':<10} | {'Tracking':<8} | {'Analytics':<10} | {'Visual/NVENC':<12} | {'E2E P50 (ms)'}"
+        )
+        print("-" * 105)
         for r in benchmark_results:
             l = r.get("latencies", {})
             dec = l.get("decode_ms", {}).get("mean", 0.0)
             inf = l.get("inference_ms", {}).get("mean", 0.0)
             trk = l.get("tracking_ms", {}).get("mean", 0.0)
+            ana = l.get("analytics_ms", {}).get("mean", 0.0)
             vis = l.get("visualize_ms", {}).get("mean", 0.0)
             e2e = l.get("e2e_ms", {}).get("p50", 0.0)
-            name_str = f"{r['model']} ({r['streams']} cams)"
-            print(f"{name_str:<23} | {dec:<8.2f} | {inf:<10.2f} | {trk:<8.2f} | {vis:<8.2f} | {e2e:<.2f}")
-        print("-" * 95)
+            m_name = os.path.basename(r["model"])
+            name_str = f"{m_name} ({r['streams']} cams)"
+            print(
+                f"{name_str:<25} | {dec:<8.2f} | {inf:<10.2f} | {trk:<8.2f} | {ana:<10.2f} | {vis:<12.2f} | {e2e:<.2f}"
+            )
+        print("-" * 105)
 
-        # Per-Core CPU Distribution
-        rep_run = next((r for r in reversed(benchmark_results) if r["streams"] == 8), benchmark_results[-1])
-        per_core = rep_run.get("per_core_cpu_pct", [])
-        if per_core:
-            print(f"\n### 3. Per-Core Logical CPU Load Distribution ({rep_run['model']} - {rep_run['streams']} Cams, {rep_run['mode'].upper()}):")
-            print("-" * 95)
-            col_lines = []
-            for i in range(0, len(per_core), 4):
-                chunk = per_core[i : i + 4]
-                col_str = " | ".join([f"Core {i+idx:02d}: {pct:>5.1f}%" for idx, pct in enumerate(chunk)])
-                col_lines.append(col_str)
-            print("\n".join(col_lines))
-            print(f" [★] Core Peak: {rep_run.get('core_max_util_pct', 0.0):.1f}% | Core Min: {rep_run.get('core_min_util_pct', 0.0):.1f}% | Load Imbalance (Std): {rep_run.get('core_load_std_pct', 0.0):.1f}%")
-            print("-" * 95)
+        # Per-Core CPU Core Utilization Breakdown
+        print("\n### 3. Individual CPU Core Utilization & Thread Balance:")
+        print("-" * 105)
+        for r in benchmark_results:
+            cores = r.get("per_core_cpu_pct", [])
+            max_c = r.get("core_max_util_pct", 0.0)
+            min_c = r.get("core_min_util_pct", 0.0)
+            m_name = os.path.basename(r["model"])
+            name_str = f"{m_name} ({r['streams']} cams - {r['mode']})"
+            cores_str = " | ".join([f"C{i:02d}:{c:3.0f}%" for i, c in enumerate(cores)])
+            print(f" • {name_str:<32} [Peak Core: {max_c:.1f}% | Min Core: {min_c:.1f}%]:")
+            print(f"   [{cores_str}]")
+        print("-" * 105)
 
         # 8-Camera Sizing Verdict
-        print("\n" + "=" * 95)
+        print("\n" + "=" * 105)
         print(
             f"🎯 8-CAMERA HARDWARE SIZING VERDICT (Target: {feasibility['target_cameras']} Cams @ {feasibility['target_fps']} FPS = {feasibility['target_total_fps']:.0f} Total FPS)"
         )
-        print("=" * 95)
+        print("=" * 105)
         print(f" [★] VERDICT GRADE       : [{feasibility['grade']}] - {feasibility['verdict']}")
         print(
             f" [★] Achieved Throughput : {feasibility['actual_fps_per_cam']:.1f} FPS/cam (Total: {feasibility['actual_total_fps']:.1f} FPS)"
@@ -1166,7 +1381,7 @@ class ReportGenerator:
             f" [★] Max Safe Streams    : {feasibility['max_safe_streams_at_target_fps']} Cameras simultaneously @ {feasibility['target_fps']} FPS"
         )
         print(f" [★] Primary Bottlenecks : {', '.join(feasibility['bottlenecks'])}")
-        print("=" * 95)
+        print("=" * 105)
 
     @staticmethod
     def export_json(data: Dict[str, Any], filepath: str):
@@ -1183,6 +1398,10 @@ class ReportGenerator:
 
         keys = [
             "model",
+            "engine_type",
+            "tracker",
+            "nvenc",
+            "nvdec",
             "streams",
             "mode",
             "skip_frames",
@@ -1195,6 +1414,10 @@ class ReportGenerator:
             "avg_gpu_util_pct",
             "peak_gpu_util_pct",
             "avg_gpu_mem_bus_pct",
+            "avg_gpu_encoder_pct",
+            "peak_gpu_encoder_pct",
+            "avg_gpu_decoder_pct",
+            "peak_gpu_decoder_pct",
             "avg_vram_mb",
             "peak_vram_mb",
             "avg_system_cpu_pct",
@@ -1221,7 +1444,7 @@ class ReportGenerator:
     ):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         md = []
-        md.append("# Smart Traffic Vision - Multi-Camera Hardware Benchmark & Sizing Report\n")
+        md.append("# Smart Traffic Vision - Production Multi-Camera Benchmark & Sizing Report\n")
         md.append(f"**Generated On:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         md.append("## 1. System Hardware Baseline\n")
         md.append(f"- **GPU Model:** {system_info.get('gpu_name', 'N/A')}")
@@ -1257,37 +1480,30 @@ class ReportGenerator:
 
         md.append("## 3. Detailed Results Matrix\n")
         md.append(
-            "| Model | Streams | Mode | Skip | Display | FPS/Cam | Total FPS | GPU % | VRAM (MB) | CPU % | RAM (MB) | Drops |"
+            "| Model | Streams | Mode | Tracker | NVENC | FPS/Cam | Total FPS | GPU % | NVENC % | VRAM (MB) | CPU % | Drops |"
         )
         md.append(
             "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
         )
         for r in results:
-            disp_str = "YES" if r.get("display") else "NO"
+            nv_str = "YES" if r.get("nvenc") else "NO"
+            m_name = os.path.basename(r["model"])
             md.append(
-                f"| `{r['model']}` | {r['streams']} | {r['mode']} | {r['skip_frames']} | {disp_str} | "
+                f"| `{m_name}` | {r['streams']} | {r['mode']} | {r.get('tracker', 'sort')} | {nv_str} | "
                 f"**{r['fps_per_camera']:.1f}** | **{r['total_fps']:.1f}** | {r['avg_gpu_util_pct']:.1f}% | "
-                f"{r['peak_vram_mb']:.0f} | {r['avg_system_cpu_pct']:.1f}% | {r['peak_process_ram_mb']:.0f} | {r.get('drop_rate_pct', 0.0):.1f}% |"
+                f"{r.get('avg_gpu_encoder_pct', 0.0):.1f}% | {r['peak_vram_mb']:.0f} | {r['avg_system_cpu_pct']:.1f}% | {r.get('drop_rate_pct', 0.0):.1f}% |"
             )
 
-        # 4. Per-Core CPU Load Distribution
-        rep_run = next((r for r in reversed(results) if r["streams"] == 8), results[-1])
-        per_core = rep_run.get("per_core_cpu_pct", [])
-        if per_core:
-            md.append(f"\n## 4. Per-Core CPU Load Distribution ({rep_run['model']} - {rep_run['streams']} Streams, {rep_run['mode'].upper()})\n")
-            md.append("| Core | Load % | Core | Load % | Core | Load % | Core | Load % |")
-            md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
-            for i in range(0, len(per_core), 4):
-                row_parts = []
-                for idx in range(4):
-                    if i + idx < len(per_core):
-                        row_parts.append(f"**Core {i+idx}** | {per_core[i+idx]:.1f}%")
-                    else:
-                        row_parts.append(" | ")
-                md.append("| " + " | ".join(row_parts) + " |")
-            md.append(f"\n- **Peak Single-Core Load:** `{rep_run.get('core_max_util_pct', 0.0):.1f}%`")
-            md.append(f"- **Minimum Core Load:** `{rep_run.get('core_min_util_pct', 0.0):.1f}%`")
-            md.append(f"- **Core Load Imbalance (Std Dev):** `{rep_run.get('core_load_std_pct', 0.0):.1f}%` (Exposes single-thread Python bottleneck)\n")
+        md.append("\n## 4. Individual CPU Core Utilization & Thread Balance\n")
+        md.append("| Model / Setup | Mode | Peak Core % | Min Core % | Per-Core Utilization Distribution (Core 0 to N) |")
+        md.append("| :--- | :---: | :---: | :---: | :--- |")
+        for r in results:
+            cores = r.get("per_core_cpu_pct", [])
+            max_c = r.get("core_max_util_pct", 0.0)
+            min_c = r.get("core_min_util_pct", 0.0)
+            m_name = os.path.basename(r["model"])
+            cores_repr = ", ".join([f"**C{i}:** {c:.0f}%" for i, c in enumerate(cores)])
+            md.append(f"| `{m_name}` ({r['streams']} cams) | {r['mode']} | **{max_c:.1f}%** | {min_c:.1f}% | {cores_repr} |")
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write("\n".join(md))
@@ -1306,19 +1522,18 @@ class ReportGenerator:
 
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         plt.subplots_adjust(hspace=0.35, wspace=0.25)
-        fig.suptitle("Smart Traffic Vision - Multi-Camera Hardware Performance Analysis", fontsize=14, fontweight="bold")
+        fig.suptitle("Smart Traffic Vision - Production Hardware Benchmark Analysis", fontsize=14, fontweight="bold")
 
-        # Sort results by streams
         sorted_res = sorted(results, key=lambda x: (x["model"], x["streams"]))
         models = list(set(r["model"] for r in sorted_res))
 
-        # Panel 1: Throughput Scaling (Streams vs FPS/camera)
+        # Panel 1: Throughput Scaling
         ax1 = axs[0, 0]
         for m in models:
             m_res = [r for r in sorted_res if r["model"] == m]
             streams = [r["streams"] for r in m_res]
             fps_cam = [r["fps_per_camera"] for r in m_res]
-            ax1.plot(streams, fps_cam, marker="o", linewidth=2.5, label=f"{m} (FPS/cam)")
+            ax1.plot(streams, fps_cam, marker="o", linewidth=2.5, label=f"{os.path.basename(m)} (FPS/cam)")
         ax1.axhline(15.0, color="green", linestyle="--", alpha=0.7, label="15 FPS Target")
         ax1.axhline(25.0, color="orange", linestyle="--", alpha=0.7, label="25 FPS Target")
         ax1.set_title("Per-Camera Throughput vs Stream Count", fontweight="bold")
@@ -1327,49 +1542,53 @@ class ReportGenerator:
         ax1.grid(True, linestyle=":", alpha=0.6)
         ax1.legend()
 
-        # Panel 2: Resource Utilization vs Stream Count
+        # Panel 2: Resource Utilization (Compute & NVENC)
         ax2 = axs[0, 1]
         for m in models:
             m_res = [r for r in sorted_res if r["model"] == m]
             streams = [r["streams"] for r in m_res]
             gpu_u = [r["avg_gpu_util_pct"] for r in m_res]
             cpu_u = [r["avg_system_cpu_pct"] for r in m_res]
-            ax2.plot(streams, gpu_u, marker="s", linewidth=2, label=f"{m} GPU %")
-            ax2.plot(streams, cpu_u, marker="^", linewidth=2, linestyle="--", label=f"{m} CPU %")
-        ax2.set_title("GPU & CPU Load vs Stream Count", fontweight="bold")
+            enc_u = [r.get("avg_gpu_encoder_pct", 0.0) for r in m_res]
+            ax2.plot(streams, gpu_u, marker="s", linewidth=2, label=f"{os.path.basename(m)} GPU %")
+            ax2.plot(streams, cpu_u, marker="^", linewidth=2, linestyle="--", label=f"{os.path.basename(m)} CPU %")
+            if any(x > 0 for x in enc_u):
+                ax2.plot(streams, enc_u, marker="x", linewidth=2, linestyle=":", label=f"{os.path.basename(m)} NVENC %")
+        ax2.set_title("Hardware Utilization vs Stream Count", fontweight="bold")
         ax2.set_xlabel("Number of Parallel Cameras")
         ax2.set_ylabel("Utilization (%)")
         ax2.set_ylim(0, 105)
         ax2.grid(True, linestyle=":", alpha=0.6)
         ax2.legend()
 
-        # Panel 3: Memory Footprint (VRAM & RAM MB)
+        # Panel 3: Memory Footprint
         ax3 = axs[1, 0]
         for m in models:
             m_res = [r for r in sorted_res if r["model"] == m]
             streams = [r["streams"] for r in m_res]
             vram = [r["peak_vram_mb"] for r in m_res]
             ram = [r["peak_process_ram_mb"] for r in m_res]
-            ax3.plot(streams, vram, marker="D", linewidth=2, label=f"{m} VRAM (MB)")
-            ax3.plot(streams, ram, marker="v", linewidth=2, linestyle=":", label=f"{m} Host RAM (MB)")
+            ax3.plot(streams, vram, marker="D", linewidth=2, label=f"{os.path.basename(m)} VRAM (MB)")
+            ax3.plot(streams, ram, marker="v", linewidth=2, linestyle=":", label=f"{os.path.basename(m)} Host RAM (MB)")
         ax3.set_title("Memory Demand vs Stream Count", fontweight="bold")
         ax3.set_xlabel("Number of Parallel Cameras")
         ax3.set_ylabel("Memory (MB)")
         ax3.grid(True, linestyle=":", alpha=0.6)
         ax3.legend()
 
-        # Panel 4: Latency Stage Breakdown (for largest run)
+        # Panel 4: Latency Stage Breakdown
         ax4 = axs[1, 1]
         largest_run = sorted_res[-1]
         l = largest_run.get("latencies", {})
-        stages = ["Decode", "Inference", "SORT", "Render"]
+        stages = ["Decode", "Inference", "Tracking", "Analytics", "Render/NVENC"]
         times = [
             l.get("decode_ms", {}).get("mean", 0.0),
             l.get("inference_ms", {}).get("mean", 0.0),
             l.get("tracking_ms", {}).get("mean", 0.0),
+            l.get("analytics_ms", {}).get("mean", 0.0),
             l.get("visualize_ms", {}).get("mean", 0.0),
         ]
-        colors = ["#3498db", "#e74c3c", "#f39c12", "#9b59b6"]
+        colors = ["#3498db", "#e74c3c", "#f39c12", "#2ecc71", "#9b59b6"]
         bars = ax4.bar(stages, times, color=colors, edgecolor="black", alpha=0.85)
         for bar in bars:
             yval = bar.get_height()
@@ -1382,7 +1601,8 @@ class ReportGenerator:
                 fontweight="bold",
             )
         ax4.set_title(
-            f"Stage Latency Breakdown ({largest_run['model']} - {largest_run['streams']} Cams)", fontweight="bold"
+            f"Stage Latency Breakdown ({os.path.basename(largest_run['model'])} - {largest_run['streams']} Cams)",
+            fontweight="bold",
         )
         ax4.set_ylabel("Mean Execution Time (ms)")
         ax4.grid(True, linestyle=":", alpha=0.6, axis="y")
@@ -1393,13 +1613,8 @@ class ReportGenerator:
 
     @staticmethod
     def cleanup_old_results(out_dir: str, keep_latest: int = 3):
-        """
-        Prunes older benchmark result files, retaining at most `keep_latest` historical runs.
-        """
         if not os.path.exists(out_dir) or keep_latest <= 0:
             return
-
-        import glob
 
         patterns = [
             "BENCHMARK_REPORT_*.md",
@@ -1411,7 +1626,6 @@ class ReportGenerator:
         deleted_count = 0
         for pattern in patterns:
             files = glob.glob(os.path.join(out_dir, pattern))
-            # Sort by modification time descending (newest first)
             files.sort(key=os.path.getmtime, reverse=True)
             for old_file in files[keep_latest:]:
                 try:
@@ -1421,15 +1635,17 @@ class ReportGenerator:
                     pass
 
         if deleted_count > 0:
-            print(f"   [~] Cleaned up {deleted_count} older benchmark artifact file(s) (retaining latest {keep_latest} runs).")
+            print(
+                f"   [~] Cleaned up {deleted_count} older benchmark artifact file(s) (retaining latest {keep_latest} runs)."
+            )
 
 
 # ==============================================================================
-# 9. MAIN CLI INTERFACE
+# 10. MAIN CLI INTERFACE
 # ==============================================================================
 def main():
     parser = argparse.ArgumentParser(
-        description="Comprehensive Multi-Camera Hardware Benchmark & Sizing Suite",
+        description="Comprehensive Production Multi-Camera Hardware Benchmark & Sizing Suite",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -1442,8 +1658,8 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["yolov8n.pt", "yolov8s.pt"],
-        help="YOLO model checkpoint files to benchmark",
+        default=["yolov8n.engine", "yolov8s.engine"],
+        help="YOLO model checkpoint or TensorRT engine files to benchmark",
     )
     parser.add_argument(
         "--duration",
@@ -1460,8 +1676,14 @@ def main():
     parser.add_argument(
         "--target-fps",
         type=float,
-        default=15.0,
+        default=25.0,
         help="Target frame rate per camera feed (e.g. 15.0 or 25.0 FPS)",
+    )
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.15,
+        help="Confidence threshold for YOLO vehicle detection (lower like 0.15 tracks distant vehicles)",
     )
     parser.add_argument(
         "--mode",
@@ -1475,6 +1697,27 @@ def main():
         type=int,
         default=[0],
         help="Frame skipping intervals to evaluate (0 = every frame, 1 = every 2nd frame, 2 = every 3rd)",
+    )
+    parser.add_argument(
+        "--tracker",
+        choices=["bytetrack", "botsort", "sort"],
+        default="bytetrack",
+        help="Object tracking algorithm to benchmark",
+    )
+    parser.add_argument(
+        "--tensorrt",
+        action="store_true",
+        help="Force auto-compilation of any .pt models to TensorRT .engine format",
+    )
+    parser.add_argument(
+        "--nvenc",
+        action="store_true",
+        help="Enable NVIDIA NVENC hardware-accelerated video encoding for HUD / output streaming",
+    )
+    parser.add_argument(
+        "--nvdec",
+        action="store_true",
+        help="Enable NVIDIA NVDEC (CUVID) hardware-accelerated video decoding for camera streams",
     )
     parser.add_argument(
         "--display",
@@ -1541,17 +1784,25 @@ def main():
         "vram_total_gb": vram_total_gb,
     }
 
-    print("\n" + "=" * 80)
-    print("🚦 INITIALIZING SMART TRAFFIC VISION BENCHMARK SUITE")
+    nvenc_supported = is_nvenc_available()
+    nvdec_supported = is_nvdec_available()
+
+    print("\n" + "=" * 85)
+    print("🚦 INITIALIZING SMART TRAFFIC VISION PRODUCTION BENCHMARK SUITE")
     print(f" Target Compute Device : {device} ({gpu_name})")
     print(f" CPU Subsystem          : {cpu_physical} Physical Cores / {cpu_logical} Logical Threads")
     print(f" Host & GPU Memory      : {sys_ram_gb:.1f} GB System RAM | {vram_total_gb:.1f} GB Dedicated VRAM")
+    print(f" Tracking Engine        : {args.tracker.upper()}")
+    print(f" NVIDIA NVENC Encoder   : {'ENABLED' if args.nvenc else 'DISABLED'} (Hardware Support: {nvenc_supported})")
+    print(f" NVIDIA NVDEC Decoder   : {'ENABLED' if args.nvdec else 'DISABLED'} (Hardware Support: {nvdec_supported})")
     print(f" Test Models            : {args.models}")
     print(f" Stream Targets         : {args.streams} cameras")
     print(f" Frame Skip Intervals   : {args.frame_skips}")
-    print(f" Live Display Window    : {'ENABLED (Visual HUD Active)' if args.display else 'DISABLED (Headless Server Mode)'}")
+    print(
+        f" Live Display Window    : {'ENABLED (Visual HUD Active)' if args.display else 'DISABLED (Headless Server Mode)'}"
+    )
     print(f" RTSP Stream Pacing     : {'DISABLED (Uncapped Stress)' if args.unpaced else f'ENABLED ({args.target_fps} FPS)'}")
-    print("=" * 80)
+    print("=" * 85)
 
     # Initialize Profiler & calibrate baseline
     profiler = HardwareProfiler(sample_interval=0.05)
@@ -1559,14 +1810,26 @@ def main():
     print(
         f"   ✔ Baseline Idle State: CPU: {baseline['baseline_cpu_pct']:.1f}% | "
         f"GPU: {baseline['baseline_gpu_pct']:.1f}% | VRAM: {baseline['baseline_vram_mb']:.0f} MB | "
-        f"Power: {baseline['baseline_power_w']:.1f} W"
+        f"Power: {baseline['baseline_power_w']:.1f} W | NVENC: {baseline['baseline_encoder_pct']:.1f}%"
     )
+
+    # Resolve Models (Auto-convert .pt to .engine if --tensorrt is requested)
+    resolved_models = []
+    for m in args.models:
+        if (args.tensorrt or m.endswith(".engine")) and m.endswith(".pt"):
+            eng_candidate = m.replace(".pt", ".engine")
+            if not os.path.exists(eng_candidate):
+                print(f"   [!] TensorRT engine not found for {m}. Building {eng_candidate}...")
+                export_yolo_to_tensorrt(m, dynamic=True, batch=8, imgsz=args.imgsz)
+            resolved_models.append(eng_candidate)
+        else:
+            resolved_models.append(m)
 
     modes_to_test = ["threaded", "batched"] if args.mode == "both" else [args.mode]
     all_results: List[Dict[str, Any]] = []
 
     # Run Benchmark Experiments
-    for model_name in args.models:
+    for model_name in resolved_models:
         for mode in modes_to_test:
             for skip in args.frame_skips:
                 for n_streams in args.streams:
@@ -1582,10 +1845,15 @@ def main():
                         display=args.display,
                         imgsz=args.imgsz,
                         device=device,
+                        tracker_name=args.tracker,
+                        conf=args.conf,
+                        use_tensorrt=args.tensorrt or model_name.endswith(".engine"),
+                        use_nvenc=args.nvenc,
+                        use_nvdec=args.nvdec,
                         profiler=profiler,
                     )
                     all_results.append(res)
-                    time.sleep(1.0)  # Brief thermal cooldown between tests
+                    time.sleep(1.0)  # Thermal cooldown between tests
 
     # Analyze 8-Camera Feasibility
     analyzer = FeasibilityAnalyzer(
@@ -1626,7 +1894,7 @@ def main():
     # Cleanup older benchmark result sets beyond keep_latest
     ReportGenerator.cleanup_old_results(args.out_dir, keep_latest=args.keep_latest)
 
-    print("\n[+] Benchmark Suite Execution Completed Successfully!")
+    print("\n[+] Production Benchmark Suite Execution Completed Successfully!")
 
 
 if __name__ == "__main__":
