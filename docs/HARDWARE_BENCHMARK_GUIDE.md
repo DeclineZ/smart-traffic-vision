@@ -20,6 +20,15 @@ Verifies that CUDA, TensorRT, and video ingestion work across 1-2 streams:
 python benchmark_hardware.py --streams 1 2 --duration 5 --models yolov8n.engine --mode batched --target-fps 25.0
 ```
 
+### TensorRT Engine Setup
+TensorRT `.engine` files are hardware-specific binaries compiled for your exact GPU architecture (cannot be shared across different GPU models). Build them once locally on your machine:
+
+```powershell
+python export_trt.py --model yolov8n.pt --batch 8
+python export_trt.py --model yolov8s.pt --batch 8
+```
+*(Or pass `--tensorrt` with `.pt` files to auto-build them on first run).*
+
 ### Full Benchmark
 Evaluates 1, 2, 4, and 8 camera feeds with TensorRT models, frame skipping, ByteTrack, NVENC, and live HUD display:
 
@@ -47,6 +56,7 @@ python benchmark_hardware.py `
 | :--- | :--- | :--- |
 | `--streams` | `1 2 4 8` | Camera feed counts to test sequentially. |
 | `--models` | `yolov8n.engine yolov8s.engine` | YOLO model checkpoints (`.pt`) or TensorRT engines (`.engine`). |
+| `--tensorrt` | `False` | Auto-compiles any specified `.pt` models to TensorRT `.engine` on first run. |
 | `--mode` | `batched` | Pipeline mode: `batched` (centralized batching) or `threaded`. |
 | `--frame-skips` | `0` | Skip intervals: `0` (every frame), `1` (every 2nd), `2` (every 3rd). |
 | `--tracker` | `bytetrack` | Tracker: `bytetrack`, `botsort`, or `sort`. |
