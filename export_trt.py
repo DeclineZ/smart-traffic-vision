@@ -166,6 +166,8 @@ def main():
     )
     parser.add_argument(
         "--max-batch",
+        "--batch",
+        dest="max_batch",
         type=int,
         default=8,
         help="Maximum batch size for dynamic profile (default: 8)",
@@ -173,8 +175,8 @@ def main():
     parser.add_argument(
         "--workspace",
         type=int,
-        default=4,
-        help="TensorRT workspace limit in GB (default: 4)",
+        default=2,
+        help="TensorRT workspace limit in GB (default: 2)",
     )
     parser.add_argument(
         "--device",
