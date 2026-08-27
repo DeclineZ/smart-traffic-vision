@@ -43,18 +43,17 @@ DEFAULT_VIDEOS = [
 COCO_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
-# ==============================================================================
-# 1. HARDWARE PROFILER (Direct NVML + psutil)
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Hardware Profiler
+# ---------------------------------------------------------------------------
 class HardwareProfiler:
     """
-    High-frequency background hardware sampler measuring:
-    - GPU Core Compute Utilization (%) & Memory Controller Bus Utilization (%)
-    - Dedicated VRAM Used (MB / GB) & PyTorch Allocated / Reserved VRAM
-    - GPU Temperature (°C) & Power Draw (Watts)
-    - Process CPU % & System Total CPU % & Per-Core CPU Distribution (Min, Max, Std)
-    - Process RAM (RSS, Peak RSS) & Total System RAM (GB, %)
-    - Process Thread Count
+    Background hardware sampler measuring:
+    - GPU compute and memory bus utilization
+    - Dedicated and PyTorch-allocated VRAM
+    - GPU temperature and power draw
+    - CPU utilization (total and per-core)
+    - Process and system RAM
     """
 
     def __init__(self, sample_interval: float = 0.05, gpu_index: int = 0):
@@ -93,7 +92,7 @@ class HardwareProfiler:
 
     def capture_baseline(self, duration: float = 1.0) -> Dict[str, float]:
         """Samples idle hardware baseline before workload runs."""
-        print("   [~] Calibrating baseline idle hardware load...")
+        print("Calibrating baseline idle hardware...")
         b_cpu, b_proc_ram, b_gpu, b_vram, b_pwr = [], [], [], [], []
         t_end = time.perf_counter() + duration
 
@@ -273,9 +272,9 @@ class HardwareProfiler:
             time.sleep(self.interval)
 
 
-# ==============================================================================
-# 2. RTSP STREAM SIMULATOR & LIVE INGESTION
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Stream Simulator
+# ---------------------------------------------------------------------------
 class RTSPStreamSimulator:
     """
     Decoupled background stream producer that simulates real IP / RTSP network cameras:
@@ -366,9 +365,9 @@ class RTSPStreamSimulator:
         return (self.frames_dropped / total * 100.0) if total > 0 else 0.0
 
 
-# ==============================================================================
-# 3. STAGE LATENCY TRACKER
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Stage Latency Tracker
+# ---------------------------------------------------------------------------
 class StageLatencyTracker:
     """Collects microsecond-accurate latency measurements for each pipeline stage."""
 
@@ -424,9 +423,9 @@ class StageLatencyTracker:
         }
 
 
-# ==============================================================================
-# 4. WORKER: THREADED PIPELINE (Independent Camera Workers)
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Threaded Camera Pipeline
+# ---------------------------------------------------------------------------
 class ThreadedCameraWorker(threading.Thread):
     def __init__(
         self,
@@ -570,9 +569,9 @@ class ThreadedCameraWorker(threading.Thread):
         self.simulator.stop()
 
 
-# ==============================================================================
-# 5. WORKER: BATCHED PIPELINE (High-Throughput Centralized Batching)
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Batched Camera Pipeline
+# ---------------------------------------------------------------------------
 class BatchedCameraPipeline:
     """
     Centralized batching engine: pulls frames from N cameras and feeds
@@ -764,9 +763,9 @@ class BatchedCameraPipeline:
             sim.stop()
 
 
-# ==============================================================================
-# 6. BENCHMARK RUNNER & EXPERIMENT ORCHESTRATOR
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Benchmark Runner
+# ---------------------------------------------------------------------------
 def run_single_test(
     model_name: str,
     n_streams: int,
@@ -781,11 +780,7 @@ def run_single_test(
     device: str = "cuda:0",
     profiler: Optional[HardwareProfiler] = None,
 ) -> Dict[str, Any]:
-    print(f"\n   ----------------------------------------------------------------------")
-    print(
-        f"   ▶ Running: {model_name} | {n_streams} Camera Stream(s) | Mode: {pipeline_mode.upper()} | Skip: {skip_frames} | Display HUD: {display} | Paced: {is_paced}"
-    )
-    print(f"   ----------------------------------------------------------------------")
+    print(f"\n[{model_name}] {n_streams} stream(s), mode={pipeline_mode}, skip={skip_frames}, display={display}")
 
     # Load Model
     model = YOLO(model_name)
@@ -797,7 +792,6 @@ def run_single_test(
         profiler = HardwareProfiler(sample_interval=0.05)
 
     # Warmup Model
-    print("   [~] Warming up GPU model caches...")
     dummy = np.zeros((imgsz, imgsz, 3), dtype=np.uint8)
     for _ in range(5):
         _ = model(dummy, verbose=False, device=device, imgsz=imgsz)
@@ -950,18 +944,18 @@ def run_single_test(
 
     # Print summary
     print(
-        f"   ✔ Completed: {fps_per_camera:.1f} FPS/cam (Total: {total_fps:.1f} FPS) | "
+        f"  -> {fps_per_camera:.1f} FPS/cam ({total_fps:.1f} total) | "
         f"GPU: {hw_metrics['avg_gpu_util_pct']:.1f}% | VRAM: {hw_metrics['peak_vram_mb']:.0f} MB | "
-        f"CPU: {hw_metrics['avg_system_cpu_pct']:.1f}% | Latency (E2E P50): {latencies_summary.get('e2e_ms', {}).get('p50', 0.0):.1f} ms | "
+        f"CPU: {hw_metrics['avg_system_cpu_pct']:.1f}% | Latency: {latencies_summary.get('e2e_ms', {}).get('p50', 0.0):.1f} ms | "
         f"Drops: {drop_rate_pct:.1f}%"
     )
 
     return result
 
 
-# ==============================================================================
-# 7. FEASIBILITY & 8-CAMERA HARDWARE SIZING ANALYZER
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Feasibility Analyzer
+# ---------------------------------------------------------------------------
 class FeasibilityAnalyzer:
     """
     Evaluates real-time feasibility for 8 cameras, determines system bottlenecks,
@@ -1066,9 +1060,9 @@ class FeasibilityAnalyzer:
         }
 
 
-# ==============================================================================
-# 8. VISUALIZATION & MULTI-FORMAT REPORT GENERATOR
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# Report Generator
+# ---------------------------------------------------------------------------
 class ReportGenerator:
     @staticmethod
     def print_terminal_report(
@@ -1076,44 +1070,38 @@ class ReportGenerator:
         feasibility: Dict[str, Any],
         system_info: Dict[str, Any],
     ):
-        print("\n" + "=" * 95)
-        print("🚦 SMART TRAFFIC VISION - MULTI-CAMERA BENCHMARK & SIZING REPORT")
-        print("=" * 95)
-        print(f" • Host Hardware  : {system_info.get('gpu_name', 'N/A')}")
-        print(
-            f" • CPU Architecture: {system_info.get('cpu_physical', 0)} Physical Cores / {system_info.get('cpu_logical', 0)} Logical Threads"
-        )
-        print(
-            f" • Memory Capacity : {system_info.get('system_ram_gb', 0.0):.1f} GB System RAM | {system_info.get('vram_total_gb', 0.0):.1f} GB Dedicated VRAM"
-        )
-        print(f" • PyTorch / CUDA  : PyTorch {torch.__version__} (CUDA: {torch.version.cuda})")
-        print("=" * 95)
+        print("\n" + "-" * 90)
+        print("Benchmark Summary Report")
+        print("-" * 90)
+        print(f"Host: {system_info.get('gpu_name', 'N/A')} | {system_info.get('cpu_physical', 0)} cores / {system_info.get('cpu_logical', 0)} threads | {system_info.get('vram_total_gb', 0.0):.1f} GB VRAM")
+        print(f"PyTorch / CUDA: {torch.__version__} ({torch.version.cuda})")
+        print("-" * 90)
 
-        # Results Table
-        print("\n### 1. Multi-Camera Scalability & Resource Demand Matrix:")
-        print("-" * 95)
+        # Performance Matrix
+        print("\n1. Performance Matrix")
+        print("-" * 90)
         header = (
-            f"{'Model':<10} | {'Streams':<7} | {'Mode':<8} | {'Skip':<4} | {'Display':<7} | "
-            f"{'FPS/Cam':<9} | {'Total FPS':<9} | {'GPU %':<6} | {'VRAM(MB)':<8} | {'CPU %':<6} | {'Drops'}"
+            f"{'Model':<12} | {'Streams':<7} | {'Mode':<8} | {'Skip':<4} | {'Display':<7} | "
+            f"{'FPS/Cam':<8} | {'Total FPS':<9} | {'GPU %':<6} | {'VRAM(MB)':<8} | {'CPU %':<6} | {'Drops'}"
         )
         print(header)
-        print("-" * 95)
+        print("-" * 90)
 
         for r in benchmark_results:
-            disp_str = "YES" if r.get("display") else "NO"
+            disp_str = "yes" if r.get("display") else "no"
             row = (
-                f"{r['model']:<10} | {r['streams']:<7} | {r['mode']:<8} | {r['skip_frames']:<4} | {disp_str:<7} | "
-                f"{r['fps_per_camera']:<9.1f} | {r['total_fps']:<9.1f} | {r['avg_gpu_util_pct']:<6.1f} | "
+                f"{r['model']:<12} | {r['streams']:<7} | {r['mode']:<8} | {r['skip_frames']:<4} | {disp_str:<7} | "
+                f"{r['fps_per_camera']:<8.1f} | {r['total_fps']:<9.1f} | {r['avg_gpu_util_pct']:<6.1f} | "
                 f"{r['peak_vram_mb']:<8.0f} | {r['avg_system_cpu_pct']:<6.1f} | {r.get('drop_rate_pct', 0.0):.1f}%"
             )
             print(row)
-        print("-" * 95)
+        print("-" * 90)
 
         # Stage Latency Breakdown Table
-        print("\n### 2. Stage-by-Stage Latency Breakdown (Averaged Across Streams):")
-        print("-" * 95)
-        print(f"{'Model / Streams':<23} | {'Decode':<8} | {'Inference':<10} | {'SORT':<8} | {'Render':<8} | {'E2E P50 (ms)'}")
-        print("-" * 95)
+        print("\n2. Latency Breakdown (ms)")
+        print("-" * 90)
+        print(f"{'Configuration':<24} | {'Decode':<8} | {'Inference':<10} | {'Tracking':<8} | {'Render':<8} | {'E2E P50'}")
+        print("-" * 90)
         for r in benchmark_results:
             l = r.get("latencies", {})
             dec = l.get("decode_ms", {}).get("mean", 0.0)
@@ -1122,58 +1110,48 @@ class ReportGenerator:
             vis = l.get("visualize_ms", {}).get("mean", 0.0)
             e2e = l.get("e2e_ms", {}).get("p50", 0.0)
             name_str = f"{r['model']} ({r['streams']} cams)"
-            print(f"{name_str:<23} | {dec:<8.2f} | {inf:<10.2f} | {trk:<8.2f} | {vis:<8.2f} | {e2e:<.2f}")
-        print("-" * 95)
+            print(f"{name_str:<24} | {dec:<8.2f} | {inf:<10.2f} | {trk:<8.2f} | {vis:<8.2f} | {e2e:<.2f}")
+        print("-" * 90)
 
         # Per-Core CPU Distribution
         rep_run = next((r for r in reversed(benchmark_results) if r["streams"] == 8), benchmark_results[-1])
         per_core = rep_run.get("per_core_cpu_pct", [])
         if per_core:
-            print(f"\n### 3. Per-Core Logical CPU Load Distribution ({rep_run['model']} - {rep_run['streams']} Cams, {rep_run['mode'].upper()}):")
-            print("-" * 95)
+            print(f"\n3. CPU Core Utilization ({rep_run['model']} - {rep_run['streams']} cams, {rep_run['mode']})")
+            print("-" * 90)
             col_lines = []
             for i in range(0, len(per_core), 4):
                 chunk = per_core[i : i + 4]
                 col_str = " | ".join([f"Core {i+idx:02d}: {pct:>5.1f}%" for idx, pct in enumerate(chunk)])
                 col_lines.append(col_str)
             print("\n".join(col_lines))
-            print(f" [★] Core Peak: {rep_run.get('core_max_util_pct', 0.0):.1f}% | Core Min: {rep_run.get('core_min_util_pct', 0.0):.1f}% | Load Imbalance (Std): {rep_run.get('core_load_std_pct', 0.0):.1f}%")
-            print("-" * 95)
+            print(
+                f"Peak core: {rep_run.get('core_max_util_pct', 0.0):.1f}% | "
+                f"Min core: {rep_run.get('core_min_util_pct', 0.0):.1f}% | "
+                f"Load std: {rep_run.get('core_load_std_pct', 0.0):.1f}%"
+            )
+            print("-" * 90)
 
-        # 8-Camera Sizing Verdict
-        print("\n" + "=" * 95)
-        print(
-            f"🎯 8-CAMERA HARDWARE SIZING VERDICT (Target: {feasibility['target_cameras']} Cams @ {feasibility['target_fps']} FPS = {feasibility['target_total_fps']:.0f} Total FPS)"
-        )
-        print("=" * 95)
-        print(f" [★] VERDICT GRADE       : [{feasibility['grade']}] - {feasibility['verdict']}")
-        print(
-            f" [★] Achieved Throughput : {feasibility['actual_fps_per_cam']:.1f} FPS/cam (Total: {feasibility['actual_total_fps']:.1f} FPS)"
-        )
-        print(
-            f" [★] GPU Load & Headroom : {feasibility['gpu_util_pct']:.1f}% Load ({feasibility['gpu_headroom_pct']:.1f}% Compute Headroom remaining)"
-        )
-        print(
-            f" [★] VRAM Load & Headroom: {feasibility['vram_used_mb']:.0f} MB / {feasibility['total_vram_mb']:.0f} MB ({feasibility['vram_headroom_mb']/1024.0:.2f} GB Free)"
-        )
-        print(
-            f" [★] CPU Load & Headroom : {feasibility['cpu_util_pct']:.1f}% Load ({feasibility['cpu_headroom_pct']:.1f}% CPU Headroom remaining)"
-        )
-        print(
-            f" [★] Frame Drop Rate     : {feasibility['drop_rate_pct']:.2f}% (Threshold: < 5.0% for real-time safety)"
-        )
-        print(
-            f" [★] Max Safe Streams    : {feasibility['max_safe_streams_at_target_fps']} Cameras simultaneously @ {feasibility['target_fps']} FPS"
-        )
-        print(f" [★] Primary Bottlenecks : {', '.join(feasibility['bottlenecks'])}")
-        print("=" * 95)
+        # Sizing Verdict
+        print(f"\n4. Sizing Verdict ({feasibility['target_cameras']} cameras @ {feasibility['target_fps']} FPS)")
+        print("-" * 90)
+        print(f"Verdict: [{feasibility['grade']}] {feasibility['verdict']}")
+        print(f"Achieved throughput: {feasibility['actual_fps_per_cam']:.1f} FPS/cam ({feasibility['actual_total_fps']:.1f} total FPS)")
+        print(f"GPU load: {feasibility['gpu_util_pct']:.1f}% ({feasibility['gpu_headroom_pct']:.1f}% headroom)")
+        print(f"VRAM: {feasibility['vram_used_mb']:.0f} MB / {feasibility['total_vram_mb']:.0f} MB ({feasibility['vram_headroom_mb']/1024.0:.2f} GB free)")
+        print(f"CPU load: {feasibility['cpu_util_pct']:.1f}% ({feasibility['cpu_headroom_pct']:.1f}% headroom)")
+        print(f"Frame drop rate: {feasibility['drop_rate_pct']:.2f}%")
+        print(f"Estimated capacity: ~{feasibility['max_safe_streams_at_target_fps']} cameras @ {feasibility['target_fps']} FPS")
+        if feasibility.get("bottlenecks"):
+            print(f"Bottlenecks: {', '.join(feasibility['bottlenecks'])}")
+        print("-" * 90)
 
     @staticmethod
     def export_json(data: Dict[str, Any], filepath: str):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        print(f"   [+] Saved structured benchmark JSON to: {filepath}")
+        print(f"Saved JSON: {filepath}")
 
     @staticmethod
     def export_csv(results: List[Dict[str, Any]], filepath: str):
@@ -1210,7 +1188,7 @@ class ReportGenerator:
             writer.writeheader()
             for r in results:
                 writer.writerow(r)
-        print(f"   [+] Saved benchmark summary CSV to: {filepath}")
+        print(f"Saved CSV: {filepath}")
 
     @staticmethod
     def export_markdown_report(
@@ -1291,7 +1269,7 @@ class ReportGenerator:
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write("\n".join(md))
-        print(f"   [+] Saved Executive Markdown Report to: {filepath}")
+        print(f"Saved Markdown report: {filepath}")
 
     @staticmethod
     def generate_plots(results: List[Dict[str, Any]], filepath: str):
@@ -1301,7 +1279,7 @@ class ReportGenerator:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except Exception as e:
-            print(f"   [!] Skipping plot generation (matplotlib error: {e})")
+            print(f"Skipping plot generation ({e})")
             return
 
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
@@ -1389,7 +1367,7 @@ class ReportGenerator:
 
         plt.savefig(filepath, dpi=300, bbox_inches="tight")
         plt.close()
-        print(f"   [+] Saved Performance Charts PNG to: {filepath}")
+        print(f"Saved charts: {filepath}")
 
     @staticmethod
     def cleanup_old_results(out_dir: str, keep_latest: int = 3):
@@ -1421,12 +1399,12 @@ class ReportGenerator:
                     pass
 
         if deleted_count > 0:
-            print(f"   [~] Cleaned up {deleted_count} older benchmark artifact file(s) (retaining latest {keep_latest} runs).")
+            print(f"Cleaned up {deleted_count} older benchmark artifact(s) (retaining latest {keep_latest}).")
 
 
-# ==============================================================================
-# 9. MAIN CLI INTERFACE
-# ==============================================================================
+# ---------------------------------------------------------------------------
+# CLI Entrypoint
+# ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
         description="Comprehensive Multi-Camera Hardware Benchmark & Sizing Suite",
@@ -1541,25 +1519,24 @@ def main():
         "vram_total_gb": vram_total_gb,
     }
 
-    print("\n" + "=" * 80)
-    print("🚦 INITIALIZING SMART TRAFFIC VISION BENCHMARK SUITE")
-    print(f" Target Compute Device : {device} ({gpu_name})")
-    print(f" CPU Subsystem          : {cpu_physical} Physical Cores / {cpu_logical} Logical Threads")
-    print(f" Host & GPU Memory      : {sys_ram_gb:.1f} GB System RAM | {vram_total_gb:.1f} GB Dedicated VRAM")
-    print(f" Test Models            : {args.models}")
-    print(f" Stream Targets         : {args.streams} cameras")
-    print(f" Frame Skip Intervals   : {args.frame_skips}")
-    print(f" Live Display Window    : {'ENABLED (Visual HUD Active)' if args.display else 'DISABLED (Headless Server Mode)'}")
-    print(f" RTSP Stream Pacing     : {'DISABLED (Uncapped Stress)' if args.unpaced else f'ENABLED ({args.target_fps} FPS)'}")
-    print("=" * 80)
+    print("\n" + "-" * 50)
+    print("Hardware Benchmark Configuration")
+    print("-" * 50)
+    print(f"Device: {device} ({gpu_name})")
+    print(f"CPU: {cpu_physical} physical / {cpu_logical} logical cores")
+    print(f"Memory: {sys_ram_gb:.1f} GB RAM | {vram_total_gb:.1f} GB VRAM")
+    print(f"Models: {args.models}")
+    print(f"Streams: {args.streams} camera(s) | Mode: {args.mode}")
+    print(f"Pacing: {args.target_fps} FPS (unpaced={args.unpaced}) | Skips: {args.frame_skips} | Display: {args.display}")
+    print("-" * 50)
 
     # Initialize Profiler & calibrate baseline
     profiler = HardwareProfiler(sample_interval=0.05)
     baseline = profiler.capture_baseline(duration=1.5)
     print(
-        f"   ✔ Baseline Idle State: CPU: {baseline['baseline_cpu_pct']:.1f}% | "
-        f"GPU: {baseline['baseline_gpu_pct']:.1f}% | VRAM: {baseline['baseline_vram_mb']:.0f} MB | "
-        f"Power: {baseline['baseline_power_w']:.1f} W"
+        f"Baseline idle: CPU {baseline['baseline_cpu_pct']:.1f}%, "
+        f"GPU {baseline['baseline_gpu_pct']:.1f}%, VRAM {baseline['baseline_vram_mb']:.0f} MB, "
+        f"Power {baseline['baseline_power_w']:.1f} W"
     )
 
     modes_to_test = ["threaded", "batched"] if args.mode == "both" else [args.mode]
@@ -1626,7 +1603,7 @@ def main():
     # Cleanup older benchmark result sets beyond keep_latest
     ReportGenerator.cleanup_old_results(args.out_dir, keep_latest=args.keep_latest)
 
-    print("\n[+] Benchmark Suite Execution Completed Successfully!")
+    print("\nBenchmark completed successfully.")
 
 
 if __name__ == "__main__":
