@@ -107,10 +107,13 @@ class HardwareProfiler:
                 try:
                     rates = pynvml.nvmlDeviceGetUtilizationRates(self.nvml_handle)
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
-                    pwr = pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0
                     b_gpu.append(rates.gpu)
                     b_vram.append(mem.used / (1024 * 1024))
-                    b_pwr.append(pwr)
+                    try:
+                        b_pwr.append(pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0)
+                    except pynvml.NVMLError:
+                        # Power telemetry is commonly unavailable on Windows/WDDM.
+                        b_pwr.append(0.0)
                 except Exception:
                     pass
             elif torch.cuda.is_available():
@@ -248,12 +251,20 @@ class HardwareProfiler:
                 try:
                     rates = pynvml.nvmlDeviceGetUtilizationRates(self.nvml_handle)
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
-                    temp = pynvml.nvmlDeviceGetTemperature(self.nvml_handle, pynvml.NVML_TEMPERATURE_GPU)
-                    pwr = pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0
 
                     self.gpu_util_samples.append(float(rates.gpu))
                     self.gpu_mem_bus_samples.append(float(rates.memory))
                     self.vram_used_mb_samples.append(float(mem.used / (1024 * 1024)))
+                    try:
+                        temp = pynvml.nvmlDeviceGetTemperature(
+                            self.nvml_handle, pynvml.NVML_TEMPERATURE_GPU
+                        )
+                    except pynvml.NVMLError:
+                        temp = 0.0
+                    try:
+                        pwr = pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0
+                    except pynvml.NVMLError:
+                        pwr = 0.0
                     self.gpu_temp_samples.append(float(temp))
                     self.gpu_power_w_samples.append(float(pwr))
                 except Exception:
