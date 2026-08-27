@@ -325,7 +325,7 @@ class RTSPStreamSimulator:
     - Tracks dropped frames count, drop rate %, and frame arrival latency.
     """
 
-    def __init__(self, source: str, target_fps: float = 25.0, buffer_size: int = 1, is_paced: bool = True):
+    def __init__(self, source: str, target_fps: float = 25.0, buffer_size: int = 3, is_paced: bool = True):
         self.source = source
         self.target_fps = target_fps
         self.buffer_size = buffer_size
@@ -549,6 +549,7 @@ class ThreadedCameraWorker(threading.Thread):
         tracker_name: str = "bytetrack",
         use_nvdec: bool = False,
         nvenc_writer: Optional[NVENCVideoWriter] = None,
+        buffer_size: int = 2,
     ):
         super().__init__(daemon=True)
         self.stream_id = stream_id
@@ -561,12 +562,17 @@ class ThreadedCameraWorker(threading.Thread):
         self.display = display
         self.model_lock = model_lock or threading.Lock()
         self.nvenc_writer = nvenc_writer
+        self.buffer_size = buffer_size
 
         # Video ingestion (NVDEC hardware acceleration or OpenCV fallback)
         if use_nvdec:
-            self.simulator = NVDECStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
+            self.simulator = NVDECStreamSimulator(
+                source=stream_source, target_fps=target_fps, buffer_size=buffer_size, is_paced=is_paced
+            )
         else:
-            self.simulator = RTSPStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
+            self.simulator = RTSPStreamSimulator(
+                source=stream_source, target_fps=target_fps, buffer_size=buffer_size, is_paced=is_paced
+            )
 
         # High-performance Vectorized Tracker
         self.tracker = TrackerWrapper(tracker_type=tracker_name, skip_frames=skip_frames)
@@ -696,6 +702,128 @@ class ThreadedCameraWorker(threading.Thread):
 
 
 # ==============================================================================
+# 5.5 WORKER: ASYNC VISUAL DISPLAY & NVENC STREAMER
+# ==============================================================================
+class AsyncDisplayWorker:
+    """
+    Decoupled visual rendering & HUD display worker.
+    Runs asynchronously in a dedicated background thread to prevent GUI rendering,
+    OpenCV resizing, grid stitching, and NVENC encoding from throttling
+    the high-throughput GPU inference loop.
+    """
+
+    def __init__(
+        self,
+        display: bool = True,
+        nvenc_writer: Optional[NVENCVideoWriter] = None,
+        window_name: str = "Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD",
+    ):
+        self.display = display
+        self.nvenc_writer = nvenc_writer
+        self.window_name = window_name
+        self.queue: queue.Queue = queue.Queue(maxsize=1)
+        self.running = False
+        self.thread: Optional[threading.Thread] = None
+
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self._render_loop, daemon=True)
+        self.thread.start()
+
+    def submit(self, frames: List[np.ndarray], tracked_list: List[np.ndarray], test_poly: Any):
+        """Non-blocking snapshot submit. If rendering is busy, drop preview frame."""
+        if not self.running:
+            return
+        payload = (frames, tracked_list, test_poly)
+        if self.queue.full():
+            try:
+                _ = self.queue.get_nowait()
+            except queue.Empty:
+                pass
+        try:
+            self.queue.put_nowait(payload)
+        except queue.Full:
+            pass
+
+    def stop(self):
+        self.running = False
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1.0)
+        if self.display:
+            try:
+                cv.destroyAllWindows()
+            except Exception:
+                pass
+
+    def _render_loop(self):
+        while self.running:
+            try:
+                payload = self.queue.get(timeout=0.04)
+            except queue.Empty:
+                if self.display:
+                    try:
+                        cv.waitKey(1)
+                    except Exception:
+                        pass
+                continue
+
+            frames, tracked_list, test_poly = payload
+            num_streams = len(frames)
+            vis_frames = []
+
+            for idx in range(num_streams):
+                f = frames[idx]
+                vis = cv.resize(f, (480, 270))
+                scale_x, scale_y = 480 / f.shape[1], 270 / f.shape[0]
+
+                # Draw polygon
+                poly_pts = np.array(
+                    [[int(x * scale_x), int(y * scale_y)] for x, y in test_poly.exterior.coords],
+                    dtype=np.int32,
+                )
+                cv.polylines(vis, [poly_pts], True, (0, 255, 0), 2)
+
+                # Draw bounding boxes
+                if idx < len(tracked_list):
+                    for obj in tracked_list[idx]:
+                        ox1, oy1, ox2, oy2, otrack_id = obj[:5]
+                        bx1, by1 = int(ox1 * scale_x), int(oy1 * scale_y)
+                        bx2, by2 = int(ox2 * scale_x), int(oy2 * scale_y)
+                        cv.rectangle(vis, (bx1, by1), (bx2, by2), (0, 255, 255), 2)
+                        cv.putText(
+                            vis, f"#{int(otrack_id)}", (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1
+                        )
+
+                cv.putText(vis, f"CAM {idx+1:02d}", (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                vis_frames.append(vis)
+
+            # Stitch Grid
+            if len(vis_frames) == 1:
+                grid = vis_frames[0]
+            elif len(vis_frames) == 2:
+                grid = np.hstack(vis_frames)
+            elif len(vis_frames) == 4:
+                grid = np.vstack([np.hstack(vis_frames[:2]), np.hstack(vis_frames[2:])])
+            elif len(vis_frames) == 8:
+                grid = np.vstack([np.hstack(vis_frames[:4]), np.hstack(vis_frames[4:])])
+            else:
+                grid = vis_frames[0]
+
+            if self.nvenc_writer:
+                self.nvenc_writer.write(grid)
+
+            if self.display:
+                cv.imshow(self.window_name, grid)
+                cv.waitKey(1)
+
+        if self.display:
+            try:
+                cv.destroyAllWindows()
+            except Exception:
+                pass
+
+
+# ==============================================================================
 # 6. WORKER: BATCHED PIPELINE (High-Throughput Centralized Batching)
 # ==============================================================================
 class BatchedCameraPipeline:
@@ -718,6 +846,7 @@ class BatchedCameraPipeline:
         tracker_name: str = "bytetrack",
         use_nvdec: bool = False,
         nvenc_writer: Optional[NVENCVideoWriter] = None,
+        buffer_size: int = 2,
     ):
         self.stream_sources = stream_sources
         self.num_streams = len(stream_sources)
@@ -728,15 +857,29 @@ class BatchedCameraPipeline:
         self.skip_frames = skip_frames
         self.display = display
         self.nvenc_writer = nvenc_writer
+        self.buffer_size = buffer_size
+
+        self.display_worker = (
+            AsyncDisplayWorker(display=self.display, nvenc_writer=self.nvenc_writer)
+            if (self.display or self.nvenc_writer)
+            else None
+        )
 
         # Simulators (NVDEC hardware decode or OpenCV fallback)
         if use_nvdec:
             self.simulators = [
-                NVDECStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+                NVDECStreamSimulator(source=src, target_fps=target_fps, buffer_size=buffer_size, is_paced=is_paced)
+                for src in stream_sources
             ]
         else:
             self.simulators = [
-                RTSPStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+                RTSPStreamSimulator(
+                    source=src,
+                    target_fps=target_fps,
+                    buffer_size=buffer_size,
+                    is_paced=is_paced,
+                )
+                for src in stream_sources
             ]
 
         self.trackers = [
@@ -754,6 +897,8 @@ class BatchedCameraPipeline:
     def run_for(self, duration_sec: float):
         for sim in self.simulators:
             sim.start()
+        if self.display_worker:
+            self.display_worker.start()
 
         self.running = True
         t_start = time.perf_counter()
@@ -837,53 +982,10 @@ class BatchedCameraPipeline:
 
             t_trk_ana = (time.perf_counter() - t_trk0) * 1000.0
 
-            # 4. Visual Rendering & Multi-Camera Display Grid (with NVENC support)
+            # 4. Asynchronous Visual Rendering & Multi-Camera Display Grid (with NVENC support)
             t_vis0 = time.perf_counter()
-            if self.display or self.nvenc_writer:
-                vis_frames = []
-                for idx in range(self.num_streams):
-                    f = frames[idx]
-                    vis = cv.resize(f, (480, 270))
-                    scale_x, scale_y = 480 / f.shape[1], 270 / f.shape[0]
-
-                    # Draw poly
-                    poly_pts = np.array(
-                        [[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords],
-                        dtype=np.int32,
-                    )
-                    cv.polylines(vis, [poly_pts], True, (0, 255, 0), 2)
-
-                    # Draw boxes
-                    for obj in tracked_list[idx]:
-                        ox1, oy1, ox2, oy2, otrack_id = obj[:5]
-                        bx1, by1 = int(ox1 * scale_x), int(oy1 * scale_y)
-                        bx2, by2 = int(ox2 * scale_x), int(oy2 * scale_y)
-                        cv.rectangle(vis, (bx1, by1), (bx2, by2), (0, 255, 255), 2)
-                        cv.putText(
-                            vis, f"#{int(otrack_id)}", (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1
-                        )
-
-                    cv.putText(vis, f"CAM {idx+1:02d}", (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                    vis_frames.append(vis)
-
-                # Stitch Grid
-                if len(vis_frames) == 1:
-                    grid = vis_frames[0]
-                elif len(vis_frames) == 2:
-                    grid = np.hstack(vis_frames)
-                elif len(vis_frames) == 4:
-                    grid = np.vstack([np.hstack(vis_frames[:2]), np.hstack(vis_frames[2:])])
-                elif len(vis_frames) == 8:
-                    grid = np.vstack([np.hstack(vis_frames[:4]), np.hstack(vis_frames[4:])])
-                else:
-                    grid = vis_frames[0]
-
-                if self.nvenc_writer:
-                    self.nvenc_writer.write(grid)
-
-                if self.display:
-                    cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
-                    cv.waitKey(1)
+            if self.display_worker:
+                self.display_worker.submit(frames, tracked_list, self.test_poly)
 
             t_vis = (time.perf_counter() - t_vis0) * 1000.0
             t_e2e = (time.perf_counter() - np.mean(capture_times)) * 1000.0
@@ -900,8 +1002,8 @@ class BatchedCameraPipeline:
             self.processed_frames += self.num_streams
 
         self.running = False
-        if self.display:
-            cv.destroyAllWindows()
+        if self.display_worker:
+            self.display_worker.stop()
         for sim in self.simulators:
             self.total_dropped_frames += sim.frames_dropped
             sim.stop()
@@ -927,6 +1029,7 @@ def run_single_test(
     use_tensorrt: bool = False,
     use_nvenc: bool = False,
     use_nvdec: bool = False,
+    buffer_size: int = 2,
     profiler: Optional[HardwareProfiler] = None,
 ) -> Dict[str, Any]:
     # Resolve model format (auto-compile TensorRT engine if requested)
@@ -1016,6 +1119,7 @@ def run_single_test(
                 conf=conf,
                 use_nvdec=use_nvdec,
                 nvenc_writer=None,
+                buffer_size=buffer_size,
             )
             workers.append(w)
             w.start()
@@ -1090,6 +1194,7 @@ def run_single_test(
             conf=conf,
             use_nvdec=use_nvdec,
             nvenc_writer=nvenc_writer,
+            buffer_size=buffer_size,
         )
         pipeline.run_for(duration_sec)
         t_elapsed = time.perf_counter() - t_start
@@ -1730,6 +1835,12 @@ def main():
         help="Disable RTSP stream pacing to run in uncapped max-throughput stress mode",
     )
     parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=2,
+        help="Camera ingestion ring buffer queue size (e.g. 1, 2, 3)",
+    )
+    parser.add_argument(
         "--imgsz",
         type=int,
         default=640,
@@ -1850,6 +1961,7 @@ def main():
                         use_tensorrt=args.tensorrt or model_name.endswith(".engine"),
                         use_nvenc=args.nvenc,
                         use_nvdec=args.nvdec,
+                        buffer_size=args.buffer_size,
                         profiler=profiler,
                     )
                     all_results.append(res)

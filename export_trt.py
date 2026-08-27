@@ -24,7 +24,7 @@ def export_yolo_to_tensorrt(
     dynamic: bool = True,
     batch: int = 8,
     device: int | str = 0,
-    workspace: int = 4,
+    workspace: int = 2,
     verbose: bool = True,
 ) -> str:
     """

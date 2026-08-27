@@ -1,6 +1,6 @@
 # Smart Traffic Vision - Production Multi-Camera Benchmark & Sizing Report
 
-**Generated On:** 2026-08-27 07:48:13
+**Generated On:** 2026-08-27 22:55:43
 
 ## 1. System Hardware Baseline
 
@@ -15,11 +15,11 @@
 > **Verdict:** **[C / FAIL] - INSUFFICIENT (Cannot sustain target 8-camera FPS without frame drops or severe latency)**
 
 - **Target Throughput:** 8 Cameras @ 25.0 FPS = **200 Total FPS**
-- **Achieved Throughput:** **15.4 FPS/cam** (Total: **123.2 FPS**)
-- **GPU Utilization & Headroom:** **13.5%** load (Headroom: **86.5%**)
-- **VRAM Footprint & Free Space:** **6334 MB** / 8151 MB (Headroom: **1.77 GB**)
-- **CPU Utilization & Headroom:** **36.7%** load (Headroom: **63.3%**)
-- **Frame Drop Rate:** **35.47%**
+- **Achieved Throughput:** **22.2 FPS/cam** (Total: **177.5 FPS**)
+- **GPU Utilization & Headroom:** **17.2%** load (Headroom: **82.8%**)
+- **VRAM Footprint & Free Space:** **6545 MB** / 8151 MB (Headroom: **1.57 GB**)
+- **CPU Utilization & Headroom:** **43.6%** load (Headroom: **56.4%**)
+- **Frame Drop Rate:** **5.10%**
 - **Max Safe Stream Capacity:** **9 Camera Streams** @ 25.0 FPS
 - **Identified Bottlenecks:** None (Hardware operates with healthy margin across all subsystems)
 
@@ -27,10 +27,10 @@
 
 | Model | Streams | Mode | Tracker | NVENC | FPS/Cam | Total FPS | GPU % | NVENC % | VRAM (MB) | CPU % | Drops |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `yolov8s.engine` | 8 | batched | bytetrack | YES | **15.4** | **123.2** | 13.5% | 0.8% | 6334 | 36.7% | 35.5% |
+| `yolov8s.engine` | 8 | batched | bytetrack | YES | **22.2** | **177.5** | 17.2% | 0.3% | 6545 | 43.6% | 5.1% |
 
 ## 4. Individual CPU Core Utilization & Thread Balance
 
 | Model / Setup | Mode | Peak Core % | Min Core % | Per-Core Utilization Distribution (Core 0 to N) |
 | :--- | :---: | :---: | :---: | :--- |
-| `yolov8s.engine` (8 cams) | batched | **68.6%** | 20.4% | **C0:** 69%, **C1:** 54%, **C2:** 57%, **C3:** 39%, **C4:** 27%, **C5:** 23%, **C6:** 22%, **C7:** 20%, **C8:** 32%, **C9:** 22%, **C10:** 56%, **C11:** 36%, **C12:** 40%, **C13:** 29%, **C14:** 26%, **C15:** 22% |
+| `yolov8s.engine` (8 cams) | batched | **63.1%** | 28.0% | **C0:** 63%, **C1:** 34%, **C2:** 63%, **C3:** 59%, **C4:** 36%, **C5:** 32%, **C6:** 32%, **C7:** 28%, **C8:** 40%, **C9:** 34%, **C10:** 59%, **C11:** 58%, **C12:** 42%, **C13:** 39%, **C14:** 35%, **C15:** 32% |
