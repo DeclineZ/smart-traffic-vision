@@ -1271,6 +1271,20 @@ def run_single_test(
         f"Drops: {drop_rate_pct:.1f}%"
     )
 
+    # Explicit cleanup to prevent VRAM accumulation across consecutive benchmark tests
+    del pipeline
+    del model
+    if nvenc_writer:
+        nvenc_writer.release()
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        try:
+            torch.cuda.ipc_collect()
+        except Exception:
+            pass
+
     return result
 
 
@@ -1965,6 +1979,10 @@ def main():
                         profiler=profiler,
                     )
                     all_results.append(res)
+                    import gc
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     time.sleep(1.0)  # Thermal cooldown between tests
 
     # Analyze 8-Camera Feasibility
