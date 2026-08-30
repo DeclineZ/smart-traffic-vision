@@ -1271,7 +1271,6 @@ def run_single_test(
         f"Drops: {drop_rate_pct:.1f}%"
     )
 
-    # Explicit cleanup to prevent VRAM accumulation across consecutive benchmark tests
     del pipeline
     del model
     if nvenc_writer:
