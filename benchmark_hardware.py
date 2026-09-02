@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import json
 import os
 import queue
@@ -29,7 +30,8 @@ try:
 
     pynvml.nvmlInit()
     HAS_NVML = True
-except Exception:
+except (ImportError, Exception):
+    pynvml = None
     HAS_NVML = False
 
 # Default 1080p surveillance video feeds
@@ -43,16 +45,27 @@ DEFAULT_VIDEOS = [
 COCO_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
+def cleanup_vram(device: str = "cuda:0"):
+    """
+    Purges PyTorch CUDA allocator cache and runs garbage collection
+    to prevent VRAM accumulation across consecutive benchmark runs.
+    """
+    if "cuda" in device and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    gc.collect()
+
+
 # ---------------------------------------------------------------------------
 # Hardware Profiler
 # ---------------------------------------------------------------------------
 class HardwareProfiler:
     """
     Background hardware sampler measuring:
-    - GPU compute and memory bus utilization
+    - GPU compute and memory bus load
     - Dedicated and PyTorch-allocated VRAM
     - GPU temperature and power draw
-    - CPU utilization (total and per-core)
+    - CPU load (total and per-core)
     - Process and system RAM
     """
 
@@ -65,10 +78,10 @@ class HardwareProfiler:
 
         # NVML Handle
         self.nvml_handle = None
-        if HAS_NVML:
+        if HAS_NVML and pynvml:
             try:
                 self.nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            except Exception:
+            except pynvml.NVMLError:
                 self.nvml_handle = None
 
         # Sample history
@@ -93,6 +106,8 @@ class HardwareProfiler:
     def capture_baseline(self, duration: float = 1.0) -> Dict[str, float]:
         """Samples idle hardware baseline before workload runs."""
         print("Calibrating baseline idle hardware...")
+        cleanup_vram(f"cuda:{self.gpu_index}")
+
         b_cpu, b_proc_ram, b_gpu, b_vram, b_pwr = [], [], [], [], []
         t_end = time.perf_counter() + duration
 
@@ -103,7 +118,7 @@ class HardwareProfiler:
         while time.perf_counter() < t_end:
             b_cpu.append(psutil.cpu_percent(interval=None))
             b_proc_ram.append(self.process.memory_info().rss / (1024 * 1024))
-            if self.nvml_handle:
+            if self.nvml_handle and pynvml:
                 try:
                     rates = pynvml.nvmlDeviceGetUtilizationRates(self.nvml_handle)
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
@@ -112,9 +127,8 @@ class HardwareProfiler:
                     try:
                         b_pwr.append(pynvml.nvmlDeviceGetPowerUsage(self.nvml_handle) / 1000.0)
                     except pynvml.NVMLError:
-                        # Power telemetry is commonly unavailable on Windows/WDDM.
                         b_pwr.append(0.0)
-                except Exception:
+                except pynvml.NVMLError:
                     pass
             elif torch.cuda.is_available():
                 b_vram.append(torch.cuda.memory_allocated(self.gpu_index) / (1024 * 1024))
@@ -158,7 +172,7 @@ class HardwareProfiler:
     def stop(self) -> Dict[str, Any]:
         self.running = False
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
+            self.thread.join(timeout=1.5)
 
         # Calculate summary statistics
         num_cores = psutil.cpu_count(logical=True) or 1
@@ -243,11 +257,11 @@ class HardwareProfiler:
                 sys_mem = psutil.virtual_memory()
                 self.system_ram_gb_samples.append(sys_mem.used / (1024**3))
                 self.system_ram_pct_samples.append(sys_mem.percent)
-            except Exception:
+            except (psutil.Error, OSError):
                 pass
 
             # GPU Metrics via NVML
-            if self.nvml_handle:
+            if self.nvml_handle and pynvml:
                 try:
                     rates = pynvml.nvmlDeviceGetUtilizationRates(self.nvml_handle)
                     mem = pynvml.nvmlDeviceGetMemoryInfo(self.nvml_handle)
@@ -267,7 +281,7 @@ class HardwareProfiler:
                         pwr = 0.0
                     self.gpu_temp_samples.append(float(temp))
                     self.gpu_power_w_samples.append(float(pwr))
-                except Exception:
+                except pynvml.NVMLError:
                     pass
             elif torch.cuda.is_available():
                 self.gpu_util_samples.append(0.0)
@@ -323,7 +337,7 @@ class RTSPStreamSimulator:
     def stop(self):
         self.running = False
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
+            self.thread.join(timeout=1.5)
         if self.cap:
             self.cap.release()
             self.cap = None
@@ -331,13 +345,16 @@ class RTSPStreamSimulator:
     def _capture_loop(self):
         frame_interval = 1.0 / self.target_fps if self.target_fps > 0 else 0.0
 
-        while self.running and self.cap and self.cap.isOpened():
+        while self.running and self.cap is not None and self.cap.isOpened():
             t_loop_start = time.perf_counter()
 
             ret, frame = self.cap.read()
             if not ret:
+                if not self.running or self.cap is None:
+                    break
                 # Video file loop
                 self.cap.set(cv.CAP_PROP_POS_FRAMES, 0)
+                time.sleep(0.01)
                 continue
 
             t_captured = time.perf_counter()
@@ -501,10 +518,10 @@ class ThreadedCameraWorker(threading.Thread):
 
             if should_run_yolo:
                 t_pre0 = time.perf_counter()
-                with self.model_lock:
-                    t_pre = (time.perf_counter() - t_pre0) * 1000.0
-                    t_infer0 = time.perf_counter()
+                t_pre = (time.perf_counter() - t_pre0) * 1000.0
 
+                t_infer0 = time.perf_counter()
+                with self.model_lock:
                     results = self.model(
                         frame,
                         verbose=False,
@@ -516,7 +533,7 @@ class ThreadedCameraWorker(threading.Thread):
                     if "cuda" in self.device and torch.cuda.is_available():
                         torch.cuda.synchronize()
 
-                    t_inf = (time.perf_counter() - t_infer0) * 1000.0
+                t_inf = (time.perf_counter() - t_infer0) * 1000.0
 
                 dets = []
                 if len(results) and len(results[0].boxes):
@@ -543,7 +560,7 @@ class ThreadedCameraWorker(threading.Thread):
             # 5. Spatial Analytics (Polygon containment)
             t_ana0 = time.perf_counter()
             for obj in tracked_objs:
-                cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
+                cx, cy = (obj[0] + obj[2]) / 2.0, (obj[1] + obj[3]) / 2.0
                 _ = self.test_poly.contains(Point(cx, cy))
             t_ana = (time.perf_counter() - t_ana0) * 1000.0
 
@@ -551,7 +568,7 @@ class ThreadedCameraWorker(threading.Thread):
             t_vis0 = time.perf_counter()
             if self.display:
                 vis = cv.resize(frame, (640, 360))
-                scale_x, scale_y = 640 / frame.shape[1], 360 / frame.shape[0]
+                scale_x, scale_y = 640.0 / frame.shape[1], 360.0 / frame.shape[0]
 
                 # Draw polygon
                 poly_pts = np.array([[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords], dtype=np.int32)
@@ -659,8 +676,8 @@ class BatchedCameraPipeline:
             if should_run_yolo:
                 t_pre0 = time.perf_counter()
                 t_pre = (time.perf_counter() - t_pre0) * 1000.0
-                t_inf0 = time.perf_counter()
 
+                t_inf0 = time.perf_counter()
                 results = self.model(
                     frames,
                     verbose=False,
@@ -675,7 +692,7 @@ class BatchedCameraPipeline:
                 t_inf = (time.perf_counter() - t_inf0) * 1000.0
                 self.inferred_batches += 1
 
-            # 3. Fan-out to Trackers & Analytics
+            # 3. Fan-out to Trackers
             t_trk0 = time.perf_counter()
             tracked_list = []
             if should_run_yolo:
@@ -692,31 +709,28 @@ class BatchedCameraPipeline:
                     tracked = self.trackers[idx].update(dets_arr)
                     self.last_tracked[idx] = tracked
                     tracked_list.append(tracked)
-
-                    # Geometry
-                    for obj in tracked:
-                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                        _ = self.test_poly.contains(Point(cx, cy))
             else:
                 for idx in range(self.num_streams):
                     tracked = self.last_tracked[idx]
                     tracked_list.append(tracked)
+            t_trk = (time.perf_counter() - t_trk0) * 1000.0
 
-                    # Geometry
-                    for obj in tracked:
-                        cx, cy = (obj[0] + obj[2]) / 2, (obj[1] + obj[3]) / 2
-                        _ = self.test_poly.contains(Point(cx, cy))
+            # 4. Spatial Analytics (Polygon containment)
+            t_ana0 = time.perf_counter()
+            for idx in range(self.num_streams):
+                for obj in tracked_list[idx]:
+                    cx, cy = (obj[0] + obj[2]) / 2.0, (obj[1] + obj[3]) / 2.0
+                    _ = self.test_poly.contains(Point(cx, cy))
+            t_ana = (time.perf_counter() - t_ana0) * 1000.0
 
-            t_trk_ana = (time.perf_counter() - t_trk0) * 1000.0
-
-            # 4. Visual Rendering & Multi-Camera Display Grid
+            # 5. Visual Rendering & Multi-Camera Display Grid
             t_vis0 = time.perf_counter()
             if self.display:
                 vis_frames = []
                 for idx in range(self.num_streams):
                     f = frames[idx]
                     vis = cv.resize(f, (480, 270))
-                    scale_x, scale_y = 480 / f.shape[1], 270 / f.shape[0]
+                    scale_x, scale_y = 480.0 / f.shape[1], 270.0 / f.shape[0]
 
                     # Draw poly
                     poly_pts = np.array([[int(x * scale_x), int(y * scale_y)] for x, y in self.test_poly.exterior.coords], dtype=np.int32)
@@ -738,14 +752,20 @@ class BatchedCameraPipeline:
                     grid = vis_frames[0]
                 elif len(vis_frames) == 2:
                     grid = np.hstack(vis_frames)
-                elif len(vis_frames) == 4:
+                elif len(vis_frames) in (3, 4):
+                    while len(vis_frames) < 4:
+                        vis_frames.append(np.zeros_like(vis_frames[0]))
                     top = np.hstack(vis_frames[:2])
-                    bot = np.hstack(vis_frames[2:])
+                    bot = np.hstack(vis_frames[2:4])
                     grid = np.vstack([top, bot])
-                elif len(vis_frames) == 8:
-                    row1 = np.hstack(vis_frames[:4])
-                    row2 = np.hstack(vis_frames[4:])
-                    grid = np.vstack([row1, row2])
+                elif len(vis_frames) in (5, 6):
+                    while len(vis_frames) < 6:
+                        vis_frames.append(np.zeros_like(vis_frames[0]))
+                    grid = np.vstack([np.hstack(vis_frames[:3]), np.hstack(vis_frames[3:6])])
+                elif len(vis_frames) in (7, 8):
+                    while len(vis_frames) < 8:
+                        vis_frames.append(np.zeros_like(vis_frames[0]))
+                    grid = np.vstack([np.hstack(vis_frames[:4]), np.hstack(vis_frames[4:8])])
                 else:
                     grid = vis_frames[0]
 
@@ -759,8 +779,8 @@ class BatchedCameraPipeline:
                 t_dec / self.num_streams,
                 t_pre,
                 t_inf / self.num_streams,
-                t_trk_ana / self.num_streams * 0.7,
-                t_trk_ana / self.num_streams * 0.3,
+                t_trk / self.num_streams,
+                t_ana / self.num_streams,
                 t_vis / self.num_streams,
                 t_e2e,
             )
@@ -792,6 +812,9 @@ def run_single_test(
     profiler: Optional[HardwareProfiler] = None,
 ) -> Dict[str, Any]:
     print(f"\n[{model_name}] {n_streams} stream(s), mode={pipeline_mode}, skip={skip_frames}, display={display}")
+
+    # Ensure clean VRAM state before test
+    cleanup_vram(device)
 
     # Load Model
     model = YOLO(model_name)
@@ -847,10 +870,18 @@ def run_single_test(
                         grid = frames[0]
                     elif len(frames) == 2:
                         grid = np.hstack(frames)
-                    elif len(frames) == 4:
-                        grid = np.vstack([np.hstack(frames[:2]), np.hstack(frames[2:])])
-                    elif len(frames) == 8:
-                        grid = np.vstack([np.hstack(frames[:4]), np.hstack(frames[4:])])
+                    elif len(frames) in (3, 4):
+                        while len(frames) < 4:
+                            frames.append(np.zeros_like(frames[0]))
+                        grid = np.vstack([np.hstack(frames[:2]), np.hstack(frames[2:4])])
+                    elif len(frames) in (5, 6):
+                        while len(frames) < 6:
+                            frames.append(np.zeros_like(frames[0]))
+                        grid = np.vstack([np.hstack(frames[:3]), np.hstack(frames[3:6])])
+                    elif len(frames) in (7, 8):
+                        while len(frames) < 8:
+                            frames.append(np.zeros_like(frames[0]))
+                        grid = np.vstack([np.hstack(frames[:4]), np.hstack(frames[4:8])])
                     else:
                         grid = frames[0]
                     cv.imshow("Smart Traffic Vision - Multi-Camera Hardware Benchmark HUD", grid)
@@ -961,6 +992,15 @@ def run_single_test(
         f"Drops: {drop_rate_pct:.1f}%"
     )
 
+    # Release model and clear VRAM
+    if pipeline_mode == "threaded":
+        del workers
+    elif pipeline_mode == "batched":
+        del pipeline
+    del model
+    del dummy
+    cleanup_vram(device)
+
     return result
 
 
@@ -995,11 +1035,11 @@ class FeasibilityAnalyzer:
 
         # Headroom calculations
         total_vram_mb = 8192.0
-        if HAS_NVML and torch.cuda.is_available():
+        if HAS_NVML and pynvml and torch.cuda.is_available():
             try:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                 total_vram_mb = pynvml.nvmlDeviceGetMemoryInfo(handle).total / (1024 * 1024)
-            except Exception:
+            except pynvml.NVMLError:
                 pass
 
         gpu_headroom_pct = max(0.0, 100.0 - gpu_util)
@@ -1038,7 +1078,6 @@ class FeasibilityAnalyzer:
         if not bottlenecks:
             bottlenecks.append("None (Hardware operates with healthy margin across all subsystems)")
 
-        cost_per_stream_fps = actual_total_fps / max(1, best_run["streams"])
         cost_per_stream_gpu = max(5.0, gpu_util / max(1, best_run["streams"]))
         cost_per_stream_cpu = max(4.0, cpu_util / max(1, best_run["streams"]))
         cost_per_stream_vram = max(150.0, (vram_mb - 800.0) / max(1, best_run["streams"]))
@@ -1289,7 +1328,7 @@ class ReportGenerator:
 
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-        except Exception as e:
+        except (ImportError, RuntimeError) as e:
             print(f"Skipping plot generation ({e})")
             return
 
@@ -1332,7 +1371,7 @@ class ReportGenerator:
         ax2.grid(True, linestyle=":", alpha=0.6)
         ax2.legend()
 
-        # Panel 3: Memory Footprint (VRAM & RAM MB)
+        # Panel 3: Memory Demand vs Stream Count
         ax3 = axs[1, 0]
         for m in models:
             m_res = [r for r in sorted_res if r["model"] == m]
@@ -1406,7 +1445,7 @@ class ReportGenerator:
                 try:
                     os.remove(old_file)
                     deleted_count += 1
-                except Exception:
+                except OSError:
                     pass
 
         if deleted_count > 0:
@@ -1514,11 +1553,11 @@ def main():
     sys_ram_gb = psutil.virtual_memory().total / (1024**3)
 
     vram_total_gb = 0.0
-    if HAS_NVML and torch.cuda.is_available():
+    if HAS_NVML and pynvml and torch.cuda.is_available():
         try:
             h = pynvml.nvmlDeviceGetHandleByIndex(0)
             vram_total_gb = pynvml.nvmlDeviceGetMemoryInfo(h).total / (1024**3)
-        except Exception:
+        except pynvml.NVMLError:
             pass
 
     system_info = {
@@ -1541,7 +1580,6 @@ def main():
     print(f"Pacing: {args.target_fps} FPS (unpaced={args.unpaced}) | Skips: {args.frame_skips} | Display: {args.display}")
     print("-" * 50)
 
-    # Initialize Profiler & calibrate baseline
     profiler = HardwareProfiler(sample_interval=0.05)
     baseline = profiler.capture_baseline(duration=1.5)
     print(
@@ -1553,7 +1591,6 @@ def main():
     modes_to_test = ["threaded", "batched"] if args.mode == "both" else [args.mode]
     all_results: List[Dict[str, Any]] = []
 
-    # Run Benchmark Experiments
     for model_name in args.models:
         for mode in modes_to_test:
             for skip in args.frame_skips:
@@ -1573,9 +1610,8 @@ def main():
                         profiler=profiler,
                     )
                     all_results.append(res)
-                    time.sleep(1.0)  # Brief thermal cooldown between tests
+                    time.sleep(1.0)
 
-    # Analyze 8-Camera Feasibility
     analyzer = FeasibilityAnalyzer(
         benchmark_results=all_results,
         target_cameras=args.target_cams,
@@ -1583,14 +1619,12 @@ def main():
     )
     feasibility = analyzer.evaluate_8cam_feasibility()
 
-    # Terminal Report
     ReportGenerator.print_terminal_report(
         benchmark_results=all_results,
         feasibility=feasibility,
         system_info=system_info,
     )
 
-    # Export Artifacts
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     json_path = os.path.join(args.out_dir, f"benchmark_results_{timestamp}.json")
     csv_path = os.path.join(args.out_dir, f"benchmark_summary_{timestamp}.csv")
@@ -1611,7 +1645,6 @@ def main():
     if args.save_plots:
         ReportGenerator.generate_plots(all_results, png_path)
 
-    # Cleanup older benchmark result sets beyond keep_latest
     ReportGenerator.cleanup_old_results(args.out_dir, keep_latest=args.keep_latest)
 
     print("\nBenchmark completed successfully.")
