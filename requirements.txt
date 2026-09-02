@@ -79,6 +79,7 @@ psutil
 pure_eval 
 pyaml==25.7.0
 Pygments
+pynvml
 pyparsing==3.2.5
 pyreadline3==3.5.4
 PySocks==1.7.1
