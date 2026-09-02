@@ -17,11 +17,15 @@ Dependencies:
 import cv2 as cv
 import numpy as np
 import os
+import sys
 import time
 import json
 import argparse
 import logging
 from datetime import datetime
+
+# Add root directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from trt_pipeline.video_stream import (
     VideoStream,

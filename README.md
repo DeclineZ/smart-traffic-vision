@@ -1,15 +1,20 @@
 # Smart Traffic Vision: Multi-Camera Tracking & MQTT Streaming
 
-Multi-camera traffic monitoring pipeline for intersection management. It ingests 1 to 8+ video feeds, detects and tracks vehicles with YOLO and SORT, calculates lane queue and movement counts through point-in-polygon tests, and publishes structured JSON telemetry to MQTT for adaptive signal controllers.
+Multi-camera traffic monitoring and hardware benchmarking pipeline for adaptive signal control. Ingests 1 to 8+ video feeds, detects and tracks vehicles in real-time with YOLO and SORT, calculates lane-by-lane queued and moving vehicle counts, and publishes structured JSON telemetry to MQTT.
 
-## Overview
+## System Architecture
 
-- Ingests multiple video streams or RTSP feeds in parallel.
-- Detects cars, motorcycles, buses, and trucks using YOLO models.
-- Tracks persistent vehicle trajectories with SORT across frames.
-- Classifies vehicles as queued or moving based on speed and lane boundaries.
-- Emits consolidated MQTT payloads per intersection window.
-- Displays an adaptive multi-camera grid preview with lane overlays and tracking IDs.
+```
+Camera Feeds (1..N) -> YOLO Detector -> SORT Tracker -> Lane Analytics -> Lane Metrics -> MQTT Publisher -> Traffic Controller
+```
+
+### Core Components
+
+- Ingests multiple video files, RTSP streams, or live network cameras via independent camera worker instances.
+- Detects vehicle classes (`car`, `motorcycle`, `bus`, `truck`, `bicycle`) using thread-synchronized YOLO models.
+- Tracks persistent trajectories across frames using SORT (7-state Kalman Filter and Hungarian assignment).
+- Evaluates vehicle centroids against polygonal lane boundaries and classifies movement as queued or flowing.
+- Emits aggregated intersection telemetry snapshots at regular intervals (default: 2.0s) over MQTT.
 
 ## Setup
 
@@ -55,82 +60,57 @@ pip install -r requirements.txt
 
 ### 4. Start MQTT Broker (Optional for Local Testing)
 
-To run a local Mosquitto broker on port 1883:
-
 ```bash
 mosquitto -v -p 1883
 ```
 
-## Running the Pipeline
+## Quick Commands
 
-### Multi-Camera Traffic Runner
+### A. Run Multi-Camera Traffic Vision
 
-Run 4 cameras with live visual grid:
+Launch 4 camera feeds with live HUD window:
 ```bash
-python run_multi_camera.py --num-cams 4 --display
+python main.py run --num-cams 4 --display
 ```
 
-Run 8 camera feeds:
+Launch 8 camera feeds:
 ```bash
-python run_multi_camera.py --num-cams 8 --display
+python main.py run --num-cams 8 --display
 ```
 
 Run specific directional cameras:
 ```bash
-python run_multi_camera.py --cameras north south east west --display
+python main.py run --cameras north south east west --display
 ```
 
 Run custom video files or RTSP streams:
 ```bash
-python run_multi_camera.py --videos videos/cam44_north.avi videos/cam43_south.avi --display
+python main.py run --videos videos/cam44_north.avi videos/cam43_south.avi --display
 ```
 
-### Hardware Benchmark Suite
+*(You can also run `python run_multi_camera.py` directly).*
+
+### B. Run Hardware Benchmarking Suite
 
 Profile GPU, VRAM, CPU load, and stage latencies across stream counts:
 ```bash
-python benchmark_hardware.py --streams 1 2 4 8 --duration 8 --models yolov8n.pt --mode both --save-plots
+python main.py benchmark --streams 1 2 4 8 --duration 8 --models yolov8n.pt --mode both --save-plots
 ```
 
-See [Hardware Benchmark Guide](docs/HARDWARE_BENCHMARK_GUIDE.md) for full benchmark configuration options and sizing metrics.
+*(You can also run `python benchmark_hardware.py` directly).*
 
-## CLI Options (`run_multi_camera.py`)
+### C. Calibrate Lane Polygons
 
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--num-cams` | `4` | Number of camera feeds to spawn (1 to 8+). |
-| `--cameras` | `None` | Named camera feeds to run (`north`, `south`, `east`, `west`, or `all`). |
-| `--configs` | `None` | Custom JSON configuration paths per feed. |
-| `--videos` | `None` | Video source file paths or RTSP URLs. |
-| `--model` | `yolov8n.pt` | YOLO weights path (`yolov8n.pt`, `yolov8s.pt`, etc.). |
-| `--device` | `auto` | Compute device (`cuda:0`, `cpu`). |
-| `--conf` | `0.20` | Detection confidence threshold. |
-| `--fps` | `25.0` | Target processing FPS per feed. |
-| `--pub-interval` | `2.0` | MQTT broadcast interval in seconds. |
-| `--mqtt-broker` | `mqtt://localhost:1883` | Target MQTT broker URL. |
-| `--mqtt-topic` | `traffic/counts` | Target MQTT topic. |
-| `--intersection-id` | `INT-001` | Intersection identifier for emitted payloads. |
-| `--display` | `False` | Opens the adaptive multi-camera HUD window. |
-
-## Calibrating Lane Polygons
-
-To adjust lane boundaries to camera perspectives:
-
+Mark perspective lane polygon boundaries on video frames:
 ```bash
-python main.py segment --video videos/cam03_east.avi --n 1
+python main.py calibrate --video videos/cam03_east.avi --sec 0 --n 1
 ```
 
-1. Click perimeter points around the lane boundary in sequential order.
-2. Press `q` when complete to print coordinates.
-3. Update the `"polygon"` field in the corresponding config:
-   - `config/config_north.json` (`N1`, `N2`, `N3`)
-   - `config/config_south.json` (`S1`, `S2`, `S3`)
-   - `config/config_east.json` (`E1`)
-   - `config/config_west.json` (`W1`, `W2`)
+*(You can also use the alias `python main.py segment` or run `python tools/segmentor.py` directly).*
 
-## MQTT Telemetry Schema
+## Telemetry Payload Schema
 
-Aggregated payloads publish to `traffic/counts`:
+Aggregated snapshots publish to `traffic/counts` every 2 seconds:
 
 ```json
 {
@@ -157,25 +137,29 @@ Aggregated payloads publish to `traffic/counts`:
 }
 ```
 
-## Repository Structure
+## Specialized Documentation
+
+- **[Hardware Benchmark Guide](docs/HARDWARE_BENCHMARK_GUIDE.md)**: Hardware profiling, latency stages, sizing evaluation, and telemetry export.
+- **[Lane Calibration Guide](docs/CALIBRATION_GUIDE.md)**: Perspective calibration guide for defining road lane boundaries.
+- **[Tracking Algorithms](algorithm/README.md)**: Details on SORT and OC-SORT tracker implementations.
+
+## Repository Layout
 
 ```
 smart-traffic-vision/
-├── docs/
-│   └── HARDWARE_BENCHMARK_GUIDE.md # Hardware benchmarking and stream sizing guide
-├── config/
-│   ├── config_north.json           # North lane polygons and camera configuration
-│   ├── config_south.json           # South lane polygons
-│   ├── config_east.json            # East lane polygons
-│   └── config_west.json            # West lane polygons
-├── trt_pipeline/
-│   ├── payload.py                  # Payload builder and lane aggregation
-│   ├── publisher.py                # Thread-safe MQTT client wrapper
-│   └── tools.py                    # Config loader and system utilities
-├── algorithm/
-│   └── sort.py                     # SORT tracker implementation
-├── videos/                         # Sample 1080p traffic clips
-├── benchmark_hardware.py           # Multi-camera hardware benchmarking suite
-├── run_multi_camera.py             # Multi-camera tracking and MQTT streaming runner
-└── main.py                         # Single-camera runner and polygon calibration utility
+├── docs/                           # Benchmark and calibration guides
+├── config/                         # Production lane polygon JSON configurations
+├── trt_pipeline/                   # Core payload builder, MQTT publisher, and stream utilities
+├── algorithm/                      # Standalone SORT and OC-SORT tracking implementations
+├── tools/                          # Interactive calibration tools and optional detectors
+│   ├── calibration/                # Calibration helpers
+│   ├── face_detector/              # Optional face detection utilities
+│   └── segmentor.py                # Lane polygon calibration tool
+├── tests/                          # Automated unit tests
+├── benchmark/
+│   ├── notebooks/                  # Experimental analysis & evaluation notebooks
+│   └── hardware-results/           # Benchmark telemetry reports (JSON, CSV, MD, PNG)
+├── main.py                         # Unified CLI dispatcher (run, benchmark, calibrate/segment)
+├── run_multi_camera.py             # Multi-camera traffic runner
+└── benchmark_hardware.py           # Multi-camera hardware benchmark suite
 ```

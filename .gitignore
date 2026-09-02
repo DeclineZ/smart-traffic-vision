@@ -92,4 +92,5 @@ temp/
 scratch/
 */data/*
 result_test_skip.zip
+benchmark/hardware-results/
 *.csv
