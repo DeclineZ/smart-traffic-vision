@@ -423,7 +423,10 @@ class TrackerWrapper:
         if self.tracker_type == "sort":
             self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
         elif self.tracker_type == "botsort":
-            from boxmot.trackers.botsort.botsort import BotSort
+            try:
+                from boxmot.trackers.bbox.botsort import BotSort
+            except ImportError:
+                from boxmot.trackers.botsort.botsort import BotSort
 
             self.tracker = BotSort(
                 track_high_thresh=0.30,
@@ -433,7 +436,10 @@ class TrackerWrapper:
                 match_thresh=0.8,
             )
         else:  # default bytetrack
-            from boxmot.trackers.bytetrack.bytetrack import ByteTrack
+            try:
+                from boxmot.trackers.bbox.bytetrack import ByteTrack
+            except ImportError:
+                from boxmot.trackers.bytetrack.bytetrack import ByteTrack
 
             self.tracker = ByteTrack(
                 min_conf=0.15,
