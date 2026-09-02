@@ -1040,7 +1040,9 @@ class FeasibilityAnalyzer:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                 total_vram_mb = pynvml.nvmlDeviceGetMemoryInfo(handle).total / (1024 * 1024)
             except pynvml.NVMLError:
-                pass
+                total_vram_mb = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+        elif torch.cuda.is_available():
+            total_vram_mb = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
 
         gpu_headroom_pct = max(0.0, 100.0 - gpu_util)
         cpu_headroom_pct = max(0.0, 100.0 - cpu_util)
@@ -1558,7 +1560,9 @@ def main():
             h = pynvml.nvmlDeviceGetHandleByIndex(0)
             vram_total_gb = pynvml.nvmlDeviceGetMemoryInfo(h).total / (1024**3)
         except pynvml.NVMLError:
-            pass
+            vram_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    elif torch.cuda.is_available():
+        vram_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
 
     system_info = {
         "gpu_name": gpu_name,
