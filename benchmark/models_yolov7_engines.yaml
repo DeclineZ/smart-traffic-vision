@@ -1,0 +1,41 @@
+# YOLOv7 engine-only suite. Build engines with provision_yolov7.py first.
+runtime_path: runtime-yolo26
+settings:
+  device: cuda:0
+  imgsz: 640
+  conf: 0.25
+  iou: 0.70
+  max_det: 300
+  warmup: 30
+  repeats: 1
+  target_fps: 30
+  seed: 0
+  telemetry_interval: 0.1
+reference_model: v7_fp16_engine
+models:
+  - id: v7_fp16_engine
+    name: YOLOv7 TensorRT FP16
+    version: YOLOv7
+    path: ../models/yolov7.engine
+    backend: ultralytics
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v7x_fp16_engine
+    name: YOLOv7-X TensorRT FP16
+    version: YOLOv7-X
+    path: ../models/yolov7x.engine
+    backend: ultralytics
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+
+videos:
+  - {id: day_north, camera: north, group: day, path: ../videos/cam44_north.avi, start_seconds: 0, frame: 1888, truth: {car: 40, motorcycle: 10}}
+  - {id: day_south, camera: south, group: day, path: ../videos/cam43_south.avi, start_seconds: 0, frame: 1888, truth: {car: 40, motorcycle: 10}}
+  - {id: day_east, camera: east, group: day, path: ../videos/cam03_east.avi, start_seconds:  0, frame: 3000, truth: {car: 6, motorcycle: 1}}
+  - {id: day_west, camera: west, group: day, path: ../videos/cam46_west.avi, start_seconds: 0, frame: 2250, truth: {car: 6, motorcycle: 0}}
+  - {id: night_north, camera: north, group: night, path: ../videos_night/cam44_north.avi, start_seconds: 0, frame: 2263, truth: {car: 40, motorcycle: 10}}
+  - {id: night_south, camera: south, group: night, path: ../videos_night/cam43_south.avi, start_seconds: 0, frame: 2263, truth: {car: 40, motorcycle: 10}}
+  - {id: night_east, camera: east, group: night, path: ../videos_night/cam03_east.avi, start_seconds: 0, frame: 2250, truth: {car: 5, motorcycle: 0}}
+  - {id: night_west, camera: west, group: night, path: ../videos_night/cam46_west.avi, start_seconds: 0, frame: 3250, truth: {car: 5, motorcycle: 7}}

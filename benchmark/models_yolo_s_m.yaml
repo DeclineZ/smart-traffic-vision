@@ -131,11 +131,11 @@ models:
 
 # Choose frame indices and enter human counts before count-check.
 videos:
-  - {id: day_north, camera: north, group: day, path: ../videos/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: day_south, camera: south, group: day, path: ../videos/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: day_east, camera: east, group: day, path: ../videos/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: day_west, camera: west, group: day, path: ../videos/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: night_north, camera: north, group: night, path: ../videos_night/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: night_south, camera: south, group: night, path: ../videos_night/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: night_east, camera: east, group: night, path: ../videos_night/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
-  - {id: night_west, camera: west, group: night, path: ../videos_night/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_north, camera: north, group: day, path: ../videos/cam44_north.avi, start_seconds: 0, frame: 1888, truth: {car: 40, motorcycle: 10}}
+  - {id: day_south, camera: south, group: day, path: ../videos/cam43_south.avi, start_seconds: 0, frame: 1888, truth: {car: 40, motorcycle: 10}}
+  - {id: day_east, camera: east, group: day, path: ../videos/cam03_east.avi, start_seconds:  0, frame: 3000, truth: {car: 6, motorcycle: 1}}
+  - {id: day_west, camera: west, group: day, path: ../videos/cam46_west.avi, start_seconds: 0, frame: 2250, truth: {car: 6, motorcycle: 0}}
+  - {id: night_north, camera: north, group: night, path: ../videos_night/cam44_north.avi, start_seconds: 0, frame: 2263, truth: {car: 40, motorcycle: 10}}
+  - {id: night_south, camera: south, group: night, path: ../videos_night/cam43_south.avi, start_seconds: 0, frame: 2263, truth: {car: 40, motorcycle: 10}}
+  - {id: night_east, camera: east, group: night, path: ../videos_night/cam03_east.avi, start_seconds: 0, frame: 2250, truth: {car: 5, motorcycle: 0}}
+  - {id: night_west, camera: west, group: night, path: ../videos_night/cam46_west.avi, start_seconds: 0, frame: 3250, truth: {car: 5, motorcycle: 7}}

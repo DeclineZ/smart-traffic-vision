@@ -18,7 +18,8 @@ import torch
 from ultralytics import YOLO
 from ultralytics.utils import DEFAULT_CFG_DICT
 
-from bench_core import CLASSES, read_json, save_json, save_csv, sha256, stats
+from bench_core import CLASSES, read_json, save_json, save_csv, sha256, stats, completed_clip
+from bench_prefetch import FrameReader
 
 
 def environment():
@@ -160,7 +161,7 @@ class UltralyticsAdapter:
         if self.model.task != 'detect':
             raise ValueError('Only axis-aligned detection models are supported')
         params = (sum(p.numel() for p in self.model.model.parameters()) if not self.engine
-                  else artifact.get('parameters'))
+                  else artifact.get('parameters', meta.get('parameters')))
         self.info = dict(id=artifact['id'], name=artifact['name'], version=artifact['version'],
                          format='engine' if self.engine else 'pt', precision=artifact['precision'],
                          pair_id=artifact.get('pair_id'), parameters=params,
@@ -239,7 +240,7 @@ def open_at(video, frame_index):
     return cap
 
 
-def save_overlay(path, frame, boxes, title):
+def draw_overlay(frame, boxes, title):
     image = frame.copy()
     colors = [(30, 210, 30), (0, 140, 255)]
     for x1, y1, x2, y2, conf, cls in boxes:
@@ -249,7 +250,11 @@ def save_overlay(path, frame, boxes, title):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, colors[k], 2)
     cv2.rectangle(image, (0, 0), (image.shape[1], 42), (0, 0, 0), -1)
     cv2.putText(image, title, (8, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-    if not cv2.imwrite(str(path), image):
+    return image
+
+
+def save_overlay(path, frame, boxes, title):
+    if not cv2.imwrite(str(path), draw_overlay(frame, boxes, title)):
         raise OSError(f'Cannot write image: {path}')
 
 
@@ -276,6 +281,8 @@ def worker(job_path):
     backend = ADAPTERS[a['backend']](a, s)
     after_load = telemetry.sample()
     rows = []
+    show_preview = s.get('show', False)
+    preview_window = 'Live inference - Q/Esc hides preview'
     if job['mode'] == 'validate':
         v = job['videos'][0]
         cap = open_at(v, v['start_frame'])
@@ -292,6 +299,14 @@ def worker(job_path):
         out = root / v['id']
         out.mkdir(exist_ok=True)
         if job['mode'] == 'performance':
+            if job.get('resume') and (out / 'result.json').is_file():
+                existing = completed_clip(out, v, a['id'], job['pass'])
+                if existing is not None:
+                    rows.append(existing)
+                    save_json(root / 'checkpoint.json', rows)
+                    print(f'Reusing completed clip: {v["id"]}', flush=True)
+                    continue
+            clip_start = time.perf_counter()
             cap = open_at(v, v['start_frame'])
             first_start = time.perf_counter()
             ok, first = cap.read()
@@ -307,37 +322,51 @@ def worker(job_path):
                         nvml_warning=telemetry.unavailable,
                         note='Process VRAM may be unavailable under WDDM. Device readings include desktop load.'))
             timings, saved, counts = [], [], []
-            h = hashlib.sha256()
+            first_boxes = np.empty((0, 6), dtype=np.float32)
+            hash_times = []
             heat = np.zeros((2, v['height'], v['width']), np.uint32) if job['pass'] == 0 else None
             region_counts = {r['id']: [0, 0] for r in v.get('regions', [])}
             telemetry.start(s['telemetry_interval'])
+            measured_start = time.perf_counter()
+            reader = FrameReader(cap, v['selected_frames'], first, first_decode_ms, s.get('prefetch', 0))
             try:
-                for i in range(v['selected_frames']):
-                    if i == 0:
-                        frame, decode_ms = first, first_decode_ms
-                    else:
-                        t = time.perf_counter()
-                        ok, frame = cap.read()
-                        decode_ms = (time.perf_counter() - t) * 1000
-                        if not ok:
-                            raise ValueError(f'Early decode failure {v["id"]} frame {v["start_frame"] + i}')
+                if show_preview:
+                    cv2.namedWindow(preview_window, cv2.WINDOW_NORMAL)
+                    cv2.resizeWindow(preview_window, 1280, 720)
+                for i, (frame, decode_ms, hash_ms) in enumerate(reader):
+                    hash_times.append(hash_ms)
                     if frame.shape[:2] != (v['height'], v['width']):
                         raise ValueError('Source resolution changed')
-                    h.update(frame.data)
                     torch.cuda.synchronize()
                     t = time.perf_counter()
                     boxes, speed = backend.predict(frame)
                     torch.cuda.synchronize()
                     call_ms = (time.perf_counter() - t) * 1000
+                    if i == 0:
+                        first_boxes = boxes.copy()
                     timings.append([decode_ms, speed['preprocess'], speed['inference'], speed['postprocess'], call_ms])
                     counts.append([int((boxes[:, 5] == k).sum()) for k in range(2)])
                     if heat is not None:
                         saved.append(boxes)
+                    if show_preview:
+                        title = (f'{a["id"]} / {v["id"]} / {i + 1}/{v["selected_frames"]} '
+                                 f'/ inference {speed["inference"]:.1f} ms')
+                        cv2.imshow(preview_window, draw_overlay(frame, boxes, title))
+                        key = cv2.waitKey(1) & 0xff
+                        if key in (27, ord('q'), ord('Q')) or cv2.getWindowProperty(preview_window, cv2.WND_PROP_VISIBLE) < 1:
+                            show_preview = False
+                            cv2.destroyAllWindows()
                     if (i + 1) % 1000 == 0:
-                        print(f'{a["id"]} pass {job["pass"] + 1} {v["id"]}: {i + 1}/{v["selected_frames"]}', flush=True)
+                        elapsed = time.perf_counter() - measured_start
+                        eta = elapsed / (i + 1) * (v['selected_frames'] - i - 1)
+                        print(f'{a["id"]} pass {job["pass"] + 1} {v["id"]}: {i + 1}/{v["selected_frames"]}; clip ETA {eta:.0f}s', flush=True)
             finally:
+                reader.close()
                 resource = telemetry.stop()
                 cap.release()
+                if show_preview:
+                    cv2.destroyAllWindows()
+            measured_seconds = time.perf_counter() - measured_start
             values = np.asarray(timings)
             analysis_start = time.perf_counter()
             if heat is not None:
@@ -354,7 +383,9 @@ def worker(job_path):
                                 region_counts[region['id']][k] += 1
             row = dict(model=a['id'], video=v['id'], group=v['group'], camera=v['camera'],
                        pass_index=job['pass'], frames=len(timings), source_fps=v['fps'],
-                       decoded_frames_sha256=h.hexdigest(), resource=resource,
+                       decoded_frames_sha256=reader.digest.hexdigest(), resource=resource,
+                       prefetch=s.get('prefetch', 0), hash_ms=stats(np.asarray(hash_times)),
+                       processing_seconds=measured_seconds, processing_fps=len(timings) / measured_seconds,
                        before_load=before, after_load=after_load, after_warmup=loaded,
                        analysis_seconds=time.perf_counter() - analysis_start, comparable=backend.info['comparable'],
                        precision=a['precision'], car_detections=sum(x[0] for x in counts),
@@ -374,7 +405,11 @@ def worker(job_path):
                 np.savez_compressed(out / 'predictions.npz', boxes=np.concatenate(saved), offsets=offsets)
                 if not cv2.imwrite(str(out / 'background.png'), first):
                     raise OSError('Cannot save heat-map background')
+                save_overlay(out / 'boxes_first.png', first, first_boxes,
+                             f'{a["id"]} / {v["id"]} / first frame boxes')
             row['artifact_write_seconds'] = time.perf_counter() - write_start
+            row['clip_seconds'] = time.perf_counter() - clip_start
+            row['resumed_run'] = bool(job.get('resume'))
             save_json(out / 'result.json', row)
             rows.append(row)
             save_json(root / 'checkpoint.json', rows)
@@ -392,6 +427,17 @@ def worker(job_path):
                 backend.predict(frame)
             save_json(root / 'artifact.json', backend.info)
             thresholds = sorted(set([0.10, 0.25, 0.50, 0.75, s['conf']])) if backend.info['comparable'] else [s['conf']]
+            if job['mode'] == 'ensemble-review':
+                boxes, _ = backend.predict(frame, .001)
+                record = dict(model=a['id'], video=v['id'], frame=v['frame'], frame_sha256=frame_hash,
+                              width=frame.shape[1], height=frame.shape[0], boxes=boxes.tolist())
+                save_json(out / 'detections.json', record)
+                if not cv2.imwrite(str(out / 'source.png'), frame):
+                    raise OSError('Cannot save review source')
+                rows.append(record)
+                save_json(root / 'checkpoint.json', rows)
+                print(f'Ensemble predictions: {a["id"]}/{v["id"]}', flush=True)
+                continue
             for conf in thresholds:
                 boxes, _ = backend.predict(frame, conf)
                 predicted = {k: int((boxes[:, 5] == i).sum()) for i, k in enumerate(CLASSES)}

@@ -28,6 +28,22 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+def completed_clip(folder, video, model, pass_index):
+    folder = Path(folder)
+    required = ['result.json', 'frames.npz', 'telemetry.csv']
+    if pass_index == 0:
+        required += ['heat.npz', 'predictions.npz', 'background.png']
+    if not all((folder / name).is_file() for name in required):
+        return None
+    try:
+        row = read_json(folder / 'result.json')
+        if (row['model'], row['video'], row['pass_index'], row['frames']) == (model, video['id'], pass_index, video['selected_frames']):
+            return row
+    except (ValueError, KeyError):
+        pass
+    return None
+
+
 def save_csv(path, rows):
     if not rows:
         return
@@ -119,10 +135,15 @@ def load_config(path):
         v.setdefault('start_seconds', 0)
         if not math.isfinite(v['start_seconds']) or v['start_seconds'] < 0:
             raise ValueError('start_seconds must be finite and nonnegative')
-        if v.get('duration_seconds', 30) != 30:
-            raise ValueError('Every registered segment must be 30 seconds')
-        v['duration_seconds'] = 30
+        duration = v.get('duration_seconds', 30)
+        if type(duration) not in (int, float) or not math.isfinite(duration) or duration <= 0:
+            raise ValueError('duration_seconds must be a positive number')
+        v['duration_seconds'] = duration
         f = v.get('frame')
+        if 'count_frames' in v:
+            frames = v['count_frames']
+            if not isinstance(frames, list) or not frames or any(type(n) is not int or n < 0 for n in frames) or len(set(frames)) != len(frames):
+                raise ValueError('count_frames must be a nonempty list of distinct nonnegative frame indices')
         if f is not None and (type(f) is not int or f < 0):
             raise ValueError('frame must be a zero-based integer or null')
         for label, count in (v.get('truth') or {}).items():
@@ -146,6 +167,18 @@ def load_config(path):
 def truth_ready(v):
     t = v.get('truth') or {}
     return v.get('frame') is not None and all(type(t.get(k)) is int and t[k] >= 0 for k in CLASSES)
+
+
+def expand_count_frames(videos):
+    result = []
+    for video in videos:
+        if 'count_frames' not in video:
+            result.append(video)
+            continue
+        for frame in video['count_frames']:
+            result.append(video | dict(id=f'{video["id"]}_f{frame}', source_video=video['id'],
+                                       frame=frame, truth=dict(car=None, motorcycle=None)))
+    return result
 
 
 def stats(values):

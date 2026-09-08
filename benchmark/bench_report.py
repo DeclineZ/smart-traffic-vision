@@ -183,6 +183,10 @@ img.onmousemove=show;img.onclick=show;}}
             gallery.append(dict(kind='heat', model=r['model'], video=video, group=r['group'], camera=r['camera'],
                                 image=str((path / 'heat_combined.png').relative_to(root)).replace('\\', '/'),
                                 link=str((path / 'heat_viewer.html').relative_to(root)).replace('\\', '/')))
+            if (path / 'boxes_first.png').exists():
+                gallery.append(dict(kind='boxes', model=r['model'], video=video, group=r['group'], camera=r['camera'],
+                                    image=str((path / 'boxes_first.png').relative_to(root)).replace('\\', '/'),
+                                    link=str((path / 'boxes_first.png').relative_to(root)).replace('\\', '/')))
             for region, counts in r.get('region_counts', {}).items():
                 regional.append(dict(model=r['model'], video=video, region=region,
                                      car_detections=counts[0], motorcycle_detections=counts[1],
@@ -288,7 +292,7 @@ def make_report(root):
     flat_rows = []
     for r in rows:
         flat = {k: v for k, v in r.items() if not isinstance(v, dict)}
-        for key in ('decode_ms', 'preprocess_ms', 'inference_ms', 'postprocess_ms', 'detection_ms', 'resource', 'before_load', 'after_load', 'after_warmup'):
+        for key in ('decode_ms', 'hash_ms', 'preprocess_ms', 'inference_ms', 'postprocess_ms', 'detection_ms', 'resource', 'before_load', 'after_load', 'after_warmup'):
             if key not in r:
                 continue
             flat.update({f'{key}_{k}': v for k, v in r[key].items()})
@@ -377,7 +381,10 @@ def make_report(root):
     filters = ''
     for field in ('model', 'group', 'camera', 'kind'):
         options = ''.join(f'<option>{html.escape(v)}</option>' for v in sorted({g[field] for g in gallery}))
-        filters += f'<label>{field} <select id="{field}"><option value="">all</option>{options}</select></label> '
+        if field == 'model':
+            filters += f'<label>{field} (Ctrl/⌘-click for multiple) <select id="{field}" multiple size="6"><option value="">all</option>{options}</select></label> '
+        else:
+            filters += f'<label>{field} <select id="{field}"><option value="">all</option>{options}</select></label> '
     assets = [p for pattern in ('*.csv', '*.json', 'contact_*.png') for p in sorted(root.glob(pattern))]
     downloads = ' · '.join(f'<a href="{p.name}">{html.escape(p.name)}</a>' for p in assets)
     paircols = ['pt', 'engine', 'group', 'comparison', 'thresholds_comparable', 'detection_speedup', 'device_peak_difference_MiB']
@@ -393,6 +400,6 @@ def make_report(root):
 <h2>Visual comparisons</h2><p>Difference maps: red = more detections than reference; blue = fewer. Heat images link to original-pixel density viewers.</p>
 <div class="filters">{filters}</div>{''.join(cards)}<h2>Environment</h2><pre>{html.escape(json.dumps(env, indent=2))}</pre>
 <p>References: <a href="https://docs.ultralytics.com/modes/predict/">Ultralytics prediction timing</a>; <a href="https://docs.nvidia.com/deploy/nvml-api/structnvmlProcessInfo__v1__t.html">NVML WDDM memory limits</a>.</p>
-<script>function filter(){{for(const card of document.querySelectorAll('article')){{card.hidden=!['model','group','camera','kind'].every(k=>!document.getElementById(k).value||card.dataset[k]===document.getElementById(k).value);}}}}for(const s of document.querySelectorAll('select'))s.onchange=filter;</script></html>'''
+<script>function selected(id){{const el=document.getElementById(id);if(!el.multiple)return el.value?[el.value]:[];const values=[...el.selectedOptions].map(o=>o.value).filter(Boolean);return values;}}function filter(){{for(const card of document.querySelectorAll('article')){{card.hidden=!['model','group','camera','kind'].every(k=>{{const values=selected(k);return !values.length||values.includes(card.dataset[k]);}});}}}}for(const s of document.querySelectorAll('select'))s.onchange=filter;</script></html>'''
     (root / 'index.html').write_text(doc, encoding='utf-8')
     save_json(root / 'report_generation.json', dict(seconds=time.perf_counter() - start, excluded_from_inference=True))

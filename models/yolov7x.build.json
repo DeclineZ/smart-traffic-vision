@@ -1,0 +1,16 @@
+{
+  "model": "yolov7x",
+  "source_url": "https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt",
+  "weights_sha256": "4873202bc3fa8b1d4c4865a37b7c61ce7b7b1cdbe6f31017c33be2bd11826e98",
+  "engine_sha256": "d2136da30392ff585dc608175a5607c893e3d02029052a12dcdfda293de99c32",
+  "parameters": 71344389,
+  "precision": "fp16",
+  "input_size": 640,
+  "batch": 1,
+  "tensorrt": "10.14.1.48.post1",
+  "torch": "2.9.1+cu126",
+  "cuda": "12.6",
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "build_seconds": 295.6027754000388,
+  "output_schema": "YOLOv7 decoded xywh + objectness*class scores, external NMS"
+}
