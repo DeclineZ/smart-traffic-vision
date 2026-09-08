@@ -1,0 +1,64 @@
+# Paths are relative to THIS file. Add model entries manually; do not rename class IDs by guesswork.
+settings:
+  device: cuda:0
+  imgsz: 640
+  conf: 0.25
+  iou: 0.70
+  max_det: 300
+  warmup: 30
+  repeats: 3
+  target_fps: 30
+  seed: 0
+  telemetry_interval: 0.1
+reference_model: v8n_pt
+models:
+  - id: v8n_pt
+    name: YOLOv8n PyTorch
+    version: YOLOv8n
+    path: ../yolov8n.pt
+    backend: ultralytics
+    pair_id: v8n
+    precision: fp32
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v8n_engine
+    name: YOLOv8n TensorRT
+    version: YOLOv8n
+    path: ../yolov8n.engine
+    backend: ultralytics
+    pair_id: v8n
+    precision: fp32
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1'}
+  - id: v8s_pt
+    name: YOLOv8s PyTorch
+    version: YOLOv8s
+    path: ../yolov8s.pt
+    backend: ultralytics
+    pair_id: v8s
+    precision: fp32
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v8s_engine
+    name: YOLOv8s TensorRT
+    version: YOLOv8s
+    path: ../yolov8s.engine
+    backend: ultralytics
+    pair_id: v8s
+    precision: fp32
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1'}
+
+# frame is the zero-based frame in the ORIGINAL file, within the selected segment.
+# Leave truth null until YOU count the exact prepared PNG. Never treat missing truth as zero.
+videos:
+  - {id: day_north, camera: north, group: day, path: ../videos/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_south, camera: south, group: day, path: ../videos/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_east, camera: east, group: day, path: ../videos/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_west, camera: west, group: day, path: ../videos/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_north, camera: north, group: night, path: ../videos_night/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_south, camera: south, group: night, path: ../videos_night/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_east, camera: east, group: night, path: ../videos_night/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_west, camera: west, group: night, path: ../videos_night/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}

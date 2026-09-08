@@ -1,0 +1,141 @@
+# Six model families/scales, twelve artifacts. Isolated Ultralytics 8.4.142 runtime.
+# PT FP16 vs TensorRT FP16; engine I/O may remain FP32 (recorded in artifact metadata).
+runtime_path: runtime-yolo26
+settings:
+  device: cuda:0
+  imgsz: 640
+  conf: 0.25
+  iou: 0.70
+  max_det: 300
+  warmup: 30
+  repeats: 3
+  target_fps: 30
+  seed: 0
+  telemetry_interval: 0.1
+reference_model: v8s_fp16_pt
+models:
+  - id: v8s_fp16_pt
+    name: YOLOv8s PyTorch FP16
+    version: YOLOv8s
+    path: ../models/yolov8s.pt
+    backend: ultralytics
+    pair_id: v8s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v8s_fp16_engine
+    name: YOLOv8s TensorRT FP16
+    version: YOLOv8s
+    path: ../models/yolov8s.engine
+    backend: ultralytics
+    pair_id: v8s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v8m_fp16_pt
+    name: YOLOv8m PyTorch FP16
+    version: YOLOv8m
+    path: ../models/yolov8m.pt
+    backend: ultralytics
+    pair_id: v8m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v8m_fp16_engine
+    name: YOLOv8m TensorRT FP16
+    version: YOLOv8m
+    path: ../models/yolov8m.engine
+    backend: ultralytics
+    pair_id: v8m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v11s_fp16_pt
+    name: YOLO11s PyTorch FP16
+    version: YOLO11s
+    path: ../models/yolo11s.pt
+    backend: ultralytics
+    pair_id: v11s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v11s_fp16_engine
+    name: YOLO11s TensorRT FP16
+    version: YOLO11s
+    path: ../models/yolo11s.engine
+    backend: ultralytics
+    pair_id: v11s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v11m_fp16_pt
+    name: YOLO11m PyTorch FP16
+    version: YOLO11m
+    path: ../models/yolo11m.pt
+    backend: ultralytics
+    pair_id: v11m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v11m_fp16_engine
+    name: YOLO11m TensorRT FP16
+    version: YOLO11m
+    path: ../models/yolo11m.engine
+    backend: ultralytics
+    pair_id: v11m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v26s_fp16_pt
+    name: YOLO26s PyTorch FP16
+    version: YOLO26s
+    path: ../models/yolo26s.pt
+    backend: ultralytics
+    pair_id: v26s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v26s_fp16_engine
+    name: YOLO26s TensorRT FP16
+    version: YOLO26s
+    path: ../models/yolo26s.engine
+    backend: ultralytics
+    pair_id: v26s_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v26m_fp16_pt
+    name: YOLO26m PyTorch FP16
+    version: YOLO26m
+    path: ../models/yolo26m.pt
+    backend: ultralytics
+    pair_id: v26m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+  - id: v26m_fp16_engine
+    name: YOLO26m TensorRT FP16
+    version: YOLO26m
+    path: ../models/yolo26m.engine
+    backend: ultralytics
+    pair_id: v26m_models_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 2, motorcycle: 3}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+
+# Choose frame indices and enter human counts before count-check.
+videos:
+  - {id: day_north, camera: north, group: day, path: ../videos/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_south, camera: south, group: day, path: ../videos/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_east, camera: east, group: day, path: ../videos/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: day_west, camera: west, group: day, path: ../videos/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_north, camera: north, group: night, path: ../videos_night/cam44_north.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_south, camera: south, group: night, path: ../videos_night/cam43_south.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_east, camera: east, group: night, path: ../videos_night/cam03_east.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}
+  - {id: night_west, camera: west, group: night, path: ../videos_night/cam46_west.avi, start_seconds: 0, frame: null, truth: {car: null, motorcycle: null}}

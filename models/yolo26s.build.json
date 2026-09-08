@@ -1,0 +1,19 @@
+{
+  "model": "yolo26s",
+  "weights_sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+  "engine_sha256": "ea94998b499e5272382157b0ac99dfdaa89c873b91abc3fc6243fd9695e6bb66",
+  "source_url": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt",
+  "parameters": 10009784,
+  "precision": "fp16",
+  "batch": 1,
+  "input_size": 640,
+  "ultralytics": "8.4.142",
+  "torch": "2.9.1+cu126",
+  "tensorrt": "10.14.1.48.post1",
+  "cuda": "12.6",
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "build_seconds": 171.21946419996675,
+  "export": "C:\\Sea traffic\\traffic\\models\\yolo26s.engine",
+  "nms": false,
+  "end2end": true
+}

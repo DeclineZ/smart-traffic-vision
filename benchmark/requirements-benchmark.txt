@@ -1,0 +1,9 @@
+# Install into the project's CUDA environment, not the OS Python.
+# GPU runtime separately: torch==2.9.1+cu126; TensorRT 10.14.1.48.post1 (tested Windows environment).
+ultralytics==8.3.240
+opencv-python==4.11.0.86
+numpy==2.4.0
+PyYAML==6.0.3
+psutil==7.2.2
+matplotlib==3.10.8
+nvidia-ml-py==13.610.43

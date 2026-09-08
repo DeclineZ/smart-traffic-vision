@@ -1,0 +1,19 @@
+{
+  "model": "yolov8m",
+  "weights_sha256": "5d4a90cdc7a21786cc59cd19778e9eafff836df9e2da32524737c7ee6efe4fe5",
+  "engine_sha256": "9a217969768c66d0592e23ed48b780afc070b693a6ecdced1abf543c9d3effb3",
+  "source_url": "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8m.pt",
+  "parameters": 25902640,
+  "precision": "fp16",
+  "batch": 1,
+  "input_size": 640,
+  "ultralytics": "8.4.142",
+  "torch": "2.9.1+cu126",
+  "tensorrt": "10.14.1.48.post1",
+  "cuda": "12.6",
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "build_seconds": 145.45855530002154,
+  "export": "C:\\Sea traffic\\traffic\\models\\yolov8m.engine",
+  "nms": false,
+  "end2end": false
+}
