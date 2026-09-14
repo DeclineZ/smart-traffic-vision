@@ -109,6 +109,25 @@ models:
     input_size: 640
     classes: {car: 2, motorcycle: 3}
     export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
+  - id: v26s_thai_fp16_pt
+    name: YOLO26s Thai Traffic PyTorch FP16
+    version: YOLO26s Thai Traffic
+    path: ../models/yolo26s_thai_traffic.pt
+    backend: ultralytics
+    pair_id: v26s_thai_traffic_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 0, motorcycle: 1}
+  - id: v26s_thai_fp16_engine
+    name: YOLO26s Thai Traffic TensorRT FP16
+    version: YOLO26s Thai Traffic
+    path: ../models/yolo26s_thai_traffic.engine
+    backend: ultralytics
+    pair_id: v26s_thai_traffic_fp16
+    precision: fp16
+    input_size: 640
+    classes: {car: 0, motorcycle: 1}
+    export: {nms: false, tensorrt: '10.14.1.48.post1', quantize: 16}
   - id: v26m_fp16_pt
     name: YOLO26m PyTorch FP16
     version: YOLO26m

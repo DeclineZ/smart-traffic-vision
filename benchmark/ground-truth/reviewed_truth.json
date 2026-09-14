@@ -1,0 +1,3397 @@
+{
+  "schema": 1,
+  "review_id": "d8847692259419e8b8e1de3490ceafc0505cd77374ddbc3718441c3ea26e5184",
+  "status": "human_reviewed",
+  "frames": [
+    {
+      "id": "day_east_f450",
+      "group": "day",
+      "camera": "east",
+      "frame": 450,
+      "frame_sha256": "91fbeaf9883e4dc6ebad82417c5f6329ea47117fba365bbcac99a9272a64d4c9",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_east_f450/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            466.35943815353426,
+            368.26837161801586,
+            783.1756426966972,
+            586.1312249249531
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1125.9684163757947,
+            317.1956022848045,
+            1219.8527719984143,
+            379.5691714212428
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1061.6459602515017,
+            299.6194918413853,
+            1146.0546130518726,
+            358.1329406187687
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1208.0237783820469,
+            343.4793062713548,
+            1337.4458359747557,
+            400.2913567314509
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1016.1849464040823,
+            278.0742358239628,
+            1092.7652193238512,
+            321.0801523386385
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1324.436305966098,
+            354.6579137486161,
+            1399.929221166804,
+            418.90694282168073
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1016.5041008695506,
+            288.0075181581778,
+            1066.3388963115083,
+            320.9548636740148
+          ],
+          "class_id": 0,
+          "models": [
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            792.9718017578125,
+            239.2140655517578,
+            836.0404052734375,
+            269.6700439453125
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1016.956324982311,
+            276.5384030962555,
+            1110.5778081623403,
+            322.09513018990737
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1210.125,
+            341.6953125,
+            1398.375,
+            411.3046875
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            658.9349112426036,
+            310.74589429680503,
+            853.1038192576655,
+            488.24126604956706
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_east_f1350",
+      "group": "day",
+      "camera": "east",
+      "frame": 1350,
+      "frame_sha256": "62b476b41da3622e46070225eabcb6d19dcecdf0323d0704915bb1b0e750788f",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_east_f1350/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            466.7217625663571,
+            368.4551899530003,
+            780.5208282300803,
+            587.5668075671822
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1094.9569480288123,
+            375.4444779306188,
+            1252.6791762663008,
+            529.6590542347143
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1062.4605128700787,
+            300.6525137263022,
+            1144.951895057239,
+            357.6598641538951
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            946.6541393396899,
+            283.4565664552711,
+            1050.4209044193992,
+            363.34551208673366
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1126.5046100718296,
+            316.282762124729,
+            1221.699440969603,
+            379.28780309887145
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            820.2145883803901,
+            252.32527534450918,
+            888.313253138574,
+            305.324031564355
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1215.3984688796318,
+            344.2621085997428,
+            1336.2894211291268,
+            400.8909958116337
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1214.15625,
+            341.6953125,
+            1407.84375,
+            418.8046875
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1039.8482945478117,
+            276.6547433794706,
+            1105.5700632538833,
+            319.5644232344543
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1332.0858386725006,
+            354.32732158377917,
+            1406.644468264793,
+            419.7366349946575
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            808.125,
+            250.125,
+            886.875,
+            302.625
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            803.82421875,
+            246.83203125,
+            838.67578125,
+            290.16796875
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            655.8364712210866,
+            320.0334428187519,
+            845.8741258741259,
+            493.4010152284264
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_east_f2250",
+      "group": "day",
+      "camera": "east",
+      "frame": 2250,
+      "frame_sha256": "cd704fe296558e539d7089768f3193c328189476209cd98a3c9160efcf292ea4",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_east_f2250/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            466.5302202678426,
+            367.6287424703422,
+            783.7654281118857,
+            588.0204050242762
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            847.7048400158725,
+            257.57228148222737,
+            933.2549548425928,
+            320.0893535373085
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1126.640028812333,
+            317.01100341142,
+            1223.6971359349654,
+            379.5367589586082
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1061.1470716516528,
+            300.4485410575256,
+            1146.1865133702465,
+            358.0579505573879
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1210.6419201012866,
+            343.8950365270777,
+            1334.756678944101,
+            400.43666915814646
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1015.608199153169,
+            277.7343159919586,
+            1094.8699711163883,
+            320.76317795587266
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1325.9956388850383,
+            354.91400444503176,
+            1406.3198964060034,
+            419.60055098575725
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1014.8781078250626,
+            287.92529485759655,
+            1061.6875782920986,
+            320.67061157112727
+          ],
+          "class_id": 0,
+          "models": [
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            793.9216129365311,
+            243.13737173424263,
+            828.5663882335066,
+            269.78431779077596
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1032.09375,
+            279.33984375,
+            1111.40625,
+            322.91015625
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1209.9375,
+            341.0625,
+            1403.0625,
+            411.9375
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            663.0661646046261,
+            321.06539265452375,
+            855.1694459386767,
+            506.8163630934607
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_east_f3150",
+      "group": "day",
+      "camera": "east",
+      "frame": 3150,
+      "frame_sha256": "d3dcc1ce15e47e553149e53298f74905bc008efc675177947404be013970a3c5",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_east_f3150/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            467.07010082649214,
+            366.837546406676,
+            748.7028909971606,
+            586.6868754975968
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1126.1079423680396,
+            317.62691874707104,
+            1222.869099584646,
+            380.3525833226073
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1061.6889165986836,
+            301.5514268971668,
+            1145.8896532744532,
+            358.08113649028917
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1211.0218956803506,
+            342.9002974116921,
+            1338.7553143354664,
+            400.8409484056469
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            739.03125,
+            365.25,
+            1047.5625,
+            666.1875
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1016.5983050902231,
+            276.7992746621556,
+            1109.3505073626077,
+            320.95851643266616
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1208.5721035139622,
+            343.2076709865719,
+            1390.772700741202,
+            411.349631045263
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1015.7846970344941,
+            286.6712674939545,
+            1067.7632066659319,
+            320.8396679578165
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1326.9641593817591,
+            356.81367715202435,
+            1406.7609160989348,
+            419.8379828125812
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            795,
+            242.25,
+            838.5,
+            270.375
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1045.5,
+            294.375,
+            1122,
+            322.125
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            665.1317912856374,
+            321.06539265452375,
+            847.9397525551371,
+            483.0815168707077
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_east_f4050",
+      "group": "day",
+      "camera": "east",
+      "frame": 4050,
+      "frame_sha256": "99bd5e5faea9ebee517e01633acf67ae8ef48db6bd9dcc720ab581bf1432211f",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_east_f4050/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            466.5661347026877,
+            367.8734579481199,
+            782.1342118385733,
+            586.7692524612394
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            942.8731105036225,
+            286.9976183626485,
+            1040.0974089012411,
+            354.8241316381247
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1220.3567134079367,
+            844.7527167601298,
+            1357.771821189058,
+            1076.7228096027297
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1124.6233381050497,
+            318.2332347072626,
+            1222.2184387610832,
+            380.53293168092193
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            426.6357960522917,
+            921.2716888425252,
+            679.7001612450822,
+            1078.014148084032
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1212.8639610260004,
+            342.57061844262125,
+            1336.9864679264565,
+            399.88300237369975
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1254.6683049768371,
+            442.44703957400355,
+            1307.1769938708221,
+            528.021814702127
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1118.9428615163265,
+            353.51427885165435,
+            1148.9029589242123,
+            407.29408204598496
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            841.4251620917989,
+            296.511138826374,
+            871.6461979655676,
+            344.79083102935266
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1033.594741124813,
+            330.06399756536825,
+            1068.15868693456,
+            391.6512754673564
+          ],
+          "class_id": 1,
+          "models": [
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1216.0412462177098,
+            342.631541454408,
+            1398.0008940809425,
+            413.4295907212831
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1085.8057313539973,
+            324.0217859567542,
+            1114.6555795092381,
+            372.45238803818467
+          ],
+          "class_id": 1,
+          "models": [
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1323.483939539693,
+            355.1644052555621,
+            1406.7910372693466,
+            419.0158095828914
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1032.609375,
+            343.96875,
+            1067.390625,
+            392.53125
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            424.5,
+            921.75,
+            682.5,
+            1078.5
+          ],
+          "class_id": 1,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1067.1485510084926,
+            302.4355775282402,
+            1143.1434978451407,
+            360.95051972838843
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            841.9999420966204,
+            296.0392227410423,
+            871.1493244076355,
+            345.0339290070471
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1038.46875,
+            279.9609375,
+            1144.03125,
+            346.2890625
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1036.171875,
+            291.1640625,
+            1144.828125,
+            365.8359375
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            668.2302313071544,
+            320.0334428187519,
+            851.0381925766541,
+            486.1773663780233
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_west_f450",
+      "group": "day",
+      "camera": "west",
+      "frame": 450,
+      "frame_sha256": "ec93a9c66525695e513a6a0c3402a250cc691e0cea3cf84e8aed3688e663fb3b",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_west_f450/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            277.2813518783188,
+            215.79105114042312,
+            734.4137306190773,
+            543.6041000616839
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day_west_f1350",
+      "group": "day",
+      "camera": "west",
+      "frame": 1350,
+      "frame_sha256": "a927bc79297c8e5d75a97130e5b158f4cbd5233419cf5a48e482266921c27907",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_west_f1350/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            1174.06003145499,
+            44.237540065757464,
+            1284.273044160051,
+            141.4864332527955
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1206.8038681512937,
+            20.197271388469368,
+            1280.7458831663628,
+            73.2492539123965
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1365.973175209974,
+            1.645023510794955,
+            1404.7941697188367,
+            30.34624830779215
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1339.599609375,
+            1.01953125,
+            1361.900390625,
+            37.23046875
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day_west_f2250",
+      "group": "day",
+      "camera": "west",
+      "frame": 2250,
+      "frame_sha256": "6069e87943b0a8173794311f873550a67380741b8f8d6518ce6af7d19d51dd80",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_west_f2250/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            58.75082001185291,
+            405.039155188374,
+            934.6800459652669,
+            1070.5032892696574
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            40.529895228077,
+            173.4860125601383,
+            737.9122472261919,
+            657.0741491542603
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v11s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            776.568313161182,
+            56.78580785890701,
+            1232.1034228967526,
+            589.2158682410769
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            724.3609046673105,
+            113.9135867341253,
+            917.7100088747263,
+            335.1133438405976
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            339.91855955189914,
+            79.9555515759384,
+            686.5883766105952,
+            209.67337150873817
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1034.8789671866596,
+            0,
+            1089.6180742334589,
+            45.534786503433864
+          ],
+          "class_id": 1,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "day_west_f3150",
+      "group": "day",
+      "camera": "west",
+      "frame": 3150,
+      "frame_sha256": "6edb085e1955ae6ea1d107bbcdbe739481bdb22c18c318bca04a1435efc9024e",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_west_f3150/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            58.683924135255296,
+            405.4816042947932,
+            933.8187632737485,
+            1070.2901753934264
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            40.362775640266,
+            160.071806813156,
+            734.5077325902325,
+            649.927254433744
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            775.783982398456,
+            61.72540680555932,
+            1231.3081330909372,
+            603.0034934193127
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            723.9152446553687,
+            110.10589685308211,
+            921.5369413054676,
+            339.6591903388812
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1147.8904797145635,
+            25.129163436016764,
+            1191.2571763303774,
+            78.35550438165286
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            723.8287567012112,
+            112.80876563615938,
+            918.3812611686852,
+            338.54624329878885
+          ],
+          "class_id": 1,
+          "models": [
+            "v11m_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1059.088784415862,
+            2.0347117137449366,
+            1092.8294442927936,
+            38.73250211989721
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1146.8619936142898,
+            18.445008404354528,
+            1191.551465302468,
+            76.69091257248132
+          ],
+          "class_id": 1,
+          "models": [
+            "v26m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1143.55078125,
+            25.828125,
+            1172.44921875,
+            73.921875
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "day_west_f4050",
+      "group": "day",
+      "camera": "west",
+      "frame": 4050,
+      "frame_sha256": "bdec061b79bc7dcf7aa2567cd617e5e40410e297bf00be3cdade0880f9db913b",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/day_west_f4050/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            59.636320684598466,
+            404.26718826713136,
+            934.5991870228004,
+            1070.2508452925344
+          ],
+          "class_id": 0,
+          "models": [
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            42.27018623867858,
+            159.18231120128033,
+            735.8815530078714,
+            648.2400434734267
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1287.2099005437296,
+            0.011088578103386145,
+            1335.7697256797344,
+            26.991491651239812
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1349.8675222775582,
+            0.5155004660653721,
+            1401.2479468481013,
+            39.02823732318009
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            776.4442012760351,
+            74.23964598465543,
+            1203.8917550405667,
+            604.1299566666746
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1233.5254077894265,
+            94.41577996808185,
+            1276.3342993440249,
+            160.36095456273904
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            724.1219755996304,
+            114.63929086567872,
+            915.7793545537119,
+            338.55253170036667
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1138.9860265817993,
+            32.306507145451484,
+            1221.490087501876,
+            116.95127827556102
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1234.3398747729875,
+            82.91507336313664,
+            1277.8597801921132,
+            158.3754587070675
+          ],
+          "class_id": 1,
+          "models": [
+            "v8s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_east_f450",
+      "group": "night",
+      "camera": "east",
+      "frame": 450,
+      "frame_sha256": "d1d4f16917c76988562e891b40689e5b4128ed07521455813d8f906bebed9525",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_east_f450/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            770.8419847700667,
+            401.47530030863834,
+            1031.0569241161033,
+            596.9594121520813
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            850.7755058446764,
+            287.86647283328944,
+            940.775109368895,
+            346.9565289683905
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            0.4220703664206878,
+            797.1979732663605,
+            143.3020727430836,
+            1023.2038408743763
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1211.117740806027,
+            747.9232331430615,
+            1333.939154642606,
+            936.969428647548
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1190.547315140845,
+            393.6593762945319,
+            1219.1121711888982,
+            437.3406237054681
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            790.5,
+            262.5,
+            850.5,
+            312.75
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1186.23046875,
+            356.625,
+            1224.26953125,
+            435.375
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1305.046875,
+            375.046875,
+            1408.453125,
+            442.453125
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1211.484375,
+            780.09375,
+            1329.515625,
+            902.90625
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            966.7132867132867,
+            294.2346969244551,
+            998.7305002689618,
+            343.76828904150494
+          ],
+          "class_id": 1,
+          "models": []
+        },
+        {
+          "box": [
+            1049.3383539537385,
+            323.12929232606746,
+            1095.8149542764927,
+            393.3018811585548
+          ],
+          "class_id": 1,
+          "models": []
+        },
+        {
+          "box": [
+            1127.832167832168,
+            315.90564347566436,
+            1172.2431414739108,
+            384.01433263660795
+          ],
+          "class_id": 1,
+          "models": []
+        },
+        {
+          "box": [
+            1104.0774610005378,
+            377.8226336219767,
+            1148.4884346422807,
+            452.12302179755153
+          ],
+          "class_id": 1,
+          "models": []
+        },
+        {
+          "box": [
+            470.96288327057556,
+            540.8707076739325,
+            788.0365788058095,
+            813.3054643177068
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "night_east_f1350",
+      "group": "night",
+      "camera": "east",
+      "frame": 1350,
+      "frame_sha256": "ce618c8b728a1d5551592667987b59f94de3fbc149a3f148b6e969aaa386ea42",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_east_f1350/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            941.0272127993113,
+            316.8509950721128,
+            1041.1655173948905,
+            396.27974710149766
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1125.216122673854,
+            315.99230504053753,
+            1211.976314198011,
+            377.2008082104637
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            812.9245418259775,
+            282.1312490373841,
+            877.782369976819,
+            333.509533024809
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1052.8505859375,
+            298.8798522949219,
+            1116.263427734375,
+            350.4780578613281
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            792.093153371118,
+            254.9523623874463,
+            891.5300925187942,
+            334.0486876917224
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            830.7013654879418,
+            249.54420925790566,
+            914.5920438426145,
+            306.3648212447037
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1209.8552288141443,
+            338.31625527798974,
+            1341.4002947380682,
+            398.5987985585252
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1304.015625,
+            374.2734375,
+            1365.984375,
+            438.7265625
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1126.5,
+            299.25,
+            1266,
+            379.5
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1051.3154767663225,
+            272.77178108173143,
+            1189.4680839059556,
+            350.13622736687864
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            816.7545942478152,
+            283.2841811116963,
+            877.4862172565543,
+            335.0954131361189
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            886.1538461538462,
+            311.7778441325769,
+            922.3023130715438,
+            375.75873395043294
+          ],
+          "class_id": 1,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "night_east_f2250",
+      "group": "night",
+      "camera": "east",
+      "frame": 2250,
+      "frame_sha256": "968f93df7a1eb2890689c35536aa46d8922aaa0933c30a54a02e6018ef97a3fd",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_east_f2250/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            1100.1436100171431,
+            362.5944384687754,
+            1249.9837178338764,
+            507.6669665999534
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            817.9350593563557,
+            624.992773649076,
+            1241.269388301003,
+            1038.0135393097953
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1010.7261673759886,
+            290.8013986020069,
+            1105.9231203057761,
+            367.09516695513827
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            878.7055371427074,
+            294.07401787000606,
+            985.2906489372722,
+            362.2212869759306
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1123.174218336667,
+            315.3279092428745,
+            1213.5503605227123,
+            371.3755631162376
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1010.560808464913,
+            272.763510844575,
+            1195.8466197764415,
+            368.62933051560947
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            917.8613704289621,
+            301.6907325239909,
+            988.3694570420635,
+            362.76829775097053
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            811.7505971771075,
+            262.8126831925125,
+            918.7415031161563,
+            329.4943370685122
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            879.2336119384669,
+            300.25819403076656,
+            936.9836119384669,
+            359.74180596923344
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1119.197478133334,
+            314.4340310413762,
+            1223.4835866901844,
+            379.9059540771541
+          ],
+          "class_id": 0,
+          "models": [
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            837.0400165895801,
+            283.64849677532135,
+            883.3983060276855,
+            332.6669235124765
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            815.5048437758308,
+            280.3527562170843,
+            881.5309692747326,
+            332.78829670783836
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1102.5,
+            354.796875,
+            1213.5,
+            407.203125
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            879,
+            299.25,
+            989.25,
+            362.25
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_east_f3150",
+      "group": "night",
+      "camera": "east",
+      "frame": 3150,
+      "frame_sha256": "608a7eb6d49e28f14e9bcda305587e761597b82fcde32909e770bae2c711b7c1",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_east_f3150/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            924.6400381440266,
+            321.6090889629389,
+            1045.0612443505627,
+            444.3511058526163
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            995.7425622455313,
+            265.40900889192335,
+            1061.7996720385981,
+            320.5640349281545
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1039.0515875790875,
+            298.99600661457254,
+            1131.0031243759913,
+            385.1999285129694
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            933.7339675868928,
+            319.74976687531455,
+            1041.0274156316084,
+            381.7091358237603
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            863.9591609415339,
+            302.0826354597434,
+            954.8373936317064,
+            359.4468217500579
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1173.2578125,
+            626.625,
+            1265.7421875,
+            840.375
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            925.403404947108,
+            360.2263972579136,
+            1040.5355715220962,
+            444.188607811921
+          ],
+          "class_id": 0,
+          "models": [
+            "v11s_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            826.0645997463522,
+            269.9530523051378,
+            944.4657989056128,
+            340.4031426954328
+          ],
+          "class_id": 0,
+          "models": [
+            "v8m_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1300.640625,
+            385.640625,
+            1342.359375,
+            437.859375
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            792.8438052209526,
+            267.9962996646463,
+            830.9566063962379,
+            301.80058237784357
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            796.1818067324518,
+            253.07352475525644,
+            850.5806710484701,
+            283.5051795925795
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1211.6021893874029,
+            340.38259005608285,
+            1341.1454378774806,
+            404.24122357635895
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            865.640625,
+            303.5625,
+            947.859375,
+            360.1875
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1102.0118343195265,
+            354.08778739922366,
+            1150.554061323292,
+            414.9728277097641
+          ],
+          "class_id": 1,
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "night_east_f4050",
+      "group": "night",
+      "camera": "east",
+      "frame": 4050,
+      "frame_sha256": "b83ec314d334fda37a70ba5cd002601adb2319c40086b0a7f54fd857f9ef40ca",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_east_f4050/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            166.92772549232618,
+            421.4457578042605,
+            536.78215879872,
+            695.8549280551035
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            982.9409301423275,
+            299.5984224149887,
+            1085.266933598821,
+            370.3852645355766
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1124.2464333766109,
+            314.8511858816948,
+            1214.908300468042,
+            378.5975982390896
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            997.6186801385238,
+            266.26013066562666,
+            1061.9038661407508,
+            306.8353014404405
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1073.3562488287625,
+            587.6070780405325,
+            1174.4046143749235,
+            748.5863947584518
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            897.5888750974452,
+            364.5175342768533,
+            938.5003373212643,
+            424.96430852787194
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1123.9282456170156,
+            309.23991743680347,
+            1254.7667802052188,
+            380.1244478798587
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1209.6454476787708,
+            337.6120545174653,
+            1335.754473824095,
+            395.79920837603515
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1034.578125,
+            273.3046875,
+            1189.921875,
+            368.6953125
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            166.5,
+            424.5,
+            549.375,
+            699.75
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1125.6427001953125,
+            316.3777770996094,
+            1189.5699462890625,
+            376.1708679199219
+          ],
+          "class_id": 0,
+          "models": [
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            983.25,
+            304.875,
+            1099.5,
+            373.5
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_west_f450",
+      "group": "night",
+      "camera": "west",
+      "frame": 450,
+      "frame_sha256": "cbe2ff868a250b85aea0ed7420c08d8e3d263a5a227032463d4e825766cfe157",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_west_f450/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            1.2309486767171962,
+            251.44049809976596,
+            659.8454795158991,
+            737.7853081874265
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            749.9829551717047,
+            92.79326118848769,
+            1036.6524737342206,
+            305.43001845473293
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1204.3156044468046,
+            16.744597857021606,
+            1287.6012314623183,
+            82.59940723204603
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            964.7280090602428,
+            369.4122864942573,
+            1072.5671984380851,
+            555.9265508738746
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1168.5813355747077,
+            33.856284529116,
+            1266.4606970057514,
+            123.77388276382527
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1085.7844526287276,
+            58.32824231612664,
+            1217.6270724225992,
+            162.09147845742416
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1085.2333984375,
+            59.03846740722656,
+            1217.9486083984375,
+            158.96099853515625
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1138.0581047973528,
+            216.6765183882233,
+            1201.993689426358,
+            338.34979499600746
+          ],
+          "class_id": 1,
+          "models": [
+            "v7x_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1262.101582832359,
+            4.780210197616223,
+            1318.003106866567,
+            55.638760328803706
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1212.0343579962591,
+            7.028550254132848,
+            1287.7825148542295,
+            60.10039589863619
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1171.7945556640625,
+            36.002105712890625,
+            1261.0579833984375,
+            124.55145263671875
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1136.7289914564994,
+            192.93848062023665,
+            1206.7283597868638,
+            339.00572880677197
+          ],
+          "class_id": 1,
+          "models": [
+            "v8m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_west_f1350",
+      "group": "night",
+      "camera": "west",
+      "frame": 1350,
+      "frame_sha256": "0cf3323f9ce5ed0c001690192b667c6cc3437f46292fead1c17a6360c84a71c0",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_west_f1350/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            0.8745435963488921,
+            259.1014251624602,
+            621.3961275877282,
+            734.500510054402
+          ],
+          "class_id": 0,
+          "models": [
+            "v8m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1106.0343633266907,
+            24.297227509697784,
+            1211.8525266878055,
+            108.38202409595796
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_west_f2250",
+      "group": "night",
+      "camera": "west",
+      "frame": 2250,
+      "frame_sha256": "7385fb8d50f88503b0a04a7f2ed7373c8ce1d67c3c88e27dae2242348782e407",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_west_f2250/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            0.4443854524091487,
+            354.6782682309416,
+            143.84470774237914,
+            807.0463026342013
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v7_fp16_engine",
+            "v8m_fp16_engine",
+            "v8s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            284.0531321512538,
+            154.07957531436273,
+            803.1925213743067,
+            513.9971353272897
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v8s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            289.125,
+            153.5625,
+            802.6875,
+            514.3125
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1289.210616762619,
+            20.841608015942946,
+            1314.3078136776,
+            64.4716450731485
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1287.681396484375,
+            16.528060913085938,
+            1316.1605224609375,
+            64.31982421875
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_west_f3150",
+      "group": "night",
+      "camera": "west",
+      "frame": 3150,
+      "frame_sha256": "e789c6a9e4e50c307332cc3e37f748c31362e6bef98fe9f87e13cc34f799fdc0",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_west_f3150/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            973.0335507028834,
+            85.50797327734966,
+            1118.7561920072137,
+            220.81230500458926
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26s_fp16_engine",
+            "v11s_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            227.95513133117808,
+            164.80500378897446,
+            776.7146632224966,
+            543.0393397153783
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            737.7188939328628,
+            95.11004009203539,
+            1011.4209303393641,
+            324.8128702813398
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            0.3461955891976622,
+            355.151967837627,
+            144.46222372316547,
+            813.2119167291377
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v8m_fp16_engine",
+            "v26m_fp16_engine",
+            "v26s_fp16_engine",
+            "v8s_fp16_engine",
+            "v7_fp16_engine",
+            "v11s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1187.2956860658994,
+            0.5850390363724116,
+            1251.6399164178627,
+            34.19621572802085
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1063.2532558824837,
+            62.40033542638375,
+            1177.4460061968068,
+            169.3743870105732
+          ],
+          "class_id": 0,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1263.420166015625,
+            36.305877685546875,
+            1297.5059814453125,
+            95.65379333496094
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "night_west_f4050",
+      "group": "night",
+      "camera": "west",
+      "frame": 4050,
+      "frame_sha256": "254f28d95910adf4d7142d47d53959b9d07bd8ce4bd81250563de1f54fd03fd9",
+      "width": 1920,
+      "height": 1080,
+      "image": "ensemble-review/v8s_fp16_engine/pass_1/night_west_f4050/source.png",
+      "reviewed": true,
+      "boxes": [
+        {
+          "box": [
+            590.5051370456306,
+            174.9459889167561,
+            912.496689193407,
+            408.2975078016195
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v7x_fp16_engine",
+            "v7_fp16_engine",
+            "v26m_fp16_engine",
+            "v11m_fp16_engine",
+            "v8s_fp16_engine",
+            "v8m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            963.761712720328,
+            84.98128865026942,
+            1138.52181770633,
+            213.11592790775893
+          ],
+          "class_id": 0,
+          "models": [
+            "v26s_thai_fp16_engine",
+            "v26m_fp16_engine",
+            "v7x_fp16_engine",
+            "v8m_fp16_engine",
+            "v7_fp16_engine",
+            "v8s_fp16_engine",
+            "v11s_fp16_engine",
+            "v11m_fp16_engine",
+            "v26s_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            878.8125,
+            738.46875,
+            1054.546875,
+            1002.09375
+          ],
+          "class_id": 1,
+          "models": [
+            "v26s_thai_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1096.5799641618405,
+            235.48290251462922,
+            1170.6421287956564,
+            364.3416064419316
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1109.2932992881638,
+            39.43032276840772,
+            1227.2946138730845,
+            128.73863484385288
+          ],
+          "class_id": 0,
+          "models": [
+            "v11m_fp16_engine",
+            "v7x_fp16_engine",
+            "v26m_fp16_engine",
+            "v8m_fp16_engine",
+            "v11s_fp16_engine",
+            "v26s_thai_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1201.0066284852976,
+            146.74591099867033,
+            1251.0940071152343,
+            240.10609781163407
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine",
+            "v7x_fp16_engine",
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1116,
+            39,
+            1227,
+            135
+          ],
+          "class_id": 0,
+          "models": [
+            "v26m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1168.8842772192788,
+            0,
+            1281.5217284894754,
+            38.54451756819674
+          ],
+          "class_id": 0,
+          "models": [
+            "v7x_fp16_engine",
+            "v11m_fp16_engine",
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1199.859375,
+            141.703125,
+            1267.640625,
+            243.046875
+          ],
+          "class_id": 1,
+          "models": [
+            "v7_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1097.25,
+            246,
+            1155.75,
+            368.25
+          ],
+          "class_id": 1,
+          "models": [
+            "v11m_fp16_engine"
+          ]
+        },
+        {
+          "box": [
+            1236.277568585261,
+            73.39743206927442,
+            1298.2463690155998,
+            159.0492684383398
+          ],
+          "class_id": 1,
+          "models": []
+        },
+        {
+          "box": [
+            4.131253362022592,
+            329.3209913406987,
+            325.33620225927916,
+            923.7240967452971
+          ],
+          "class_id": 0,
+          "models": []
+        },
+        {
+          "box": [
+            91.92038730500269,
+            501.6566139146014,
+            709.5427649273803,
+            1034.1427291728874
+          ],
+          "class_id": 0,
+          "models": []
+        }
+      ]
+    }
+  ]
+}

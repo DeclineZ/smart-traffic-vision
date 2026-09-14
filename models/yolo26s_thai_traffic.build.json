@@ -1,0 +1,25 @@
+{
+  "model": "yolo26s_thai_traffic",
+  "weights_sha256": "cc579a0387668e204ba79372e9f2380ad6531659fff5fd1d78d7cf282b6b1c2c",
+  "engine_sha256": "3bbdddd9f0b24d5a76fd1ea1cfd770eeb9888d5698dd7172f71b074865ce97b8",
+  "parameters": 9951734,
+  "precision": "fp16",
+  "batch": 1,
+  "input_size": 640,
+  "classes": {
+    "0": "car",
+    "1": "motorcycle",
+    "2": "bus",
+    "3": "truck",
+    "4": "three_wheeler"
+  },
+  "ultralytics": "8.4.150",
+  "torch": "2.9.1+cu126",
+  "tensorrt": "10.14.1.48.post1",
+  "cuda": "12.6",
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "build_seconds": 232.45542839999962,
+  "export": "C:\\Sea traffic\\traffic\\models\\yolo26s_thai_traffic.engine",
+  "nms": false,
+  "end2end": true
+}
