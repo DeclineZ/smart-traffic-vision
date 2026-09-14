@@ -94,6 +94,23 @@ def main():
         help="MQTT destination topic",
     )
     run_parser.add_argument(
+        "--skip-frames",
+        type=int,
+        default=1,
+        help="Frame skipping ratio (0 = none, 1 = 1-in-2, 2 = 1-in-3)",
+    )
+    run_parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=2,
+        help="Jitter-absorbing ring buffer size per stream (default: 2)",
+    )
+    run_parser.add_argument(
+        "--nvenc",
+        default=None,
+        help="Save live multi-camera grid to hardware-encoded H.264 video (e.g. out.mp4)",
+    )
+    run_parser.add_argument(
         "--intersection-id",
         default="INT-001",
         help="Intersection identifier string",

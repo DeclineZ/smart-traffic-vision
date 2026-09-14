@@ -147,10 +147,16 @@ class MQTTPublisher:
         target_topic = topic or self.topic
         message = json.dumps(payload) if isinstance(payload, dict) else str(payload)
 
+        if not self.is_connected:
+            if not hasattr(self, "_warned_no_conn"):
+                logger.warning(f"MQTT Broker at {self.host}:{self.port} is not connected (MQTT_ERR_NO_CONN / code 4). Traffic data will be queued/dropped until broker is reachable.")
+                self._warned_no_conn = True
+            return False
+
         try:
             info = self._client.publish(target_topic, message, qos=self.qos)
             if info.rc != mqtt.MQTT_ERR_SUCCESS:
-                logger.warning(f"MQTT publish returned status code: {info.rc}")
+                logger.warning(f"MQTT publish returned status code: {info.rc} ({mqtt.error_string(info.rc)})")
                 return False
             return True
         except Exception as e:
