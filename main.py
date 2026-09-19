@@ -55,9 +55,10 @@ def main():
         action="store_true",
         help="Display live multi-camera HUD window",
     )
+    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolo26s.pt"
     run_parser.add_argument(
         "--model",
-        default="yolov8n.pt",
+        default=default_model,
         help="YOLO model weights or engine path",
     )
     run_parser.add_argument(
@@ -68,7 +69,7 @@ def main():
     run_parser.add_argument(
         "--conf",
         type=float,
-        default=0.20,
+        default=0.15,
         help="YOLO detection confidence threshold",
     )
     run_parser.add_argument(
@@ -76,6 +77,18 @@ def main():
         type=float,
         default=25.0,
         help="Target processing frame rate per stream",
+    )
+    run_parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=640,
+        help="YOLO inference image size (default: 640)",
+    )
+    run_parser.add_argument(
+        "--frame-skip",
+        type=int,
+        default=0,
+        help="Frames to skip between YOLO deep detections (0 = full rate, 1 = alternate frames with continuous SORT tracking)",
     )
     run_parser.add_argument(
         "--pub-interval",

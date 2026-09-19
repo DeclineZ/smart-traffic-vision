@@ -94,7 +94,9 @@ class CameraWorker(threading.Thread):
         device: str = "cuda:0",
         display: bool = False,
         max_fps: float = 25.0,
-        conf: float = 0.20,
+        conf: float = 0.15,
+        imgsz: int = 640,
+        frame_skip: int = 0,
         model_lock: Optional[threading.Lock] = None,
     ):
         super().__init__(daemon=True)
@@ -105,9 +107,14 @@ class CameraWorker(threading.Thread):
         self.display = display
         self.max_fps = max_fps
         self.conf = conf
+        self.imgsz = imgsz
+        self.frame_skip = frame_skip
+        self.last_dets_arr = np.empty((0, 6))
         self.model_lock = model_lock or threading.Lock()
         self.running = False
         self.latest_frame: Optional[np.ndarray] = None
+        self.processed_frames: int = 0
+        self.current_fps: float = 0.0
 
         # Load config
         self.config = initial_config(config_path)
@@ -130,12 +137,34 @@ class CameraWorker(threading.Thread):
         }
         self.metrics = LaneMetricsManager(self.lane_config)
 
-        # Tracker & motion memory
-        self.tracker = Sort(max_age=25, min_hits=3, iou_threshold=0.3)
+        # Tracker & motion memory (min_hits=2 for responsive tracking without drops)
+        self.tracker = Sort(max_age=25, min_hits=2, iou_threshold=0.3)
         self.track_history: Dict[int, deque] = {}
+        self.track_class_votes: Dict[int, Dict[int, float]] = {}
 
         self.latest_lanes: List[Dict[str, Any]] = []
         self._lanes_lock = threading.Lock()
+
+        # Dynamically determine target classes and names from model metadata
+        model_names = getattr(self.model, "names", {})
+        if len(model_names) == 80:
+            # Standard COCO: filter to road vehicle classes
+            coco_vehicles = {"bicycle", "car", "motorcycle", "bus", "truck"}
+            self.target_classes = [k for k, v in model_names.items() if v in coco_vehicles]
+            self.class_names = {k: model_names[k] for k in self.target_classes}
+        else:
+            # Custom model: detect all classes trained in the model
+            self.target_classes = list(model_names.keys())
+            self.class_names = dict(model_names)
+
+        # Balanced sensitivity weights (prioritize motorcycles & 3-wheelers)
+        self.class_sensitivity: Dict[int, float] = {
+            0: 1.05,  # car (passenger vehicles: sedans, SUVs, pickups, vans)
+            1: 1.10,  # motorcycle (critical Thai intersection priority)
+            2: 1.00,  # bus (neutral weight; prevents stealing commuter vans)
+            3: 1.05,  # truck (heavy commercial transport only)
+            4: 1.15,  # three_wheeler (tuk-tuks & salengs strongly prioritized!)
+        }
 
     def get_latest_lanes(self) -> List[Dict[str, Any]]:
         with self._lanes_lock:
@@ -164,6 +193,7 @@ class CameraWorker(threading.Thread):
             stale_ids = [tid for tid in self.track_history if tid not in active_track_ids]
             for tid in stale_ids:
                 del self.track_history[tid]
+                self.track_class_votes.pop(tid, None)
 
     def run(self):
         is_url = "://" in self.video_path
@@ -196,28 +226,70 @@ class CameraWorker(threading.Thread):
                     continue
 
                 frame_idx += 1
+                self.processed_frames = frame_idx
 
-                # Thread-safe YOLO model inference
-                with self.model_lock:
-                    results = self.model(
-                        frame,
-                        verbose=False,
-                        device=self.device,
-                        classes=list(COCO_CLASSES.keys()),
-                        conf=self.conf,
-                    )
-                    if "cuda" in self.device and torch.cuda.is_available():
-                        torch.cuda.synchronize()
+                should_run_yolo = (frame_idx % (self.frame_skip + 1)) == 0
 
-                dets = []
-                if len(results) and len(results[0].boxes):
-                    for box in results[0].boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        dets.append([x1, y1, x2, y2, conf, cls_id])
+                if should_run_yolo:
+                    # Thread-safe YOLO model inference with explicit imgsz to avoid 1080p CPU scaling overhead
+                    with self.model_lock:
+                        results = self.model(
+                            frame,
+                            verbose=False,
+                            device=self.device,
+                            classes=self.target_classes if self.target_classes else None,
+                            conf=self.conf,
+                            imgsz=self.imgsz,
+                        )
 
-                dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
+                    dets = []
+                    if len(results) and len(results[0].boxes):
+                        raw_dets = []
+                        for box in results[0].boxes:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            conf = float(box.conf[0])
+                            cls_id = int(box.cls[0])
+                            weight = self.class_sensitivity.get(cls_id, 1.0)
+                            weighted_conf = conf * weight
+                            raw_dets.append([x1, y1, x2, y2, conf, cls_id, weighted_conf])
+
+                        # Cross-class suppression of competing multi-label candidate boxes on the same physical vehicle
+                        # (e.g. resolves competing car vs truck on open-bed pickups, or bus vs truck)
+                        suppressed = [False] * len(raw_dets)
+                        for i in range(len(raw_dets)):
+                            if suppressed[i]:
+                                continue
+                            b1, w1, c1 = raw_dets[i][:4], raw_dets[i][6], raw_dets[i][5]
+                            for j in range(i + 1, len(raw_dets)):
+                                if suppressed[j]:
+                                    continue
+                                c2 = raw_dets[j][5]
+                                if c1 != c2:
+                                    b2, w2 = raw_dets[j][:4], raw_dets[j][6]
+                                    ix1, iy1 = max(b1[0], b2[0]), max(b1[1], b2[1])
+                                    ix2, iy2 = min(b1[2], b2[2]), min(b1[3], b2[3])
+                                    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+                                    iarea = iw * ih
+                                    if iarea > 0:
+                                        a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+                                        a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+                                        iou = iarea / (a1 + a2 - iarea)
+                                        if iou > 0.60:
+                                            if w1 >= w2:
+                                                suppressed[j] = True
+                                            else:
+                                                suppressed[i] = True
+                                                break
+
+                        for i in range(len(raw_dets)):
+                            if not suppressed[i]:
+                                d = raw_dets[i]
+                                dets.append([d[0], d[1], d[2], d[3], d[4], d[5]])
+
+                    dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
+                    self.last_dets_arr = dets_arr
+                else:
+                    dets_arr = self.last_dets_arr
 
                 # Update SORT tracker
                 track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
@@ -232,17 +304,67 @@ class CameraWorker(threading.Thread):
                     tid = int(track_id)
                     active_ids.add(tid)
                     cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+                    box_w = max(1.0, float(x2 - x1))
+                    box_h = max(1.0, float(y2 - y1))
+                    box_area = box_w * box_h
 
-                    cls_id = 2  # Default car
+                    cls_id = 0
                     cname = "car"
                     conf_val = self.conf
                     if len(dets_arr):
-                        centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) / 2.0
-                        dists = np.linalg.norm(centers - np.array([cx, cy]), axis=1)
-                        closest_idx = int(np.argmin(dists))
-                        cls_id = int(dets_arr[closest_idx, 5])
-                        cname = COCO_CLASSES.get(cls_id, "car")
-                        conf_val = float(dets_arr[closest_idx, 4])
+                        # Match detection with highest IoU with tracked bounding box
+                        det_boxes = dets_arr[:, :4]
+                        ix1 = np.maximum(x1, det_boxes[:, 0])
+                        iy1 = np.maximum(y1, det_boxes[:, 1])
+                        ix2 = np.minimum(x2, det_boxes[:, 2])
+                        iy2 = np.minimum(y2, det_boxes[:, 3])
+                        inter_w = np.maximum(0.0, ix2 - ix1)
+                        inter_h = np.maximum(0.0, iy2 - iy1)
+                        inter_area = inter_w * inter_h
+                        det_areas = np.maximum(1.0, (det_boxes[:, 2] - det_boxes[:, 0]) * (det_boxes[:, 3] - det_boxes[:, 1]))
+                        ious = inter_area / (box_area + det_areas - inter_area)
+
+                        best_det_idx = int(np.argmax(ious))
+                        if ious[best_det_idx] > 0.15:
+                            match_idx = best_det_idx
+                        else:
+                            centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) / 2.0
+                            dists = np.linalg.norm(centers - np.array([cx, cy]), axis=1)
+                            closest_idx = int(np.argmin(dists))
+                            match_idx = closest_idx if dists[closest_idx] < 80.0 else None
+
+                        if match_idx is not None:
+                            raw_cls_id = int(dets_arr[match_idx, 5])
+                            conf_val = float(dets_arr[match_idx, 4])
+                            raw_cname = self.class_names.get(raw_cls_id, "car")
+
+                            # Clean camera-invariant class voting (adaptive to any angle/zoom)
+                            vote_cls_id = raw_cls_id
+                            if raw_cname in ("pickup", "songthaew"):
+                                vote_cls_id = 0
+
+                            # Geometric Van vs Bus safeguard:
+                            # A true transit bus is 10-12m long (median area > 33,000 px²).
+                            # If a detection votes for bus (cls 2) but has a compact footprint typical
+                            # of a passenger van (< 22,000 px² at near/mid lane position cy > 250),
+                            # resolve the vote to passenger car (cls 0).
+                            if vote_cls_id == 2 and box_area < 22000 and cy > 250:
+                                vote_cls_id = 0
+
+                            # Accumulate temporal class votes with exponential decay (eliminates flicker)
+                            if tid not in self.track_class_votes:
+                                self.track_class_votes[tid] = {}
+                            for c in self.track_class_votes[tid]:
+                                self.track_class_votes[tid][c] *= 0.82
+                            weighted_vote = conf_val * self.class_sensitivity.get(vote_cls_id, 1.0)
+                            self.track_class_votes[tid][vote_cls_id] = self.track_class_votes[tid].get(vote_cls_id, 0.0) + weighted_vote
+
+                    # Resolve stable class from accumulated temporal votes
+                    if tid in self.track_class_votes and self.track_class_votes[tid]:
+                        cls_id = max(self.track_class_votes[tid], key=self.track_class_votes[tid].get)
+                    cname = self.class_names.get(cls_id, "car")
+                    if cname in ("pickup", "songthaew"):
+                        cname = "car"
 
                     track_meta[tid] = (cls_id, cname, conf_val)
 
@@ -254,7 +376,7 @@ class CameraWorker(threading.Thread):
                             self.metrics.register_vehicle(
                                 lane_id=lane_id,
                                 track_id=tid,
-                                vehicle_class=cls_id,
+                                vehicle_class=cname,
                                 is_queued=is_q,
                             )
 
@@ -298,8 +420,17 @@ class CameraWorker(threading.Thread):
                         bx1, by1 = int(ox1 * scale_x), int(oy1 * scale_y)
                         bx2, by2 = int(ox2 * scale_x), int(oy2 * scale_y)
 
-                        cls_id, cname, conf_val = track_meta.get(tid, (2, "car", self.conf))
-                        box_color = (0, 255, 255) if cname in ("motorcycle", "bicycle") else (0, 220, 100)
+                        cls_id, cname, conf_val = track_meta.get(tid, (0, "car", self.conf))
+                        if cname in ("three_wheeler", "tuktuk", "saleng"):
+                            box_color = (0, 165, 255)  # Orange/Amber for tuk-tuks & three-wheelers
+                        elif cname in ("motorcycle", "bicycle"):
+                            box_color = (0, 255, 255)  # Bright yellow for 2-wheelers
+                        elif cname == "bus":
+                            box_color = (255, 200, 0)  # Cyan/sky blue for buses & transit vans
+                        elif cname == "truck":
+                            box_color = (200, 50, 255)  # Magenta/purple for heavy commercial rigs
+                        else:
+                            box_color = (0, 220, 100)  # Emerald green for passenger cars / pickups
                         cv.rectangle(vis_frame, (bx1, by1), (bx2, by2), box_color, 2)
                         label = f"#{tid} {cname} {conf_val:.2f}"
                         cv.putText(
@@ -313,19 +444,22 @@ class CameraWorker(threading.Thread):
                             cv.LINE_AA,
                         )
 
+                    fps_display = f"{self.name.upper()} | {self.current_fps:.1f} FPS"
                     cv.putText(
                         vis_frame,
-                        f"{self.name.upper()} (CAM: {self.camera_info['camera_id']})",
+                        fps_display,
                         (15, 25),
                         cv.FONT_HERSHEY_SIMPLEX,
-                        0.7,
+                        0.65,
                         (0, 255, 255),
                         2,
                     )
                     self.latest_frame = vis_frame
 
-                # Frame pacing
+                # Frame pacing & smoothed FPS tracking
                 elapsed = time.perf_counter() - t0
+                inst_fps = 1.0 / max(1e-4, elapsed)
+                self.current_fps = 0.9 * self.current_fps + 0.1 * inst_fps if self.current_fps > 0 else inst_fps
                 if frame_delay > elapsed:
                     time.sleep(frame_delay - elapsed)
 
@@ -346,6 +480,9 @@ def build_camera_workers(
     """Constructs dynamic CameraWorker instances supporting 1 to 8+ feeds."""
     workers: List[CameraWorker] = []
 
+    imgsz = getattr(args, "imgsz", 640)
+    frame_skip = getattr(args, "frame_skip", 0)
+
     # Case 1: Explicit config list provided
     if args.configs:
         for idx, cfg_path in enumerate(args.configs):
@@ -361,6 +498,8 @@ def build_camera_workers(
                 display=args.display,
                 max_fps=args.fps,
                 conf=args.conf,
+                imgsz=imgsz,
+                frame_skip=frame_skip,
                 model_lock=model_lock,
             )
             workers.append(w)
@@ -382,6 +521,8 @@ def build_camera_workers(
                 display=args.display,
                 max_fps=args.fps,
                 conf=args.conf,
+                imgsz=imgsz,
+                frame_skip=frame_skip,
                 model_lock=model_lock,
             )
             workers.append(w)
@@ -407,6 +548,8 @@ def build_camera_workers(
             display=args.display,
             max_fps=args.fps,
             conf=args.conf,
+            imgsz=imgsz,
+            frame_skip=frame_skip,
             model_lock=model_lock,
         )
         workers.append(w)
@@ -448,9 +591,10 @@ def main():
         action="store_true",
         help="Display adaptive multi-camera live grid window",
     )
+    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolo26s.pt"
     parser.add_argument(
         "--model",
-        default="yolov8n.pt",
+        default=default_model,
         help="YOLO model checkpoint or TensorRT engine path",
     )
     parser.add_argument(
@@ -461,7 +605,7 @@ def main():
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.20,
+        default=0.15,
         help="YOLO detection confidence threshold",
     )
     parser.add_argument(
@@ -469,6 +613,18 @@ def main():
         type=float,
         default=25.0,
         help="Target processing FPS per camera feed",
+    )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=640,
+        help="YOLO inference image size (default: 640)",
+    )
+    parser.add_argument(
+        "--frame-skip",
+        type=int,
+        default=0,
+        help="Frames to skip between YOLO deep detections (0 = full rate, 1 = alternate frames with continuous SORT tracking)",
     )
     parser.add_argument(
         "--pub-interval",
@@ -498,8 +654,10 @@ def main():
     gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() and "cuda" in device else "CPU"
     logger.info(f"Using compute device: {device} ({gpu_name})")
 
-    logger.info(f"Loading YOLO model: {args.model} onto {device} (conf threshold: {args.conf})...")
+    logger.info(f"Loading YOLO model: {args.model} onto {device} (conf threshold: {args.conf}, imgsz: {args.imgsz})...")
     model = YOLO(args.model)
+    if "cuda" in device and torch.cuda.is_available():
+        model.to(device)
     model_lock = threading.Lock()
 
     workers = build_camera_workers(args=args, model=model, device=device, model_lock=model_lock)
@@ -552,7 +710,7 @@ def main():
                     grid = stitch_camera_grid(frames)
                     cv.imshow("Smart Traffic Vision - Adaptive Multi-Camera Monitor", grid)
 
-                if cv.waitKey(1) & 0xFF == ord("q"):
+                if cv.waitKey(10) & 0xFF == ord("q"):
                     break
             else:
                 time.sleep(0.1)
