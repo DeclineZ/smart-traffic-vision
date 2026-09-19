@@ -37,6 +37,16 @@ class TestVehicleClassification(unittest.TestCase):
         self.assertEqual(classify_vehicle("truck"), "cars")
         self.assertEqual(classify_vehicle("bus"), "cars")
         self.assertEqual(classify_vehicle("van"), "cars")
+        self.assertEqual(classify_vehicle("three_wheeler"), "cars")
+        self.assertEqual(classify_vehicle("tuktuk"), "cars")
+
+    def test_custom_class_mapping(self):
+        thai_classes = {0: "car", 1: "motorcycle", 2: "bus", 3: "truck", 4: "three_wheeler"}
+        self.assertEqual(classify_vehicle(0, thai_classes), "cars")
+        self.assertEqual(classify_vehicle(1, thai_classes), "motorbike")
+        self.assertEqual(classify_vehicle(2, thai_classes), "cars")
+        self.assertEqual(classify_vehicle(3, thai_classes), "cars")
+        self.assertEqual(classify_vehicle(4, thai_classes), "cars")
 
 
 class TestLaneMetricsManager(unittest.TestCase):

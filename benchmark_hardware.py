@@ -45,6 +45,26 @@ DEFAULT_VIDEOS = [
 COCO_CLASSES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
+def get_model_target_classes(model) -> Optional[List[int]]:
+    """
+    Returns target class filter for YOLO inference.
+    If the model is domain-specific (e.g. Thai traffic with <= 15 classes), returns None to infer all classes.
+    Otherwise, returns COCO traffic class IDs [1, 2, 3, 5, 7].
+    """
+    raw_names = getattr(model, "names", None)
+    if raw_names and isinstance(raw_names, dict):
+        model_names = {int(k): str(v) for k, v in raw_names.items()}
+    elif raw_names and isinstance(raw_names, list):
+        model_names = {i: str(v) for i, v in enumerate(raw_names)}
+    else:
+        return list(COCO_CLASSES.keys())
+
+    traffic_keywords = {"car", "motorcycle", "bus", "truck", "three_wheeler", "tuktuk", "bicycle"}
+    if len(model_names) <= 15 and any(v.lower() in traffic_keywords for v in model_names.values()):
+        return None
+    return list(COCO_CLASSES.keys())
+
+
 def cleanup_vram(device: str = "cuda:0"):
     """
     Purges PyTorch CUDA allocator cache and runs garbage collection
@@ -484,6 +504,7 @@ class ThreadedCameraWorker(threading.Thread):
         min_hits = 1 if self.skip_frames > 0 else 2
         self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
+        self.target_classes = get_model_target_classes(self.model)
 
         self.latency_tracker = StageLatencyTracker()
         self.running = False
@@ -522,14 +543,16 @@ class ThreadedCameraWorker(threading.Thread):
 
                 t_infer0 = time.perf_counter()
                 with self.model_lock:
-                    results = self.model(
-                        frame,
-                        verbose=False,
-                        device=self.device,
-                        classes=list(COCO_CLASSES.keys()),
-                        conf=self.conf,
-                        imgsz=self.imgsz,
-                    )
+                    infer_kwargs = {
+                        "verbose": False,
+                        "device": self.device,
+                        "conf": self.conf,
+                        "imgsz": self.imgsz,
+                    }
+                    if self.target_classes is not None:
+                        infer_kwargs["classes"] = self.target_classes
+
+                    results = self.model(frame, **infer_kwargs)
                     if "cuda" in self.device and torch.cuda.is_available():
                         torch.cuda.synchronize()
 
@@ -634,6 +657,7 @@ class BatchedCameraPipeline:
         self.trackers = [Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3) for _ in range(self.num_streams)]
         self.last_tracked: List[np.ndarray] = [np.empty((0, 5)) for _ in range(self.num_streams)]
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
+        self.target_classes = get_model_target_classes(self.model)
 
         self.latency_tracker = StageLatencyTracker()
         self.running = False
@@ -678,14 +702,16 @@ class BatchedCameraPipeline:
                 t_pre = (time.perf_counter() - t_pre0) * 1000.0
 
                 t_inf0 = time.perf_counter()
-                results = self.model(
-                    frames,
-                    verbose=False,
-                    device=self.device,
-                    classes=list(COCO_CLASSES.keys()),
-                    conf=self.conf,
-                    imgsz=self.imgsz,
-                )
+                infer_kwargs = {
+                    "verbose": False,
+                    "device": self.device,
+                    "conf": self.conf,
+                    "imgsz": self.imgsz,
+                }
+                if self.target_classes is not None:
+                    infer_kwargs["classes"] = self.target_classes
+
+                results = self.model(frames, **infer_kwargs)
                 if "cuda" in self.device and torch.cuda.is_available():
                     torch.cuda.synchronize()
 

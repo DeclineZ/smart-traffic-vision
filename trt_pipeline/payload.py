@@ -11,23 +11,35 @@ from typing import Any
 from shapely.geometry import Polygon
 
 
-def classify_vehicle(class_identifier: int | str) -> str:
+def classify_vehicle(
+    class_identifier: int | str,
+    class_names: dict[int, str] | None = None,
+) -> str:
     """
     Map class ID or class name to controller vehicle category ('cars' or 'motorbike').
 
-    Standard mappings:
-      - 1 (bicycle), 3 (motorcycle), 'motorbike', 'motorcycle', 'bicycle', 'bike' -> 'motorbike'
-      - 2 (car), 5 (bus), 7 (truck), 'car', 'bus', 'truck', 'van' -> 'cars'
+    Supports:
+      - Custom domain models (e.g. Thai Traffic: 0: car, 1: motorcycle, 2: bus, 3: truck, 4: three_wheeler)
+      - Standard COCO class IDs (1: bicycle, 2: car, 3: motorcycle, 5: bus, 7: truck)
+      - Class names:
+          'motorcycle', 'motorbike', 'bicycle', 'bike' -> 'motorbike'
+          'three_wheeler', 'tuktuk', 'car', 'bus', 'truck', 'van' -> 'cars'
     """
+    if class_names and isinstance(class_identifier, int) and class_identifier in class_names:
+        class_identifier = class_names[class_identifier]
+
     if isinstance(class_identifier, int):
+        # Fallback for standard COCO integer classes when class_names dictionary is omitted
         if class_identifier in (1, 3):
             return "motorbike"
         return "cars"
 
-    name = str(class_identifier).lower().strip()
+    name = str(class_identifier).lower().strip().replace("-", "_").replace(" ", "_")
     if name in ("motorcycle", "motorbike", "bicycle", "bike"):
         return "motorbike"
+    # Three-wheelers (tuk-tuks, saleng) occupy standard lane queues and are aggregated with 'cars'
     return "cars"
+
 
 
 class LaneMetricsManager:

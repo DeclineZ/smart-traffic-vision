@@ -90,7 +90,7 @@ output/
 outputs/
 temp/
 scratch/
-*/data/*
+data/
 result_test_skip.zip
 benchmark/hardware-results/
 *.csv

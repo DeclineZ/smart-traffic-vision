@@ -84,10 +84,13 @@ class BatchedCameraPipeline:
         mqtt_broker: str = "mqtt://localhost:1883",
         mqtt_topic: str = "traffic/counts",
         intersection_id: str = "INT-001",
+        voting_window: int = 15,
+        pickup_bias: float = 1.15,
+        enable_voting: bool = True,
     ):
         global cv, np, shapely, Point, Polygon, YOLO, Sort
         global AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
-        global LaneMetricsManager, PayloadBuilder, MQTTPublisher, StreamBufferWorker
+        global LaneMetricsManager, PayloadBuilder, MQTTPublisher, StreamBufferWorker, TrackClassVotingFilter
 
         import cv2 as cv
         import numpy as np
@@ -100,6 +103,7 @@ class BatchedCameraPipeline:
         from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
         from trt_pipeline.publisher import MQTTPublisher
         from trt_pipeline.stream import StreamBufferWorker
+        from trt_pipeline.voter import TrackClassVotingFilter
         self.num_streams = len(camera_names)
         self.camera_names = camera_names
         self.config_paths = config_paths
@@ -164,6 +168,39 @@ class BatchedCameraPipeline:
         logger.info(f"Loading vision model: '{self.model_path}' onto device '{self.device}'...")
         self.model = YOLO(self.model_path)
 
+        # Auto-configure class mappings from model metadata
+        raw_names = getattr(self.model, "names", None)
+        if raw_names and isinstance(raw_names, dict):
+            model_names = {int(k): str(v) for k, v in raw_names.items()}
+        elif raw_names and isinstance(raw_names, list):
+            model_names = {i: str(v) for i, v in enumerate(raw_names)}
+        else:
+            model_names = COCO_CLASSES
+
+        # Check if model has domain-specific traffic classes (e.g. Thai Traffic 5-class model)
+        traffic_keywords = {"car", "motorcycle", "bus", "truck", "three_wheeler", "tuktuk", "bicycle"}
+        is_traffic_model = len(model_names) <= 15 and any(v.lower() in traffic_keywords for v in model_names.values())
+
+        if is_traffic_model:
+            self.class_names = model_names
+            self.target_classes = None  # Infer across all domain classes
+            logger.info(f"Loaded domain-specific traffic model with {len(self.class_names)} classes: {self.class_names}")
+        else:
+            self.class_names = COCO_CLASSES
+            self.target_classes = list(COCO_CLASSES.keys())
+            logger.info(f"Loaded general model with {len(model_names)} classes. Filtering to COCO traffic classes: {self.target_classes}")
+
+        self.default_car_cls = next((k for k, v in self.class_names.items() if v.lower() == "car"), 0)
+        truck_cls_id = next((k for k, v in self.class_names.items() if v.lower() == "truck"), 3)
+        self.class_voter = TrackClassVotingFilter(
+            num_streams=self.num_streams,
+            window_size=voting_window,
+            car_truck_bias=pickup_bias,
+            car_cls_id=self.default_car_cls,
+            truck_cls_id=truck_cls_id,
+            enabled=enable_voting,
+        )
+
         # 5. Decoupled Display & Video Encoding Worker
         nvenc_writer = None
         if self.nvenc_out:
@@ -181,6 +218,7 @@ class BatchedCameraPipeline:
                 display=self.display,
                 nvenc_writer=nvenc_writer,
                 window_name=f"Smart Traffic Vision - Multi-Camera Production Grid ({self.num_streams} Cams)",
+                class_names=self.class_names,
             )
             if (self.display or nvenc_writer)
             else None
@@ -246,13 +284,14 @@ class BatchedCameraPipeline:
                 obj = tracked_objs[idx]
                 track_id = int(obj[4])
                 cx, cy = float(cxs[idx]), float(cys[idx])
-                cls_id = int(obj[5]) if len(obj) >= 6 else 2
+                cls_id = int(obj[5]) if len(obj) >= 6 else self.default_car_cls
+                cls_name = self.class_names.get(cls_id, "car")
 
                 is_q = self._is_queued(cam_idx, track_id, (cx, cy), frame_idx)
                 metrics.register_vehicle(
                     lane_id=lane_id,
                     track_id=track_id,
-                    vehicle_class=cls_id,
+                    vehicle_class=cls_name,
                     is_queued=is_q,
                 )
 
@@ -312,13 +351,15 @@ class BatchedCameraPipeline:
                 # 2. Centralized Model Forward Pass
                 results = []
                 if should_run_yolo:
-                    results = self.model(
-                        batch_frames,
-                        verbose=False,
-                        device=self.device,
-                        classes=list(COCO_CLASSES.keys()),
-                        conf=self.conf,
-                    )
+                    infer_kwargs = {
+                        "verbose": False,
+                        "device": self.device,
+                        "conf": self.conf,
+                    }
+                    if self.target_classes is not None:
+                        infer_kwargs["classes"] = self.target_classes
+
+                    results = self.model(batch_frames, **infer_kwargs)
                     self.total_inferred_batches += 1
                 else:
                     self.total_skipped_batches += 1
@@ -340,7 +381,7 @@ class BatchedCameraPipeline:
                         track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
                         tracked_out = self.trackers[idx].update(track_input)
 
-                        # Re-associate class IDs from closest detections
+                        # Re-associate class IDs from closest detections with temporal voting smoothing
                         if len(tracked_out) > 0 and len(dets_arr) > 0:
                             matched_tracked = []
                             det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
@@ -348,13 +389,30 @@ class BatchedCameraPipeline:
                                 t_cx = (tobj[0] + tobj[2]) * 0.5
                                 t_cy = (tobj[1] + tobj[3]) * 0.5
                                 dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
-                                c_id = int(dets_arr[np.argmin(dists), 5])
-                                matched_tracked.append(np.append(tobj[:5], c_id))
+                                best_idx = int(np.argmin(dists))
+                                raw_c_id = int(dets_arr[best_idx, 5])
+                                det_conf = float(dets_arr[best_idx, 4])
+                                tid = int(tobj[4])
+
+                                smoothed_c_id = self.class_voter.update(
+                                    cam_idx=idx,
+                                    track_id=tid,
+                                    raw_cls_id=raw_c_id,
+                                    conf=det_conf,
+                                )
+                                matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
                             tracked_objs = np.array(matched_tracked)
                         elif len(tracked_out) > 0:
-                            # Default class: car (2)
-                            cls_col = np.full((len(tracked_out), 1), 2)
-                            tracked_objs = np.hstack([tracked_out[:, :5], cls_col])
+                            matched_tracked = []
+                            for tobj in tracked_out:
+                                tid = int(tobj[4])
+                                smoothed_c_id = self.class_voter.get_class(
+                                    cam_idx=idx,
+                                    track_id=tid,
+                                    fallback=self.default_car_cls,
+                                )
+                                matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
+                            tracked_objs = np.array(matched_tracked)
                         else:
                             tracked_objs = np.empty((0, 6))
 
@@ -364,6 +422,11 @@ class BatchedCameraPipeline:
                         tracked_objs = self.last_tracked[idx]
 
                     tracked_list.append(tracked_objs)
+
+                    # Prune stale track voting history
+                    if len(tracked_objs) > 0:
+                        active_tids = set(int(o[4]) for o in tracked_objs)
+                        self.class_voter.prune(cam_idx=idx, active_track_ids=active_tids)
 
                     # Vectorized Lane Analytics
                     self._evaluate_vectorized_lanes(cam_idx=idx, tracked_objs=tracked_objs, frame_idx=batch_idx)
@@ -429,7 +492,8 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     parser.add_argument("--cameras", nargs="+", default=None, help="Named cameras to run (north south east west all)")
     parser.add_argument("--configs", nargs="+", default=None, help="Custom JSON configuration paths")
     parser.add_argument("--videos", nargs="+", default=None, help="Custom video paths or RTSP stream URLs")
-    parser.add_argument("--model", default="yolov8s.pt", help="YOLO model checkpoint or TensorRT .engine path")
+    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
+    parser.add_argument("--model", default=default_model, help="YOLO model checkpoint or TensorRT .engine path")
     parser.add_argument("--device", default=None, help="Inference compute device: 'cuda:0', 'cpu' (default: auto)")
     parser.add_argument("--conf", type=float, default=0.20, help="YOLO detection confidence threshold")
     parser.add_argument("--fps", type=float, default=25.0, help="Target ingestion frame rate per camera")
@@ -441,6 +505,9 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     parser.add_argument("--mqtt-broker", default="mqtt://localhost:1883", help="MQTT broker URL")
     parser.add_argument("--mqtt-topic", default="traffic/counts", help="MQTT destination topic")
     parser.add_argument("--intersection-id", default="INT-001", help="Intersection identifier string")
+    parser.add_argument("--voting-window", type=int, default=15, help="Temporal voting window size in frames for class smoothing (default: 15)")
+    parser.add_argument("--pickup-bias", type=float, default=1.15, help="Prior weight multiplier favoring car over truck for pickup trucks (default: 1.15)")
+    parser.add_argument("--no-voting", action="store_true", help="Disable temporal class smoothing filter")
     return parser
 
 
@@ -502,6 +569,9 @@ def main():
         mqtt_broker=args.mqtt_broker,
         mqtt_topic=args.mqtt_topic,
         intersection_id=args.intersection_id,
+        voting_window=args.voting_window,
+        pickup_bias=args.pickup_bias,
+        enable_voting=(not args.no_voting),
     )
 
     # Handle OS termination signals

@@ -55,9 +55,10 @@ def main():
         action="store_true",
         help="Display live multi-camera HUD window",
     )
+    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
     run_parser.add_argument(
         "--model",
-        default="yolov8n.pt",
+        default=default_model,
         help="YOLO model weights or engine path",
     )
     run_parser.add_argument(
@@ -114,6 +115,23 @@ def main():
         "--intersection-id",
         default="INT-001",
         help="Intersection identifier string",
+    )
+    run_parser.add_argument(
+        "--voting-window",
+        type=int,
+        default=15,
+        help="Temporal voting window size in frames for class smoothing (default: 15)",
+    )
+    run_parser.add_argument(
+        "--pickup-bias",
+        type=float,
+        default=1.15,
+        help="Prior weight multiplier favoring car over truck for pickup trucks (default: 1.15)",
+    )
+    run_parser.add_argument(
+        "--no-voting",
+        action="store_true",
+        help="Disable temporal class smoothing filter",
     )
 
     # 2. Hardware Benchmarking & Sizing Suite

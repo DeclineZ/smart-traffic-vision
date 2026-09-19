@@ -155,11 +155,13 @@ class AsyncDisplayWorker:
         nvenc_writer: Optional[NVENCVideoWriter] = None,
         window_name: str = "Smart Traffic Vision - Multi-Camera Production Grid",
         tile_size: Tuple[int, int] = (480, 270),
+        class_names: Optional[Dict[int, str]] = None,
     ):
         self.display = display
         self.nvenc_writer = nvenc_writer
         self.window_name = window_name
         self.tile_size = tile_size
+        self.class_names = class_names
 
         # Queue size = 1 ensures we always display the freshest frame, dropping preview if UI is slow
         self.queue: queue.Queue = queue.Queue(maxsize=1)
@@ -280,9 +282,21 @@ class AsyncDisplayWorker:
                         cls_name = "car"
                         if len(obj) >= 6:
                             cls_id = int(obj[5])
-                            cls_name = COCO_CLASSES.get(cls_id, "car")
+                            if self.class_names and cls_id in self.class_names:
+                                cls_name = self.class_names[cls_id]
+                            else:
+                                cls_name = COCO_CLASSES.get(cls_id, "car")
 
-                        color = (0, 255, 255) if cls_name in ("motorcycle", "bicycle") else (0, 220, 100)
+                        # Dynamic vehicle category colors
+                        if cls_name in ("motorcycle", "bicycle"):
+                            color = (0, 255, 255)  # Yellow for 2-wheelers
+                        elif cls_name in ("three_wheeler", "tuktuk"):
+                            color = (255, 165, 0)  # Orange for 3-wheelers / Tuk-tuks
+                        elif cls_name in ("bus", "truck"):
+                            color = (0, 165, 255)  # Amber for heavy vehicles
+                        else:
+                            color = (0, 220, 100)  # Vibrant Green for cars
+
                         cv.rectangle(vis, (bx1, by1), (bx2, by2), color, 2)
                         label = f"#{int(track_id)} {cls_name}"
                         cv.putText(vis, label, (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv.LINE_AA)

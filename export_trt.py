@@ -87,8 +87,8 @@ def export_yolo_to_tensorrt(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export YOLO PyTorch models to TensorRT FP16")
-    parser.add_argument("--model", type=str, default="yolov8s.pt", help="Path to .pt model weights")
+    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
+    parser.add_argument("--model", type=str, default=default_model, help="Path to .pt model weights")
     parser.add_argument("--batch", type=int, default=8, help="Max batch size for dynamic batching (default: 8)")
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image resolution (default: 640)")
     parser.add_argument("--workspace", type=int, default=2, help="TensorRT build workspace in GB (default: 2)")
