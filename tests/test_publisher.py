@@ -52,6 +52,7 @@ class TestMQTTPublisher(unittest.TestCase):
 
     def test_publish_dict_payload(self):
         pub = MQTTPublisher(topic="traffic/counts")
+        pub._is_connected = True
         mock_publish_info = MagicMock()
         mock_publish_info.rc = 0
         pub._client.publish = MagicMock(return_value=mock_publish_info)

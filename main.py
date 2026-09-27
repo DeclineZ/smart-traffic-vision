@@ -133,6 +133,18 @@ def main():
         action="store_true",
         help="Disable temporal class smoothing filter",
     )
+    run_parser.add_argument(
+        "--tracker",
+        choices=["byetrack", "sort"],
+        default="byetrack",
+        help="Object tracking algorithm: 'byetrack' (default) or 'sort'",
+    )
+    run_parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=640,
+        help="Inference image resolution (e.g. 640, 960, 1280)",
+    )
 
     # 2. Hardware Benchmarking & Sizing Suite
     bench_parser = subparsers.add_parser(
@@ -223,30 +235,39 @@ def main():
         help="Generate 4-panel analysis charts (PNG)",
     )
 
-    # 3. Interactive Lane Polygon Calibration
+    # 3. Interactive Lane Polygon & Counting Gate Calibration
     calib_parser = subparsers.add_parser(
         "calibrate",
         aliases=["segment"],
-        help="Launch interactive lane polygon segmentor & perspective calibration tool",
+        help="Launch interactive lane polygon and virtual counting gate calibration tool",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    calib_parser.add_argument(
+        "--direction",
+        "--approach",
+        type=str,
+        dest="direction",
+        choices=["north", "south", "east", "west", "northeast", "custom"],
+        default=None,
+        help="Target approach / camera direction (automatically resolves video and config files)",
     )
     calib_parser.add_argument(
         "--video",
         type=str,
-        required=True,
-        help="Path to video file or RTSP stream URL to extract calibration frame",
+        default=None,
+        help="Path to video file or RTSP stream URL",
+    )
+    calib_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to target camera configuration JSON file to update",
     )
     calib_parser.add_argument(
         "--sec",
         type=float,
         default=0.0,
-        help="Timestamp in seconds to grab video frame",
-    )
-    calib_parser.add_argument(
-        "--n",
-        type=int,
-        default=1,
-        help="Number of consecutive lane polygons to calibrate",
+        help="Timestamp in seconds to grab initial video frame",
     )
 
     # If no arguments provided, show help
@@ -268,11 +289,13 @@ def main():
         benchmark_hardware.main()
 
     elif args.command in ("calibrate", "segment"):
-        from tools.segmentor import RoadSegmenter
-        for lane_idx in range(args.n):
-            print(f"\n--- Calibrating Lane {lane_idx + 1} of {args.n} ---")
-            segmentor = RoadSegmenter(video_path=args.video, time_in_seconds=args.sec)
-            segmentor.segment()
+        from tools.segmentor import run_calibration
+        run_calibration(
+            direction=args.direction,
+            video=args.video,
+            config=args.config,
+            sec=args.sec,
+        )
 
 
 if __name__ == "__main__":

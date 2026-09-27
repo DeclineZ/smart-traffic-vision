@@ -13,7 +13,12 @@
   },
   "model": {
     "engine_path": "models/yolov7-tiny.engine",
-    "input_shape": [1, 3, 640, 640],
+    "input_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
     "device": "cuda:0"
   },
   "tracker": {
@@ -58,20 +63,90 @@
       "N1": {
         "direction": "N",
         "description": "North Lane 1",
-        "polygon": [[1316, 578], [589, 274], [669, 264], [1510, 569]]
+        "polygon": [
+          [
+            1316,
+            578
+          ],
+          [
+            589,
+            274
+          ],
+          [
+            669,
+            264
+          ],
+          [
+            1510,
+            569
+          ]
+        ]
       },
       "N2": {
         "direction": "N",
         "description": "North Lane 2",
-        "polygon": [[1555, 564], [1649, 542], [780, 263], [692, 264]]
+        "polygon": [
+          [
+            1555,
+            564
+          ],
+          [
+            1649,
+            542
+          ],
+          [
+            780,
+            263
+          ],
+          [
+            692,
+            264
+          ]
+        ]
       },
       "N3": {
         "direction": "N",
         "description": "North Lane 3",
-        "polygon": [[1867, 493], [1763, 542], [788, 267], [846, 250]]
+        "polygon": [
+          [
+            1867,
+            493
+          ],
+          [
+            1763,
+            542
+          ],
+          [
+            788,
+            267
+          ],
+          [
+            846,
+            250
+          ]
+        ]
       }
     }
   },
+  "gates": [
+    {
+      "gate_id": "GATE_N_STOPLINE",
+      "p1": [
+        1316,
+        584
+      ],
+      "p2": [
+        1872,
+        494
+      ],
+      "type": "stopline",
+      "direction": [
+        0.16,
+        0.987
+      ],
+      "label": "STOPLINE"
+    }
+  ],
   "density": {
     "enabled": false
   },

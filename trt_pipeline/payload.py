@@ -185,6 +185,7 @@ class PayloadBuilder:
         frame_idx: int,
         lanes_snapshot: list[dict[str, Any]],
         meta: dict[str, Any] | None = None,
+        traffic_flow: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Build full payload matching controller's basicValidate expectations:
@@ -193,6 +194,7 @@ class PayloadBuilder:
           - timestamp (ISO 8601 UTC with ms)
           - meta (dict with frameId)
           - lanes (list of lane objects)
+          - traffic_flow (optional cross-camera flow & O-D matrix)
         """
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -200,19 +202,24 @@ class PayloadBuilder:
         if meta:
             merged_meta.update(meta)
 
-        return {
+        payload: dict[str, Any] = {
             "intersectionId": self.intersection_id,
             "cameraId": self.camera_id,
             "timestamp": ts,
             "meta": merged_meta,
             "lanes": lanes_snapshot,
         }
+        if traffic_flow:
+            payload["traffic_flow"] = traffic_flow
+
+        return payload
 
     def to_json(
         self,
         frame_idx: int,
         lanes_snapshot: list[dict[str, Any]],
         meta: dict[str, Any] | None = None,
+        traffic_flow: dict[str, Any] | None = None,
     ) -> str:
         """Build and serialize payload to JSON string."""
-        return json.dumps(self.build(frame_idx, lanes_snapshot, meta))
+        return json.dumps(self.build(frame_idx, lanes_snapshot, meta, traffic_flow))

@@ -44,7 +44,7 @@ def is_nvenc_available() -> bool:
     try:
         res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
         return res.returncode == 0
-    except Exception:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
 
 
@@ -100,7 +100,7 @@ class NVENCVideoWriter:
                 if self.process.stdin:
                     self.process.stdin.close()
                 self.process.wait(timeout=2.0)
-            except Exception:
+            except (subprocess.TimeoutExpired, OSError):
                 self.process.kill()
             self.process = None
 
@@ -206,6 +206,7 @@ class AsyncDisplayWorker:
         cam_names: List[str],
         lane_configs: Optional[List[Dict[str, Any]]] = None,
         header_stats: Optional[str] = None,
+        gates: Optional[List[List[Dict[str, Any]]]] = None,
     ) -> None:
         """
         Non-blocking snapshot submit. If rendering is busy, drop preview frame
@@ -214,7 +215,7 @@ class AsyncDisplayWorker:
         if not self.running:
             return
 
-        payload = (frames, tracked_list, cam_names, lane_configs, header_stats)
+        payload = (frames, tracked_list, cam_names, lane_configs, header_stats, gates)
         if self.queue.full():
             try:
                 _ = self.queue.get_nowait()
@@ -234,19 +235,24 @@ class AsyncDisplayWorker:
         if self.display:
             try:
                 cv.destroyAllWindows()
-            except Exception:
+            except cv.error:
                 pass
         logger.info("AsyncDisplayWorker stopped.")
 
     def _render_loop(self) -> None:
         while self.running:
             try:
-                payload = self.queue.get(timeout=0.04)
+                raw_payload = self.queue.get(timeout=0.04)
             except queue.Empty:
                 time.sleep(0.01)
                 continue
 
-            frames, tracked_list, cam_names, lane_configs, header_stats = payload
+            if len(raw_payload) == 6:
+                frames, tracked_list, cam_names, lane_configs, header_stats, gates = raw_payload
+            else:
+                frames, tracked_list, cam_names, lane_configs, header_stats = raw_payload
+                gates = None
+
             num_streams = len(frames)
             vis_frames = []
 
@@ -271,6 +277,47 @@ class AsyncDisplayWorker:
                             cv.polylines(vis, [pts], True, (0, 255, 120), 1)
                             first_pt = (pts[0][0], max(15, pts[0][1]))
                             cv.putText(vis, lane_id, first_pt, cv.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv.LINE_AA)
+
+                # 1.5 Draw Virtual Counting Gates (Tripwires & Direction Arrows)
+                if gates and idx < len(gates) and gates[idx]:
+                    for g in gates[idx]:
+                        gx1, gy1 = int(g["p1"][0] * scale_x), int(g["p1"][1] * scale_y)
+                        gx2, gy2 = int(g["p2"][0] * scale_x), int(g["p2"][1] * scale_y)
+                        g_type = g.get("type", "stopline")
+                        is_flash = g.get("flash", False)
+
+                        if is_flash:
+                            line_col = (255, 255, 255)
+                            line_thick = 4
+                        elif g_type == "ingress":
+                            line_col = (255, 220, 0)   # Cyan (Entry / Inflow)
+                            line_thick = 2
+                        elif g_type == "egress":
+                            line_col = (255, 50, 220)  # Magenta (Departure / Exit)
+                            line_thick = 2
+                        else:  # stopline
+                            line_col = (0, 165, 255)   # Amber / Orange (Stopline)
+                            line_thick = 2
+
+                        cv.line(vis, (gx1, gy1), (gx2, gy2), line_col, line_thick, cv.LINE_AA)
+
+                        # Draw direction arrow at midpoint
+                        mx = (gx1 + gx2) // 2
+                        my = (gy1 + gy2) // 2
+                        nx, ny = g.get("normal", (0.0, 1.0))
+                        arrow_tip = (int(mx + nx * 16), int(my + ny * 16))
+                        cv.arrowedLine(vis, (mx, my), arrow_tip, line_col, 2, tipLength=0.35)
+
+                        # Draw live passage counter badge pill
+                        cnt = g.get("count", 0)
+                        lbl = f"{g.get('label', 'GATE')}:{cnt}"
+                        (bw, bh), _ = cv.getTextSize(lbl, cv.FONT_HERSHEY_SIMPLEX, 0.40, 1)
+                        bx = max(4, min(self.tile_size[0] - bw - 8, mx - bw // 2))
+                        by = max(bh + 6, min(self.tile_size[1] - 6, my - 4))
+
+                        cv.rectangle(vis, (bx - 3, by - bh - 4), (bx + bw + 3, by + 3), (15, 15, 15), -1)
+                        cv.rectangle(vis, (bx - 3, by - bh - 4), (bx + bw + 3, by + 3), line_col, 1)
+                        cv.putText(vis, lbl, (bx, by), cv.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1, cv.LINE_AA)
 
                 # 2. Draw Tracked Bounding Boxes & IDs
                 if idx < len(tracked_list) and len(tracked_list[idx]) > 0:
