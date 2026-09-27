@@ -77,7 +77,7 @@ class TrackClassVotingFilter:
         Returns:
             Stabilized class ID.
         """
-        if not self.enabled or cam_idx >= len(self.stream_tracks):
+        if not self.enabled or cam_idx < 0 or cam_idx >= len(self.stream_tracks):
             return raw_cls_id
 
         tracks = self.stream_tracks[cam_idx]
@@ -132,7 +132,7 @@ class TrackClassVotingFilter:
         Retrieves the smoothed class ID for a track without adding an observation
         (e.g., during frame-skipping intervals).
         """
-        if not self.enabled or cam_idx >= len(self.stream_tracks):
+        if not self.enabled or cam_idx < 0 or cam_idx >= len(self.stream_tracks):
             return fallback
 
         tracks = self.stream_tracks[cam_idx]
@@ -144,7 +144,7 @@ class TrackClassVotingFilter:
         """
         Removes memory for tracks that are no longer active to prevent memory growth.
         """
-        if cam_idx >= len(self.stream_tracks):
+        if cam_idx < 0 or cam_idx >= len(self.stream_tracks):
             return
 
         tracks = self.stream_tracks[cam_idx]
@@ -155,7 +155,7 @@ class TrackClassVotingFilter:
 
     def reset(self, cam_idx: Optional[int] = None) -> None:
         """Resets voting memory for a specific stream or all streams."""
-        if cam_idx is not None and cam_idx < len(self.stream_tracks):
+        if cam_idx is not None and 0 <= cam_idx < len(self.stream_tracks):
             self.stream_tracks[cam_idx].clear()
         else:
             for stream_map in self.stream_tracks:

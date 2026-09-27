@@ -46,7 +46,7 @@ def export_yolo_to_tensorrt(
     target_engine = model_path.with_suffix(".engine")
 
     print("\n" + "=" * 60)
-    print("🚀 EXPORTING YOLO TO TENSORRT ENGINE (FP16)")
+    print("[EXPORT] EXPORTING YOLO TO TENSORRT ENGINE (FP16)")
     print(f" Source Model    : {model_path}")
     print(f" Target Output   : {target_engine}")
     print(f" Precision       : {'FP16 (Half)' if half else 'FP32 (Single)'}")
@@ -79,7 +79,7 @@ def export_yolo_to_tensorrt(
 
     elapsed = time.perf_counter() - t0
     print("\n" + "=" * 60)
-    print(f"✅ Export completed successfully in {elapsed:.1f} seconds!")
+    print(f"[SUCCESS] Export completed successfully in {elapsed:.1f} seconds!")
     print(f" Output Engine : {exported_path}")
     print("=" * 60 + "\n")
 

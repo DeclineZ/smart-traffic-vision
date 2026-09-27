@@ -46,6 +46,7 @@ DEFAULT_CONFIGS = {
     "south": "config/config_south.json",
     "east": "config/config_east.json",
     "west": "config/config_west.json",
+    "northeast": "config/config_northeast.json",
 }
 
 COCO_CLASSES = {
@@ -87,10 +88,13 @@ class BatchedCameraPipeline:
         voting_window: int = 15,
         pickup_bias: float = 1.15,
         enable_voting: bool = True,
+        tracker_type: str = "byetrack",
+        imgsz: int = 640,
     ):
         global cv, np, shapely, Point, Polygon, YOLO, Sort
         global AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
         global LaneMetricsManager, PayloadBuilder, MQTTPublisher, StreamBufferWorker, TrackClassVotingFilter
+        global VirtualGate, GateFlowManager
 
         import cv2 as cv
         import numpy as np
@@ -99,7 +103,9 @@ class BatchedCameraPipeline:
         from ultralytics import YOLO
 
         from algorithm.sort import Sort
+        from algorithm.byetrack import ByteTrack
         from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
+        from trt_pipeline.gates import VirtualGate, GateFlowManager
         from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
         from trt_pipeline.publisher import MQTTPublisher
         from trt_pipeline.stream import StreamBufferWorker
@@ -118,12 +124,17 @@ class BatchedCameraPipeline:
         self.nvenc_out = nvenc_out
         self.pub_interval = pub_interval
         self.intersection_id = intersection_id
+        self.tracker_type = tracker_type.lower()
+        self.imgsz = int(imgsz)
 
         # 1. Load Camera Configs, Lane Polygons & Metrics Managers
         self.camera_configs = []
         self.lane_configs: List[Dict[str, Dict[str, Any]]] = []
         self.metrics_managers: List[LaneMetricsManager] = []
         self.queue_speed_thresholds: List[float] = []
+
+        # 1.1 Virtual Counting Gates Manager
+        self.gate_manager = GateFlowManager(camera_names=self.camera_names)
 
         for idx in range(self.num_streams):
             cfg = initial_config(config_paths[idx])
@@ -142,27 +153,59 @@ class BatchedCameraPipeline:
             self.lane_configs.append(lane_dict)
             self.metrics_managers.append(LaneMetricsManager(lane_dict))
 
+            # Parse virtual counting gates
+            if "gates" in cfg and isinstance(cfg["gates"], list):
+                for g_cfg in cfg["gates"]:
+                    self.gate_manager.add_gate(VirtualGate(
+                        gate_id=g_cfg["gate_id"],
+                        cam_idx=idx,
+                        p1=g_cfg["p1"],
+                        p2=g_cfg["p2"],
+                        gate_type=g_cfg.get("type", "stopline"),
+                        direction_vec=g_cfg.get("direction"),
+                        label=g_cfg.get("label", g_cfg["gate_id"]),
+                        target_dir=g_cfg.get("target_dir"),
+                    ))
+
         # 2. Trackers & Motion Memory per Camera
         min_hits = 1 if self.skip_frames > 0 else 2
-        self.trackers = [
-            Sort(max_age=30, min_hits=min_hits, iou_threshold=0.3)
-            for _ in range(self.num_streams)
-        ]
+        if self.tracker_type == "byetrack":
+            self.trackers = [
+                ByteTrack(track_thresh=0.40, low_thresh=0.10, match_thresh=0.70, max_age=30, min_hits=min_hits)
+                for _ in range(self.num_streams)
+            ]
+            logger.info(f"Initialized ByteTrack trackers across {self.num_streams} streams (track_thresh=0.40, low_thresh=0.10).")
+        else:
+            self.trackers = [
+                Sort(max_age=30, min_hits=min_hits, iou_threshold=0.3)
+                for _ in range(self.num_streams)
+            ]
+            logger.info(f"Initialized SORT trackers across {self.num_streams} streams.")
         self.last_tracked: List[np.ndarray] = [np.empty((0, 6)) for _ in range(self.num_streams)]
         self.track_histories: List[Dict[int, deque]] = [{} for _ in range(self.num_streams)]
 
-        # 3. Stream Ingestion Workers (Double-Buffered Ring Buffer)
-        self.stream_workers = [
-            StreamBufferWorker(
-                name=self.camera_names[i],
-                source=self.video_sources[i],
-                target_fps=self.target_fps,
-                buffer_size=self.buffer_size,
-                is_paced=True,
-                loop_video=True,
-            )
-            for i in range(self.num_streams)
-        ]
+        # 3. Stream Ingestion (Synchronized Lockstep for Files, Threaded Ring Buffer for RTSP)
+        self.is_file_mode = all(
+            isinstance(src, str) and os.path.exists(src)
+            for src in self.video_sources
+        )
+        if self.is_file_mode:
+            self.file_caps = [cv.VideoCapture(src) for src in self.video_sources]
+            self.stream_workers = []
+            logger.info("Local video files detected: Using Synchronized Lockstep Mode (0% drift, exact frame-by-frame sync).")
+        else:
+            self.file_caps = []
+            self.stream_workers = [
+                StreamBufferWorker(
+                    name=self.camera_names[i],
+                    source=self.video_sources[i],
+                    target_fps=self.target_fps,
+                    buffer_size=self.buffer_size,
+                    is_paced=True,
+                    loop_video=True,
+                )
+                for i in range(self.num_streams)
+            ]
 
         # 4. Load Inference Model (Auto-detects TensorRT FP16 .engine vs PyTorch .pt)
         logger.info(f"Loading vision model: '{self.model_path}' onto device '{self.device}'...")
@@ -311,6 +354,8 @@ class BatchedCameraPipeline:
         self.running = False
         for worker in self.stream_workers:
             worker.stop()
+        for cap in self.file_caps:
+            cap.release()
 
         if self.display_worker:
             self.display_worker.stop()
@@ -333,12 +378,21 @@ class BatchedCameraPipeline:
             while self.running:
                 t0 = time.perf_counter()
 
-                # 1. Ingest batch: pull 1 frame from each camera ring buffer
+                # 1. Ingest batch: pull 1 frame from each camera
                 batch_frames = []
-                for worker in self.stream_workers:
-                    item = worker.get_frame(timeout=0.1)
-                    if item:
-                        batch_frames.append(item[1])
+                if self.is_file_mode:
+                    for cap in self.file_caps:
+                        ret, frame = cap.read()
+                        if not ret:
+                            cap.set(cv.CAP_PROP_POS_FRAMES, 0)
+                            ret, frame = cap.read()
+                        if ret and frame is not None:
+                            batch_frames.append(frame)
+                else:
+                    for worker in self.stream_workers:
+                        item = worker.get_frame(timeout=0.1)
+                        if item:
+                            batch_frames.append(item[1])
 
                 if len(batch_frames) < self.num_streams:
                     # Waiting for all streams to deliver synced frames
@@ -355,6 +409,7 @@ class BatchedCameraPipeline:
                         "verbose": False,
                         "device": self.device,
                         "conf": self.conf,
+                        "imgsz": self.imgsz,
                     }
                     if self.target_classes is not None:
                         infer_kwargs["classes"] = self.target_classes
@@ -377,48 +432,70 @@ class BatchedCameraPipeline:
                                 dets.append([x1, y1, x2, y2, conf, cls_id])
 
                         dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-                        # SORT tracker update with detection boxes [x1, y1, x2, y2, conf]
-                        track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
-                        tracked_out = self.trackers[idx].update(track_input)
 
-                        # Re-associate class IDs from closest detections with temporal voting smoothing
-                        if len(tracked_out) > 0 and len(dets_arr) > 0:
-                            matched_tracked = []
-                            det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
-                            for tobj in tracked_out:
-                                t_cx = (tobj[0] + tobj[2]) * 0.5
-                                t_cy = (tobj[1] + tobj[3]) * 0.5
-                                dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
-                                best_idx = int(np.argmin(dists))
-                                raw_c_id = int(dets_arr[best_idx, 5])
-                                det_conf = float(dets_arr[best_idx, 4])
-                                tid = int(tobj[4])
-
-                                smoothed_c_id = self.class_voter.update(
-                                    cam_idx=idx,
-                                    track_id=tid,
-                                    raw_cls_id=raw_c_id,
-                                    conf=det_conf,
-                                )
-                                matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
-                            tracked_objs = np.array(matched_tracked)
-                        elif len(tracked_out) > 0:
-                            matched_tracked = []
-                            for tobj in tracked_out:
-                                tid = int(tobj[4])
-                                smoothed_c_id = self.class_voter.get_class(
-                                    cam_idx=idx,
-                                    track_id=tid,
-                                    fallback=self.default_car_cls,
-                                )
-                                matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
-                            tracked_objs = np.array(matched_tracked)
+                        if self.tracker_type == "byetrack":
+                            tracked_out = self.trackers[idx].update(dets_arr)
+                            if len(tracked_out) > 0 and len(dets_arr) > 0:
+                                det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
+                                for i, tobj in enumerate(tracked_out):
+                                    t_cx = (tobj[0] + tobj[2]) * 0.5
+                                    t_cy = (tobj[1] + tobj[3]) * 0.5
+                                    dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
+                                    best_idx = int(np.argmin(dists))
+                                    raw_c_id = int(dets_arr[best_idx, 5])
+                                    det_conf = float(dets_arr[best_idx, 4])
+                                    tid = int(tobj[4])
+                                    smoothed_c_id = self.class_voter.update(
+                                        cam_idx=idx,
+                                        track_id=tid,
+                                        raw_cls_id=raw_c_id,
+                                        conf=det_conf,
+                                    )
+                                    tracked_out[i, 5] = smoothed_c_id
+                            tracked_objs = tracked_out
                         else:
-                            tracked_objs = np.empty((0, 6))
+                            # SORT tracker update with detection boxes [x1, y1, x2, y2, conf]
+                            track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
+                            tracked_out = self.trackers[idx].update(track_input)
+
+                            # Re-associate class IDs from closest detections with temporal voting smoothing
+                            if len(tracked_out) > 0 and len(dets_arr) > 0:
+                                matched_tracked = []
+                                det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
+                                for tobj in tracked_out:
+                                    t_cx = (tobj[0] + tobj[2]) * 0.5
+                                    t_cy = (tobj[1] + tobj[3]) * 0.5
+                                    dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
+                                    best_idx = int(np.argmin(dists))
+                                    raw_c_id = int(dets_arr[best_idx, 5])
+                                    det_conf = float(dets_arr[best_idx, 4])
+                                    tid = int(tobj[4])
+
+                                    smoothed_c_id = self.class_voter.update(
+                                        cam_idx=idx,
+                                        track_id=tid,
+                                        raw_cls_id=raw_c_id,
+                                        conf=det_conf,
+                                    )
+                                    matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
+                                tracked_objs = np.array(matched_tracked)
+                            elif len(tracked_out) > 0:
+                                matched_tracked = []
+                                for tobj in tracked_out:
+                                    tid = int(tobj[4])
+                                    smoothed_c_id = self.class_voter.get_class(
+                                        cam_idx=idx,
+                                        track_id=tid,
+                                        fallback=self.default_car_cls,
+                                    )
+                                    matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
+                                tracked_objs = np.array(matched_tracked)
+                            else:
+                                tracked_objs = np.empty((0, 6))
 
                         self.last_tracked[idx] = tracked_objs
                     else:
-                        # Skip frame: use tracker's Kalman predicted state
+                        # Skip frame: hold the last known tracked state (zero Kalman stretching)
                         tracked_objs = self.last_tracked[idx]
 
                     tracked_list.append(tracked_objs)
@@ -431,15 +508,41 @@ class BatchedCameraPipeline:
                     # Vectorized Lane Analytics
                     self._evaluate_vectorized_lanes(cam_idx=idx, tracked_objs=tracked_objs, frame_idx=batch_idx)
 
+                # 3.5 Update Virtual Counting Gates across all camera streams
+                for idx in range(self.num_streams):
+                    if len(tracked_list[idx]) > 0:
+                        self.gate_manager.update_tracks(cam_idx=idx, tracked_objs=tracked_list[idx], now=time.time())
+
                 # 4. Decoupled Asynchronous Display Submission (0 ms GPU blocking)
                 if self.display_worker:
-                    stats_str = f"BATCH {batch_idx:06d} | FPS: {current_fps:.1f} | INFER: {'YES' if should_run_yolo else 'SKIP (Kalman)'} | DROPS: {sum(w.frames_dropped for w in self.stream_workers)}"
+                    gate_stats = self.gate_manager.get_corridor_accounting()
+                    gate_str = f" | GATES [IN: {gate_stats['total_inflow']} | STOP: {gate_stats['total_stopline_cleared']} | QUEUE: {gate_stats['corridor_queue']} | FLOW: {gate_stats['discharge_rate_cars_per_sec']}/s]"
+                    drops_str = f" | DROPS: {sum(w.frames_dropped for w in self.stream_workers)}" if self.stream_workers else " | SYNC: LOCKSTEP"
+                    stats_str = f"BATCH {batch_idx:06d} | FPS: {current_fps:.1f}{gate_str}{drops_str}"
+
+                    # Prepare gate rendering payload
+                    gates_render = []
+                    for c_i in range(self.num_streams):
+                        cam_g_list = []
+                        for g in self.gate_manager.gates_by_cam.get(c_i, []):
+                            cam_g_list.append({
+                                "p1": g.p1,
+                                "p2": g.p2,
+                                "normal": g.normal,
+                                "count": g.count,
+                                "label": g.label,
+                                "type": g.gate_type,
+                                "flash": (time.time() - g.last_flash_ts < 0.4),
+                            })
+                        gates_render.append(cam_g_list)
+
                     self.display_worker.submit(
                         frames=batch_frames,
                         tracked_list=tracked_list,
                         cam_names=self.camera_names,
                         lane_configs=self.lane_configs,
                         header_stats=stats_str,
+                        gates=gates_render,
                     )
                     # Poll GUI window from main thread (100% thread-safe on macOS/Linux/Windows)
                     if not self.display_worker.poll_window():
@@ -455,6 +558,7 @@ class BatchedCameraPipeline:
                         m_mgr.reset()
 
                     if combined_lanes:
+                        telemetry = self.gate_manager.get_mqtt_telemetry()
                         payload = self.payload_builder.build(
                             frame_idx=batch_idx,
                             lanes_snapshot=combined_lanes,
@@ -464,8 +568,10 @@ class BatchedCameraPipeline:
                                 "mode": "batched_production",
                                 "skip_frames": self.skip_frames,
                             },
+                            traffic_flow=telemetry,
                         )
                         self.publisher.publish(payload)
+                        self.gate_manager.reset_interval()
 
                     last_pub_time = now
 
@@ -476,6 +582,13 @@ class BatchedCameraPipeline:
                     last_fps_time = now
 
                 self.total_processed_batches = batch_idx
+
+                # Pacing in file mode to maintain smooth, steady real-time playback
+                if self.is_file_mode and self.target_fps > 0:
+                    desired_interval = 1.0 / self.target_fps
+                    loop_elapsed = time.perf_counter() - t0
+                    if loop_elapsed < desired_interval:
+                        time.sleep(desired_interval - loop_elapsed)
 
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt caught. Shutting down pipeline...")
@@ -508,6 +621,8 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     parser.add_argument("--voting-window", type=int, default=15, help="Temporal voting window size in frames for class smoothing (default: 15)")
     parser.add_argument("--pickup-bias", type=float, default=1.15, help="Prior weight multiplier favoring car over truck for pickup trucks (default: 1.15)")
     parser.add_argument("--no-voting", action="store_true", help="Disable temporal class smoothing filter")
+    parser.add_argument("--tracker", choices=["byetrack", "sort"], default="byetrack", help="Object tracking algorithm: 'byetrack' (default) or 'sort'")
+    parser.add_argument("--imgsz", type=int, default=640, help="Inference image resolution (default: 640, supports 960, 1280)")
     return parser
 
 
@@ -572,6 +687,8 @@ def main():
         voting_window=args.voting_window,
         pickup_bias=args.pickup_bias,
         enable_voting=(not args.no_voting),
+        tracker_type=args.tracker,
+        imgsz=args.imgsz,
     )
 
     # Handle OS termination signals
