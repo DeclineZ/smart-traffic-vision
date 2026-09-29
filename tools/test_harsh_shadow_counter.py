@@ -13,6 +13,7 @@ Metrics Evaluated:
 
 from __future__ import annotations
 import argparse
+import json
 import os
 import sys
 import time
@@ -66,13 +67,15 @@ def run_benchmark(
 
     # Load lane config or construct adaptive 3-lane grid for generic video
     if config_path and os.path.exists(config_path):
-        cfg = initial_config(config_path)
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        lanes_source = cfg.get("lane_metrics", {}).get("lanes", cfg.get("lanes", {}))
         lanes_dict = {
             lid: {
                 "direction": linfo.get("direction", "N"),
                 "polygon": Polygon(linfo["polygon"]) if not isinstance(linfo["polygon"], Polygon) else linfo["polygon"],
             }
-            for lid, linfo in cfg.get("lane_metrics", {}).get("lanes", {}).items()
+            for lid, linfo in lanes_source.items()
         }
     else:
         # Default 3 vertical road lanes spanning the video width

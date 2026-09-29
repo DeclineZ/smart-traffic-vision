@@ -212,6 +212,46 @@ class InteractiveLaneCalibrator:
                 "skip": 0,
                 "max_frames": 0
             },
+            "model": {
+                "engine_path": "models/yolov8s.engine",
+                "input_shape": [1, 3, 640, 640],
+                "device": "cuda:0"
+            },
+            "tracker": {
+                "type": "ByteTrack",
+                "params": {
+                    "min_conf": 0.3,
+                    "track_thresh": 0.5,
+                    "match_thresh": 0.7,
+                    "track_buffer": 25,
+                    "frame_rate": 25
+                }
+            },
+            "classes": {
+                "dict_class": {
+                    "1": "bicycle",
+                    "2": "car",
+                    "3": "motorcycle",
+                    "5": "bus",
+                    "7": "truck"
+                }
+            },
+            "output": {
+                "base_dir": "./output/calibrated",
+                "save_crop": False,
+                "data_output_path": "output/calibrated/data.json"
+            },
+            "tracking": {
+                "zones": []
+            },
+            "density": {
+                "enabled": False
+            },
+            "processing": {
+                "opencv_threads": 0,
+                "use_opencl": False,
+                "video_queue_size": 2
+            },
             "lane_metrics": {
                 "enabled": True,
                 "publish_interval_frames": 50,
