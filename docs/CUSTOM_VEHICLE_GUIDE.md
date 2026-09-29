@@ -1,11 +1,22 @@
 # Thai Multi-Class Traffic Vision & Custom Vehicle Guide
 
-Comprehensive guide to mining, curating, and fine-tuning Ultralytics YOLO26s using YOLO26x co-training for the 5-Class COCO-aligned Thai traffic standard:
-- **`car`** (0): Sedans, hatchbacks, taxis, SUVs, PPVs, and commuter passenger vans (Toyota Commuter / HiAce - COCO aligned)
-- **`motorcycle`** (1): Scooters, underbones, commuter bikes, big bikes, delivery motorbikes (Grab, Lineman, Shopee)
-- **`bus`** (2): BMTA city buses (ขสมก. ครีมแดง / ปรับอากาศ), EV Thai Smile Bus, intercity tour coaches, double-deckers
-- **`truck`** (3): Standard กระบะ (Hilux, D-Max), high-cage รถคอก, สองแถว (songthaew), 6/10-wheelers, and articulated 18-wheelers (รถพ่วง)
-- **`three_wheeler`** (4): ตุ๊กตุ๊ก (tuk-tuk) and ซาเล้ง (saleng / cargo sidecar tricycle)
+Comprehensive guide to mining, curating, and fine-tuning Ultralytics YOLO26s using YOLO26x co-training for the 5-Class Thai traffic standard:
+- **`car`** (0): Light vehicles, including sedans, hatchbacks, taxis, SUVs/PPVs, passenger commuter vans (Toyota Commuter / HiAce / Ventury), ordinary pickups (กระบะ Hilux, D-Max, Navara, Ranger), and pickup-based songthaews (สองแถวกระบะ).
+- **`motorcycle`** (1): Scooters, underbones, commuter bikes, big bikes, delivery motorbikes (Grab, Lineman, Shopee).
+- **`bus`** (2): BMTA city buses (ขสมก. ครีมแดง / ปรับอากาศ), EV Thai Smile Bus, intercity tour coaches, double-deckers.
+- **`truck`** (3): Medium and heavy commercial trucks (6/10-wheelers, articulated 18-wheelers / รถพ่วง, heavy dump/flatbed trucks), and truck-based songthaews (สองแถว built on medium 4/6-wheel commercial truck chassis).
+- **`three_wheeler`** (4): ตุ๊กตุ๊ก (tuk-tuk) and ซาเล้ง (saleng / cargo sidecar tricycle).
+
+---
+
+## Agreed Taxonomy Policy & Separation of Concerns
+
+### 1. Detector Classes vs. Downstream Controller Weights
+- **Detector Focus**: The YOLO26s detector models visual morphology only. Class boundaries are defined by visual scale and structure (light 4-wheelers vs. medium/heavy commercial vehicles), avoiding arbitrary classification splits based on operational role.
+- **Controller Independence**: Traffic signal controllers, queue estimation engines, and adaptive controllers assign Passenger Car Equivalent (PCE) or priority weights independently in their own control logic. Detector classes must not be conflated with traffic weights, and no traffic weights are assigned in the detection layer.
+- **Subtype Preservation**: Detailed subtypes (`pickup`, `pickup_based_songthaew`, `truck_based_songthaew`, `passenger_van`, `high_cage_pickup`) are retained as separate metadata in annotation review manifests, ensuring operational granularity is preserved without fragmenting standard 5-class YOLO labels.
+- **Ambiguity Handling**: When vehicle scale or chassis type cannot be definitively determined due to distance, occlusion, or motion blur, annotators must mark the instance as ambiguous rather than guessing.
+- **External Dataset Provenance**: External UA-DETRAC mappings (where vans and light trucks appear in raw annotations) remain strictly provisional pending visual verification against the Thai light-versus-heavy boundary.
 
 ---
 

@@ -1,0 +1,1308 @@
+{
+  "metadata": {
+    "version": "1.2",
+    "description": "Stratified evaluation sampling manifest for YOLO26s Thai Traffic Vision",
+    "ref_size": 640,
+    "total_samples": 42,
+    "registry_total_candidates": 135,
+    "actual_coverage": {
+      "classes_covered": [
+        "bus",
+        "car",
+        "motorcycle",
+        "three_wheeler",
+        "truck"
+      ],
+      "classes_missing": [],
+      "cameras_covered": [
+        "cam03_east",
+        "cam43_south",
+        "cam44_north",
+        "cam45_northeast",
+        "cam46_west"
+      ],
+      "cameras_missing": [],
+      "real_night_frames_count": 8,
+      "small_objects_frames_count": 26
+    },
+    "coverage_gaps": [],
+    "exposure_breakdown": {
+      "unproven_checkpoint_exposure": 35,
+      "nearby_training_exposure": 7
+    },
+    "annotation_status_breakdown": {
+      "unreviewed_candidate_and_teacher_annotations": 26,
+      "missing_unannotated": 8,
+      "unreviewed_historical_predictions": 8
+    },
+    "clean_input_status_breakdown": {
+      "existing_raw_image": 26,
+      "requires_video_extraction": 16
+    },
+    "eligibility_summary": {
+      "eligible_for_quantitative_eval_count": 0,
+      "ineligible_unreviewed_count": 42,
+      "policy_note": "Unreviewed annotations are strictly ineligible for final quantitative evaluation scoring until verified by human review. Clean image inputs must be verified on disk or extracted from source video."
+    }
+  },
+  "samples": [
+    {
+      "source_frame_id": "cam03_east_f003720",
+      "frame_id": "cam03_east_f003720",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 3720,
+      "timestamp_sec": 24.8,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f003720"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 540,
+      "nearby_training_delta_sec": 3.6,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f014080",
+      "frame_id": "cam03_east_f014080",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 14080,
+      "timestamp_sec": 93.87,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f014080"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 4657,
+      "nearby_training_delta_sec": 31.05,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f014160",
+      "frame_id": "cam03_east_f014160",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 14160,
+      "timestamp_sec": 94.4,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f014160"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 4737,
+      "nearby_training_delta_sec": 31.58,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f028023",
+      "frame_id": "cam03_east_f028023",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 28023,
+      "timestamp_sec": 186.82,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f028023"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 7500,
+      "nearby_training_delta_sec": 50.0,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f054063",
+      "frame_id": "cam03_east_f054063",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 54063,
+      "timestamp_sec": 360.42,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f054063"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 3240,
+      "nearby_training_delta_sec": 21.6,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f074349",
+      "frame_id": "cam03_east_f074349",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 74349,
+      "timestamp_sec": 495.66,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f074349"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 780,
+      "nearby_training_delta_sec": 5.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f142509",
+      "frame_id": "cam03_east_f142509",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 142509,
+      "timestamp_sec": 950.06,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f142509"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2280,
+      "nearby_training_delta_sec": 15.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam03_east_f142629",
+      "frame_id": "cam03_east_f142629",
+      "video_name": "cam03_east",
+      "camera": "cam03_east",
+      "frame_idx": 142629,
+      "timestamp_sec": 950.86,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:three_wheeler",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam03_east_f142629"
+      ],
+      "verified_classes_present": [
+        "car",
+        "bus",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2400,
+      "nearby_training_delta_sec": 16.0,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f046440",
+      "frame_id": "cam43_south_f046440",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 46440,
+      "timestamp_sec": 309.6,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_f046440"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2820,
+      "nearby_training_delta_sec": 18.8,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f046560",
+      "frame_id": "cam43_south_f046560",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 46560,
+      "timestamp_sec": 310.4,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_f046560"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2700,
+      "nearby_training_delta_sec": 18.0,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f074340",
+      "frame_id": "cam43_south_f074340",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 74340,
+      "timestamp_sec": 495.6,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_f074340"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2100,
+      "nearby_training_delta_sec": 14.0,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f100500",
+      "frame_id": "cam43_south_f100500",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 100500,
+      "timestamp_sec": 670.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_f100500"
+      ],
+      "verified_classes_present": [
+        "car",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 780,
+      "nearby_training_delta_sec": 5.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f002720",
+      "frame_id": "cam43_south_night_f002720",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 2720,
+      "timestamp_sec": 18.13,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f002720"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1680,
+      "nearby_training_delta_sec": 11.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f002800",
+      "frame_id": "cam43_south_night_f002800",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 2800,
+      "timestamp_sec": 18.67,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f002800"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1760,
+      "nearby_training_delta_sec": 11.73,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f002880",
+      "frame_id": "cam43_south_night_f002880",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 2880,
+      "timestamp_sec": 19.2,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f002880"
+      ],
+      "verified_classes_present": [
+        "car",
+        "bus"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1840,
+      "nearby_training_delta_sec": 12.27,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f002960",
+      "frame_id": "cam43_south_night_f002960",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 2960,
+      "timestamp_sec": 19.73,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f002960"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1920,
+      "nearby_training_delta_sec": 12.8,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f003040",
+      "frame_id": "cam43_south_night_f003040",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 3040,
+      "timestamp_sec": 20.27,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f003040"
+      ],
+      "verified_classes_present": [
+        "car",
+        "bus"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2000,
+      "nearby_training_delta_sec": 13.33,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_night_f003120",
+      "frame_id": "cam43_south_night_f003120",
+      "video_name": "cam43_south_night",
+      "camera": "cam43_south",
+      "frame_idx": 3120,
+      "timestamp_sec": 20.8,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "real_night_surveillance",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam43_south_night_f003120"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 2080,
+      "nearby_training_delta_sec": 13.87,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f036540",
+      "frame_id": "cam44_north_f036540",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 36540,
+      "timestamp_sec": 243.6,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam44_north_f036540"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 3240,
+      "nearby_training_delta_sec": 21.6,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f041220",
+      "frame_id": "cam44_north_f041220",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 41220,
+      "timestamp_sec": 274.8,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam44_north_f041220"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1440,
+      "nearby_training_delta_sec": 9.6,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f041400",
+      "frame_id": "cam44_north_f041400",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 41400,
+      "timestamp_sec": 276.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam44_north_f041400"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "truck"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1620,
+      "nearby_training_delta_sec": 10.8,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f044640",
+      "frame_id": "cam44_north_f044640",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 44640,
+      "timestamp_sec": 297.6,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "class_representation:truck",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam44_north_f044640"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "truck",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1620,
+      "nearby_training_delta_sec": 10.8,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam46_west_f021240",
+      "frame_id": "cam46_west_f021240",
+      "video_name": "cam46_west",
+      "camera": "cam46_west",
+      "frame_idx": 21240,
+      "timestamp_sec": 141.6,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam46_west_f021240"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 720,
+      "nearby_training_delta_sec": 4.8,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam46_west_f025020",
+      "frame_id": "cam46_west_f025020",
+      "video_name": "cam46_west",
+      "camera": "cam46_west",
+      "frame_idx": 25020,
+      "timestamp_sec": 166.8,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam46_west_f025020"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 494,
+      "nearby_training_delta_sec": 3.29,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam46_west_f025306",
+      "frame_id": "cam46_west_f025306",
+      "video_name": "cam46_west",
+      "camera": "cam46_west",
+      "frame_idx": 25306,
+      "timestamp_sec": 168.71,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:bus",
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam46_west_f025306"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "bus",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 780,
+      "nearby_training_delta_sec": 5.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam46_west_f025606",
+      "frame_id": "cam46_west_f025606",
+      "video_name": "cam46_west",
+      "camera": "cam46_west",
+      "frame_idx": 25606,
+      "timestamp_sec": 170.71,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "class_representation:car",
+        "class_representation:motorcycle",
+        "class_representation:three_wheeler",
+        "small_distant_vehicles"
+      ],
+      "artifact_references": [
+        "val_split:cam46_west_f025606"
+      ],
+      "verified_classes_present": [
+        "car",
+        "motorcycle",
+        "three_wheeler"
+      ],
+      "has_small_vehicles": true,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1080,
+      "nearby_training_delta_sec": 7.2,
+      "annotations_status": "unreviewed_candidate_and_teacher_annotations",
+      "clean_input_status": "existing_raw_image",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f012611",
+      "frame_id": "cam45_northeast_f012611",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 12611,
+      "timestamp_sec": 84.07,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#12611"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f063055",
+      "frame_id": "cam45_northeast_f063055",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 63055,
+      "timestamp_sec": 420.37,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#63055"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f189166",
+      "frame_id": "cam45_northeast_f189166",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 189166,
+      "timestamp_sec": 1261.11,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#189166"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f378332",
+      "frame_id": "cam45_northeast_f378332",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 378332,
+      "timestamp_sec": 2522.21,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#378332"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f630554",
+      "frame_id": "cam45_northeast_f630554",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 630554,
+      "timestamp_sec": 4203.69,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#630554"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f882775",
+      "frame_id": "cam45_northeast_f882775",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 882775,
+      "timestamp_sec": 5885.17,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#882775"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f1071941",
+      "frame_id": "cam45_northeast_f1071941",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 1071941,
+      "timestamp_sec": 7146.27,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#1071941"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam45_northeast_f1198052",
+      "frame_id": "cam45_northeast_f1198052",
+      "video_name": "cam45_northeast",
+      "camera": "cam45_northeast",
+      "frame_idx": 1198052,
+      "timestamp_sec": 7987.01,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "unseen_camera_holdout:cam45_northeast"
+      ],
+      "artifact_references": [
+        "video_frame:cam45_northeast.avi#1198052"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": null,
+      "nearby_training_delta_sec": null,
+      "annotations_status": "missing_unannotated",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unannotated frame lacks ground truth."
+    },
+    {
+      "source_frame_id": "cam43_south_f002000",
+      "frame_id": "pred_cam43_south_f002000",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 2000,
+      "timestamp_sec": 13.33,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam43_south_f002000.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 20,
+      "nearby_training_delta_sec": 0.13,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f004500",
+      "frame_id": "pred_cam43_south_f004500",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 4500,
+      "timestamp_sec": 30.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam43_south_f004500.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 330,
+      "nearby_training_delta_sec": 2.2,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam43_south_f012000",
+      "frame_id": "pred_cam43_south_f012000",
+      "video_name": "cam43_south",
+      "camera": "cam43_south",
+      "frame_idx": 12000,
+      "timestamp_sec": 80.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam43_south_f012000.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "unproven_checkpoint_exposure",
+      "nearby_training_delta_frames": 1500,
+      "nearby_training_delta_sec": 10.0,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f001500",
+      "frame_id": "pred_cam44_north_f001500",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 1500,
+      "timestamp_sec": 10.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam44_north_f001500.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 60,
+      "nearby_training_delta_sec": 0.4,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f003600",
+      "frame_id": "pred_cam44_north_f003600",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 3600,
+      "timestamp_sec": 24.0,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam44_north_f003600.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 180,
+      "nearby_training_delta_sec": 1.2,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_f009500",
+      "frame_id": "pred_cam44_north_f009500",
+      "video_name": "cam44_north",
+      "camera": "cam44_north",
+      "frame_idx": 9500,
+      "timestamp_sec": 63.33,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_day",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam44_north_f009500.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 20,
+      "nearby_training_delta_sec": 0.13,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_night_f002500",
+      "frame_id": "pred_cam44_north_night_f002500",
+      "video_name": "cam44_north_night",
+      "camera": "cam44_north",
+      "frame_idx": 2500,
+      "timestamp_sec": 16.67,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam44_north_night_f002500.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 20,
+      "nearby_training_delta_sec": 0.13,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    },
+    {
+      "source_frame_id": "cam44_north_night_f005000",
+      "frame_id": "pred_cam44_north_night_f005000",
+      "video_name": "cam44_north_night",
+      "camera": "cam44_north",
+      "frame_idx": 5000,
+      "timestamp_sec": 33.33,
+      "timing_status": "evidenced_from_video_fps",
+      "lighting_type": "real_night",
+      "selection_reasons": [
+        "historical_qualitative_prediction_artifact"
+      ],
+      "artifact_references": [
+        "eval_prediction:pred_cam44_north_night_f005000.jpg"
+      ],
+      "verified_classes_present": [],
+      "has_small_vehicles": null,
+      "training_exposure": "nearby_training_exposure",
+      "nearby_training_delta_frames": 220,
+      "nearby_training_delta_sec": 1.47,
+      "annotations_status": "unreviewed_historical_predictions",
+      "clean_input_status": "requires_video_extraction",
+      "eligible_for_quantitative_eval": false,
+      "eligibility_reason": "Unreviewed annotations are ineligible for quantitative benchmark scoring until human-audited."
+    }
+  ]
+}

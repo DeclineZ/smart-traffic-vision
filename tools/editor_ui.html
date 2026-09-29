@@ -1,0 +1,2729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO26s Review Pack Visual Annotation Editor</title>
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-surface: #111827;
+            --bg-card: #182234;
+            --bg-input: #1f293d;
+            --border-color: #2e3b52;
+            --border-focus: #38bdf8;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            /* Class Colors */
+            --color-car: #38bdf8;
+            --color-motorcycle: #fb923c;
+            --color-bus: #c084fc;
+            --color-truck: #facc15;
+            --color-three-wheeler: #4ade80;
+
+            /* Status Colors */
+            --status-verified: #10b981;
+            --status-draft: #f59e0b;
+            --status-unreviewed: #64748b;
+            --status-unannotated: #8b5cf6;
+            --status-danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Top Header */
+        header.app-header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            z-index: 10;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--color-car);
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dirty-badge {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .dirty-badge.visible {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Frame Navigation */
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background-color: #27354f;
+            border-color: var(--border-focus);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .frame-select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            cursor: pointer;
+            max-width: 320px;
+            outline: none;
+        }
+
+        .frame-select:focus {
+            border-color: var(--border-focus);
+        }
+
+        /* Progress Summary & Save Actions */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .progress-pill-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--bg-card);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.75rem;
+        }
+
+        .pill-verified { color: var(--status-verified); font-weight: 600; }
+        .pill-draft { color: var(--status-draft); font-weight: 600; }
+        .pill-unreviewed { color: var(--status-unreviewed); font-weight: 600; }
+        .pill-unannotated { color: var(--status-unannotated); font-weight: 600; }
+
+        .btn-action {
+            border: 1px solid transparent;
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .btn-save-draft {
+            background-color: var(--bg-card);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-save-draft:hover:not(:disabled) {
+            background-color: #27354f;
+            border-color: #fbbf24;
+            color: #fbbf24;
+        }
+
+        .btn-mark-verified {
+            background-color: #065f46;
+            border-color: #059669;
+            color: #ecfdf5;
+        }
+
+        .btn-mark-verified:hover:not(:disabled) {
+            background-color: #047857;
+            border-color: #10b981;
+        }
+
+        .btn-mark-uncertain {
+            background-color: rgba(147, 51, 234, 0.2);
+            border-color: rgba(168, 85, 247, 0.4);
+            color: #e9d5ff;
+        }
+
+        .btn-mark-uncertain:hover:not(:disabled) {
+            background-color: rgba(147, 51, 234, 0.35);
+            border-color: #c084fc;
+        }
+
+        .btn-mark-rejected {
+            background-color: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+
+        .btn-mark-rejected:hover:not(:disabled) {
+            background-color: rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+            color: #fee2e2;
+        }
+
+        .btn-action:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Filter Sub-bar */
+        .filter-bar {
+            background-color: #0e1422;
+            border-bottom: 1px solid var(--border-color);
+            padding: 6px 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+        }
+
+        .filter-label {
+            color: var(--text-muted);
+            margin-right: 4px;
+        }
+
+        .filter-chip {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 3px 9px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.15s ease;
+        }
+
+        .filter-chip:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        .filter-chip.active {
+            background-color: var(--bg-card);
+            border-color: var(--border-focus);
+            color: var(--border-focus);
+            font-weight: 600;
+        }
+
+        /* Main Workspace */
+        .workspace {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Canvas Area */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #070a12;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas#viewport {
+            display: block;
+            outline: none;
+        }
+
+        /* Floating Viewport Controls */
+        .viewport-toolbar {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background-color: rgba(17, 24, 39, 0.9);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 6px 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 5;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .tool-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+
+        .tool-btn:hover {
+            background-color: #27354f;
+            border-color: var(--border-focus);
+        }
+
+        .zoom-display {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            min-width: 48px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hud-hint {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background-color: rgba(17, 24, 39, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Right Sidebar */
+        aside.sidebar {
+            width: 360px;
+            background-color: var(--bg-surface);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            z-index: 6;
+        }
+
+        .sidebar-section {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-title {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Frame Meta Card */
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 0.78rem;
+        }
+
+        .meta-cell {
+            background-color: var(--bg-card);
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .meta-label {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            margin-bottom: 2px;
+        }
+
+        .meta-value {
+            color: var(--text-primary);
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status-verified-badge { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .status-draft-badge { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .status-unreviewed-badge { background-color: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); }
+        .status-unannotated-badge { background-color: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.4); }
+        .status-rejected-badge { background-color: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); }
+        .status-uncertain-badge { background-color: rgba(192, 132, 252, 0.2); color: #d8b4fe; border: 1px solid rgba(192, 132, 252, 0.5); }
+
+        .pill-uncertain { color: #d8b4fe; font-weight: 600; }
+        .pill-rejected { color: #fca5a5; font-weight: 600; }
+
+        .tag-badge {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #38bdf8;
+            font-size: 0.68rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .checklist-item {
+            font-size: 0.74rem;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            line-height: 1.35;
+        }
+        .checklist-item input[type="checkbox"] {
+            margin-top: 2px;
+            accent-color: var(--border-focus);
+        }
+
+        .risk-item {
+            font-size: 0.72rem;
+            color: #fca5a5;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+            line-height: 1.3;
+        }
+
+        /* Class Palette */
+        .class-palette {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .class-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 7px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            transition: all 0.15s ease;
+        }
+
+        .class-btn:hover {
+            background-color: #27354f;
+            border-color: var(--border-focus);
+        }
+
+        .class-btn.active {
+            border-width: 2px;
+            font-weight: 600;
+        }
+
+        .class-btn-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .class-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .class-hotkey {
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-size: 0.68rem;
+            font-family: monospace;
+            color: var(--text-secondary);
+        }
+
+        .class-count {
+            background-color: rgba(255, 255, 255, 0.06);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        /* Inspector Controls */
+        .field-group {
+            margin-bottom: 10px;
+        }
+
+        .field-group label {
+            display: block;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .field-select, .field-input, .field-textarea {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .field-select:focus, .field-input:focus, .field-textarea:focus {
+            border-color: var(--border-focus);
+        }
+
+        .field-textarea {
+            resize: vertical;
+            min-height: 52px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            accent-color: var(--border-focus);
+            cursor: pointer;
+        }
+
+        .inspector-empty {
+            color: var(--text-muted);
+            font-size: 0.76rem;
+            text-align: center;
+            padding: 16px 8px;
+            background-color: rgba(255, 255, 255, 0.02);
+            border-radius: 4px;
+            border: 1px dashed var(--border-color);
+        }
+
+        .btn-delete-box {
+            width: 100%;
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 10px;
+            transition: all 0.15s ease;
+        }
+
+        .btn-delete-box:hover {
+            background-color: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+            color: #fee2e2;
+        }
+
+        /* Box List */
+        .box-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .box-item {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 6px 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .box-item:hover {
+            background-color: #27354f;
+        }
+
+        .box-item.selected {
+            border-color: var(--border-focus);
+            background-color: rgba(56, 189, 248, 0.1);
+        }
+
+        .box-item-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .box-item-id {
+            font-family: monospace;
+            color: var(--text-muted);
+            font-size: 0.68rem;
+        }
+
+        .box-item-del {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .box-item-del:hover {
+            color: var(--status-danger);
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Dialogs / Modals */
+        dialog.modal {
+            background-color: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px 24px;
+            max-width: 480px;
+            width: 90%;
+            margin: auto;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+            outline: none;
+        }
+
+        dialog::backdrop {
+            background-color: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .toast {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .toast.success { border-color: var(--status-verified); color: #ecfdf5; }
+        .toast.error { border-color: var(--status-danger); color: #fee2e2; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <h1 class="app-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <path d="M9 3v18"></path>
+                    <path d="M3 9h18"></path>
+                </svg>
+                YOLO26s Review Pack Visual Editor
+            </h1>
+            <div id="dirty-badge" class="dirty-badge">
+                <span style="font-size: 0.65rem;">●</span> UNSAVED CHANGES
+            </div>
+        </div>
+
+        <!-- Frame Navigation -->
+        <div class="header-nav">
+            <button id="btn-prev" class="nav-btn" title="Previous frame ([)" disabled>◀ Prev</button>
+            <select id="frame-select" class="frame-select" aria-label="Jump to frame"></select>
+            <button id="btn-next" class="nav-btn" title="Next frame (])">Next ▶</button>
+        </div>
+
+        <!-- Progress Counts & Save Actions -->
+        <div class="header-right">
+            <div class="progress-pill-group" id="progress-summary">
+                <span class="pill-verified" id="count-verified">0 Ver</span>
+                <span>•</span>
+                <span class="pill-draft" id="count-draft">0 Draft</span>
+                <span>•</span>
+                <span class="pill-unreviewed" id="count-unreviewed">0 Unrev</span>
+                <span id="sep-uncertain" style="display:none;">•</span>
+                <span class="pill-uncertain" id="count-uncertain" style="display:none;">0 Uncert</span>
+                <span id="sep-rejected" style="display:none;">•</span>
+                <span class="pill-rejected" id="count-rejected" style="display:none;">0 Rej</span>
+                <span>•</span>
+                <span class="pill-unannotated" id="count-unannotated">0 Unann</span>
+                <span id="count-total-summary">(0 tot)</span>
+            </div>
+
+            <button id="btn-save-draft" class="btn-action btn-save-draft" title="Save draft (Ctrl+S)">
+                💾 Save Draft
+            </button>
+            <button id="btn-mark-uncertain" class="btn-action btn-mark-uncertain" title="Mark frame uncertain / ambiguous">
+                ? Uncertain
+            </button>
+            <button id="btn-mark-rejected" class="btn-action btn-mark-rejected" title="Reject frame (unusable image / severe defect)">
+                ✕ Reject Frame
+            </button>
+            <button id="btn-mark-verified" class="btn-action btn-mark-verified" title="Mark frame verified (Ctrl+Enter)">
+                ✓ Mark Verified
+            </button>
+        </div>
+    </header>
+
+    <!-- Filter Sub-bar -->
+    <nav class="filter-bar">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip" data-filter="unreviewed">Unreviewed</button>
+        <button class="filter-chip" data-filter="draft">Draft</button>
+        <button class="filter-chip" data-filter="verified">Verified</button>
+        <button class="filter-chip" data-filter="uncertain">Uncertain</button>
+        <button class="filter-chip" data-filter="rejected">Rejected</button>
+        <button class="filter-chip" data-filter="unannotated">Unannotated</button>
+        <button id="btn-help" class="nav-btn" style="margin-left: auto; padding: 2px 8px; font-size: 0.72rem;">⌨ Shortcuts (?)</button>
+    </nav>
+
+    <!-- Main Workspace -->
+    <div class="workspace">
+        <!-- Canvas Viewport -->
+        <main class="canvas-container" id="canvas-container">
+            <div class="hud-hint" id="hud-hint">
+                Wheel: Zoom • Drag/Space: Pan • Click+Drag: Draw Box • Click Box: Select & Resize
+            </div>
+            <canvas id="viewport" tabindex="0"></canvas>
+
+            <div class="viewport-toolbar">
+                <button class="tool-btn" id="tool-zoom-out" title="Zoom Out (-)">−</button>
+                <span class="zoom-display" id="zoom-level">100%</span>
+                <button class="tool-btn" id="tool-zoom-in" title="Zoom In (+)">+</button>
+                <button class="tool-btn" id="tool-fit" title="Fit to Screen (F)">Fit</button>
+                <button class="tool-btn" id="tool-reset" title="100% Zoom (1:1)">1:1</button>
+                <button class="tool-btn" id="tool-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+                <div style="width: 1px; height: 16px; background: var(--border-color); margin: 0 4px;"></div>
+                <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer;" title="Toggle teacher proposals visibility">
+                    <input type="checkbox" id="toggle-proposals" checked style="accent-color: #10b981; cursor: pointer;">
+                    <span>Proposals</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer;" title="Show rejected teacher proposals">
+                    <input type="checkbox" id="toggle-rejected-proposals" style="accent-color: #6b7280; cursor: pointer;">
+                    <span>Rejected</span>
+                </label>
+            </div>
+        </main>
+
+        <!-- Right Inspector Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Frame Info Section -->
+            <section class="sidebar-section">
+                <div class="section-title">
+                    <span>Frame Metadata</span>
+                    <span id="frame-status-badge" class="status-badge status-unreviewed-badge">UNREVIEWED</span>
+                </div>
+                <div class="meta-grid">
+                    <div class="meta-cell">
+                        <div class="meta-label">Camera</div>
+                        <div class="meta-value" id="meta-camera">-</div>
+                    </div>
+                    <div class="meta-cell">
+                        <div class="meta-label">Lighting</div>
+                        <div class="meta-value" id="meta-lighting">-</div>
+                    </div>
+                    <div class="meta-cell" style="grid-column: span 2;">
+                        <div class="meta-label">Diagnostic Group</div>
+                        <div class="meta-value" id="meta-group" style="font-size: 0.72rem;">-</div>
+                    </div>
+                    <div class="meta-cell">
+                        <div class="meta-label">Origin</div>
+                        <div class="meta-value" id="meta-origin">-</div>
+                    </div>
+                    <div class="meta-cell">
+                        <div class="meta-label">Canonical Source</div>
+                        <div class="meta-value" id="meta-canonical-id" style="font-size: 0.7rem;">-</div>
+                    </div>
+                    <div class="meta-cell">
+                        <div class="meta-label">Dimensions</div>
+                        <div class="meta-value" id="meta-dim">-</div>
+                    </div>
+                    <div class="meta-cell">
+                        <div class="meta-label">Boxes Count</div>
+                        <div class="meta-value" id="meta-box-count">0</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Review Focus & Checklist Section -->
+            <section class="sidebar-section" id="section-checklist">
+                <div class="section-title">
+                    <span>Review Focus & Checklist</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <div class="meta-label" style="margin-bottom: 4px;">Review Tags</div>
+                    <div id="meta-tags" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">None</span>
+                    </div>
+                </div>
+                <div style="margin-bottom: 8px;" id="group-checks">
+                    <div class="meta-label" style="margin-bottom: 4px;">Inspection Checklist</div>
+                    <div id="meta-checks">
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">No specific checks listed</span>
+                    </div>
+                </div>
+                <div id="group-risks" style="margin-bottom: 4px;">
+                    <div class="meta-label" style="margin-bottom: 4px;">Known Risk Factors</div>
+                    <div id="meta-risks">
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">None reported</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Class Palette -->
+            <section class="sidebar-section">
+                <div class="section-title">
+                    <span>Active Class Palette</span>
+                    <span style="font-size: 0.68rem; color: var(--text-muted);">Keys 1 - 5</span>
+                </div>
+                <div class="class-palette" id="class-palette">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </section>
+
+            <!-- Selected Box Inspector -->
+            <section class="sidebar-section" id="section-inspector">
+                <div class="section-title">
+                    <span>Selected Box</span>
+                    <span id="selected-inst-id" style="font-family: monospace; font-size: 0.68rem; color: var(--border-focus);">-</span>
+                </div>
+
+                <div id="inspector-content">
+                    <!-- Teacher Proposal Review Action Box -->
+                    <div class="field-group" id="group-teacher-proposal" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                            <span id="proposal-badge-cat" style="font-size: 0.70rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: rgba(16, 185, 129, 0.2); color: #34d399;">+ Proposal</span>
+                            <span id="proposal-status-badge" style="font-size: 0.70rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #854d0e; color: #fef08a;">Pending</span>
+                        </div>
+                        <div id="proposal-provenance" style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 6px;">YOLO26x Proposal</div>
+                        <div id="proposal-conflict-info" style="display: none; font-size: 0.72rem; color: #f87171; background: rgba(239, 68, 68, 0.12); padding: 4px 6px; border-radius: 4px; margin-bottom: 8px;"></div>
+                        <div style="display: flex; gap: 6px; margin-top: 4px;">
+                            <button type="button" id="btn-accept-proposal" class="btn-action" style="flex: 1; background: #059669; border-color: #10b981; color: white; justify-content: center; padding: 5px 8px; font-size: 0.76rem;">
+                                ✓ Accept (A)
+                            </button>
+                            <button type="button" id="btn-reject-proposal" class="btn-action" style="flex: 1; background: #374151; border-color: #4b5563; color: #f3f4f6; justify-content: center; padding: 5px 8px; font-size: 0.76rem;">
+                                ✕ Reject (X)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="field-group" id="group-orig-class" style="display: none;">
+                        <label>Original Source Class & Provenance</label>
+                        <div id="inspect-orig-class" style="font-size: 0.72rem; color: #a7f3d0; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); padding: 5px 8px; border-radius: 4px; font-weight: 500;">-</div>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="inspect-class">Vehicle Class</label>
+                        <select id="inspect-class" class="field-select"></select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="inspect-subtype">Subtype (Detailed Taxonomy)</label>
+                        <select id="inspect-subtype" class="field-select" style="margin-bottom: 4px;"></select>
+                        <input type="text" id="inspect-subtype-custom" class="field-input" placeholder="Or enter custom subtype...">
+                    </div>
+
+                    <div class="field-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="inspect-ambiguous">
+                            <span>Mark Ambiguous (e.g. distant/motion blur)</span>
+                        </label>
+                    </div>
+
+                    <div class="field-group" id="group-ambiguity-reason" style="display: none;">
+                        <label for="inspect-ambiguity-reason">Ambiguity Reason</label>
+                        <input type="text" id="inspect-ambiguity-reason" class="field-input" placeholder="e.g. severe night glare, heavy occlusion">
+                    </div>
+
+                    <div class="field-group">
+                        <label>Normalized Coordinates [xc, yc, w, h]</label>
+                        <div id="inspect-coords" style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary); background: var(--bg-card); padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border-color);">-</div>
+                    </div>
+
+                    <button id="btn-delete-box" class="btn-delete-box">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete Box (Del)
+                    </button>
+                </div>
+
+                <div id="inspector-empty" class="inspector-empty">
+                    No box selected.<br>Click a box to edit its properties, or click & drag on the canvas to draw a new box.
+                </div>
+            </section>
+
+            <!-- Frame Notes & Ambiguity -->
+            <section class="sidebar-section">
+                <div class="section-title">
+                    <span>Frame Review Notes</span>
+                </div>
+                <div class="field-group">
+                    <label class="checkbox-label" style="margin-bottom: 8px;">
+                        <input type="checkbox" id="frame-ambiguous">
+                        <span>Mark entire frame ambiguous</span>
+                    </label>
+                    <textarea id="frame-notes" class="field-textarea" placeholder="Reviewer observations (e.g. heavy rain, horizon occluded)..."></textarea>
+                </div>
+            </section>
+
+            <!-- Box List in Frame -->
+            <section class="sidebar-section" style="flex: 1; border-bottom: none;">
+                <div class="section-title">
+                    <span>Boxes in Frame</span>
+                    <span id="box-list-count" style="font-size: 0.72rem; color: var(--text-muted);">0</span>
+                </div>
+                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                    <button type="button" id="btn-accept-all-additions" class="btn-action" style="flex: 1; background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #6ee7b7; font-size: 0.70rem; padding: 4px 6px; justify-content: center;" title="Accept all candidate vehicle additions in this frame">
+                        ✓ Accept All +NEW
+                    </button>
+                    <button type="button" id="btn-reject-all-pending" class="btn-action" style="flex: 1; background: rgba(100, 116, 139, 0.15); border-color: #64748b; color: #cbd5e1; font-size: 0.70rem; padding: 4px 6px; justify-content: center;" title="Reject all remaining pending proposals in this frame">
+                        ✕ Reject Rest
+                    </button>
+                </div>
+                <div class="box-list" id="box-list"></div>
+            </section>
+        </aside>
+    </div>
+
+    <!-- Modals -->
+    <!-- Unsaved Changes Modal -->
+    <dialog id="unsaved-modal" class="modal">
+        <h2 class="modal-title">Unsaved Changes</h2>
+        <p class="modal-body">You have modified annotations on this frame that have not been saved yet. Navigating away will discard your unsaved work.</p>
+        <div class="modal-actions">
+            <button id="modal-cancel" class="nav-btn">Cancel</button>
+            <button id="modal-discard" class="btn-action" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fee2e2;">Discard Changes</button>
+            <button id="modal-save-draft" class="btn-action btn-save-draft">Save Draft & Proceed</button>
+        </div>
+    </dialog>
+
+    <!-- Stale Save Conflict Modal -->
+    <dialog id="conflict-modal" class="modal">
+        <h2 class="modal-title" style="color: #f59e0b;">External Modification Conflict</h2>
+        <p class="modal-body">The annotations file (<code>annotations.json</code>) was modified on disk since this frame was loaded. To prevent silently overwriting external work, your save was rejected.<br><br>Please reload the frame to review the latest changes.</p>
+        <div class="modal-actions">
+            <button id="conflict-reload" class="btn-action btn-mark-verified">Reload Frame</button>
+        </div>
+    </dialog>
+
+    <!-- Shortcuts & Help Modal -->
+    <dialog id="help-modal" class="modal">
+        <h2 class="modal-title">Keyboard Shortcuts & Controls</h2>
+        <div class="modal-body" style="font-size: 0.82rem; line-height: 1.7;">
+            <p><strong>1 - 5</strong>: Select Class / Change Selected Box Class</p>
+            <p><strong>A</strong>: Accept Selected Teacher Proposal</p>
+            <p><strong>X</strong>: Reject Selected Teacher Proposal</p>
+            <p><strong>Delete / Backspace</strong>: Delete Selected Box (or Reject Proposal)</p>
+            <p><strong>Ctrl + Z</strong>: Undo Last Change</p>
+            <p><strong>Ctrl + S</strong>: Save Draft</p>
+            <p><strong>Ctrl + Enter</strong>: Mark Frame Verified</p>
+            <p><strong>[ / ]</strong>: Previous / Next Frame</p>
+            <p><strong>F</strong>: Fit Image to Screen</p>
+            <p><strong>Esc</strong>: Deselect Box / Cancel Operation</p>
+            <p><strong>Mouse Wheel</strong>: Zoom centered on cursor</p>
+            <p><strong>Space + Drag</strong> (or Middle/Right Drag): Pan Canvas</p>
+            <p><strong>Left Drag (Empty Space)</strong>: Draw New Bounding Box</p>
+            <p><strong>Left Drag (Handles)</strong>: Resize Selected Box (8 Handles)</p>
+        </div>
+        <div class="modal-actions">
+            <button id="help-close" class="nav-btn">Close</button>
+        </div>
+    </dialog>
+
+    <!-- Toast Notifications Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Application Script -->
+    <script>
+        // Taxonomy Definition
+        const TAXONOMY_CLASSES = [
+            { id: 0, name: "car", label: "Car", color: "#38bdf8", key: "1" },
+            { id: 1, name: "motorcycle", label: "Motorcycle", color: "#fb923c", key: "2" },
+            { id: 2, name: "bus", label: "Bus", color: "#c084fc", key: "3" },
+            { id: 3, name: "truck", label: "Truck", color: "#facc15", key: "4" },
+            { id: 4, name: "three_wheeler", label: "Three Wheeler", color: "#4ade80", key: "5" }
+        ];
+
+        const SUBTYPE_PRESETS = {
+            0: ["pickup", "pickup_based_songthaew", "passenger_van", "sedan", "hatchback", "suv_ppv", "taxi", "high_cage_pickup", "light_vehicle_provisional", "other_car"],
+            1: ["motorcycle_commuter", "sport_bike", "delivery_bike_with_box", "motorcycle_provisional", "other_motorcycle"],
+            2: ["bmta_city_bus", "thai_smile_bus", "tour_coach", "double_decker", "bus_provisional", "other_bus"],
+            3: ["medium_truck_6w", "heavy_truck_10w", "articulated_trailer_18w", "truck_based_songthaew", "construction_truck", "truck_provisional", "other_truck"],
+            4: ["tuktuk", "saleng", "three_wheeler_provisional", "other_three_wheeler"]
+        };
+
+        // Application State
+        const state = {
+            frames: [],              // All frame summaries
+            filteredFrames: [],      // Frames matching active filter
+            currentFilter: "all",    // all | unreviewed | draft | verified | unannotated
+            currentFrameIndex: 0,    // Index in state.filteredFrames
+            currentFrameId: null,
+            currentRecord: null,     // Detailed record from /api/frame/<id>
+            baseEtag: null,          // ETag for stale save detection
+            
+            // Frame editable data
+            boxes: [],               // Working list of box objects
+            selectedBoxIndex: null,  // Index in state.boxes
+            activeClassId: 0,        // Default drawing class
+            isDirty: false,
+            undoStack: [],           // Undo history
+
+            // Teacher Proposals visibility
+            showProposals: true,
+            showRejectedProposals: false,
+
+            // Canvas Transform
+            zoom: 1.0,
+            panX: 0,
+            panY: 0,
+            imgElement: new Image(),
+            imgLoaded: false,
+
+            // Mouse Interaction
+            mode: "IDLE",            // IDLE | DRAWING | MOVING | RESIZING | PANNING
+            dragHandle: null,        // nw | n | ne | e | se | s | sw | w
+            dragStartX: 0,
+            dragStartY: 0,
+            mouseImgX: 0,
+            mouseImgY: 0,
+            spacePressed: false
+        };
+
+        // DOM Elements
+        const canvas = document.getElementById("viewport");
+        const ctx = canvas.getContext("2d");
+        const canvasContainer = document.getElementById("canvas-container");
+        const dirtyBadge = document.getElementById("dirty-badge");
+        const frameSelect = document.getElementById("frame-select");
+        const btnPrev = document.getElementById("btn-prev");
+        const btnNext = document.getElementById("btn-next");
+        const btnSaveDraft = document.getElementById("btn-save-draft");
+        const btnMarkVerified = document.getElementById("btn-mark-verified");
+        const btnMarkUncertain = document.getElementById("btn-mark-uncertain");
+        const btnMarkRejected = document.getElementById("btn-mark-rejected");
+        const zoomLevelDisplay = document.getElementById("zoom-level");
+        const inspectorContent = document.getElementById("inspector-content");
+        const inspectorEmpty = document.getElementById("inspector-empty");
+        const boxList = document.getElementById("box-list");
+        const classPalette = document.getElementById("class-palette");
+
+        // Resize Canvas to Container
+        function resizeCanvas() {
+            const rect = canvasContainer.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            renderCanvas();
+        }
+
+        window.addEventListener("resize", resizeCanvas);
+
+        // Coordinate Conversions
+        function imageToCanvasCoords(ix, iy) {
+            return {
+                x: state.panX + ix * state.zoom,
+                y: state.panY + iy * state.zoom
+            };
+        }
+
+        function canvasToImageCoords(cx, cy) {
+            if (!state.imgLoaded) return { x: 0, y: 0 };
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+            let ix = (cx - state.panX) / state.zoom;
+            let iy = (cy - state.panY) / state.zoom;
+            ix = Math.max(0, Math.min(imgW, ix));
+            iy = Math.max(0, Math.min(imgH, iy));
+            return { x: ix, y: iy };
+        }
+
+        function bboxNormToImageRect(bbox, imgW, imgH) {
+            const [xc, yc, bw, bh] = bbox;
+            const x1 = (xc - bw / 2) * imgW;
+            const y1 = (yc - bh / 2) * imgH;
+            const x2 = (xc + bw / 2) * imgW;
+            const y2 = (yc + bh / 2) * imgH;
+            return { x1, y1, x2, y2, w: x2 - x1, h: y2 - y1 };
+        }
+
+        function imageRectToBboxNorm(x1, y1, x2, y2, imgW, imgH) {
+            const minX = Math.max(0, Math.min(imgW, Math.min(x1, x2)));
+            const maxX = Math.max(0, Math.min(imgW, Math.max(x1, x2)));
+            const minY = Math.max(0, Math.min(imgH, Math.min(y1, y2)));
+            const maxY = Math.max(0, Math.min(imgH, Math.max(y1, y2)));
+            const xc = (minX + maxX) / (2 * imgW);
+            const yc = (minY + maxY) / (2 * imgH);
+            const bw = (maxX - minX) / imgW;
+            const bh = (maxY - minY) / imgH;
+            return [
+                parseFloat(xc.toFixed(6)),
+                parseFloat(yc.toFixed(6)),
+                parseFloat(bw.toFixed(6)),
+                parseFloat(bh.toFixed(6))
+            ];
+        }
+
+        // Unique Instance ID Generator
+        function generateUniqueInstanceId(existingBoxes, frameId) {
+            let maxIdx = -1;
+            const regex = new RegExp(`^${frameId}_inst_(\\d+)$`);
+            for (const b of existingBoxes) {
+                if (b.instance_id) {
+                    const match = b.instance_id.match(regex);
+                    if (match) {
+                        const val = parseInt(match[1], 10);
+                        if (val > maxIdx) maxIdx = val;
+                    }
+                }
+            }
+            const nextIdx = maxIdx + 1;
+            const padded = String(nextIdx).padStart(3, "0");
+            return `${frameId}_inst_${padded}`;
+        }
+
+        // Undo History
+        function pushUndo() {
+            if (state.undoStack.length > 40) {
+                state.undoStack.shift();
+            }
+            state.undoStack.push(JSON.parse(JSON.stringify(state.boxes)));
+            setDirty(true);
+        }
+
+        function undo() {
+            if (state.undoStack.length === 0) {
+                showToast("Nothing to undo", "info");
+                return;
+            }
+            state.boxes = state.undoStack.pop();
+            if (state.selectedBoxIndex !== null && state.selectedBoxIndex >= state.boxes.length) {
+                state.selectedBoxIndex = state.boxes.length > 0 ? 0 : null;
+            }
+            setDirty(true);
+            updateInspector();
+            updateBoxList();
+            updatePaletteCounts();
+            renderCanvas();
+            showToast("Undo applied", "info");
+        }
+
+        function setDirty(dirty) {
+            state.isDirty = dirty;
+            if (dirty) {
+                dirtyBadge.classList.add("visible");
+                // If current review status is verified, editing resets to draft!
+                const statusBadge = document.getElementById("frame-status-badge");
+                if (statusBadge && statusBadge.textContent === "VERIFIED") {
+                    statusBadge.textContent = "DRAFT (MODIFIED)";
+                    statusBadge.className = "status-badge status-draft-badge";
+                }
+            } else {
+                dirtyBadge.classList.remove("visible");
+            }
+        }
+
+        // Toast Messages
+        function showToast(message, type = "info") {
+            const container = document.getElementById("toast-container");
+            const toast = document.createElement("div");
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = "0";
+                toast.style.transition = "opacity 0.3s ease";
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Fit Image to Canvas
+        function fitToScreen() {
+            if (!state.imgLoaded) return;
+            const rect = canvasContainer.getBoundingClientRect();
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+            const scaleX = rect.width / imgW;
+            const scaleY = rect.height / imgH;
+            const fitScale = Math.min(scaleX, scaleY) * 0.94;
+            state.zoom = fitScale;
+            state.panX = (rect.width - imgW * fitScale) / 2;
+            state.panY = (rect.height - imgH * fitScale) / 2;
+            updateZoomDisplay();
+            renderCanvas();
+        }
+
+        function resetZoom() {
+            if (!state.imgLoaded) return;
+            const rect = canvasContainer.getBoundingClientRect();
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+            state.zoom = 1.0;
+            state.panX = (rect.width - imgW) / 2;
+            state.panY = (rect.height - imgH) / 2;
+            updateZoomDisplay();
+            renderCanvas();
+        }
+
+        function updateZoomDisplay() {
+            zoomLevelDisplay.textContent = `${Math.round(state.zoom * 100)}%`;
+        }
+
+        // Canvas Rendering Loop
+        function renderCanvas() {
+            const rect = canvasContainer.getBoundingClientRect();
+            ctx.clearRect(0, 0, rect.width, rect.height);
+
+            if (!state.imgLoaded) {
+                ctx.fillStyle = "#64748b";
+                ctx.font = "14px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("Loading clean frame image...", rect.width / 2, rect.height / 2);
+                return;
+            }
+
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+
+            // Draw Clean Image
+            ctx.save();
+            ctx.drawImage(
+                state.imgElement,
+                state.panX,
+                state.panY,
+                imgW * state.zoom,
+                imgH * state.zoom
+            );
+
+            // Draw Image Boundary Border
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(state.panX, state.panY, imgW * state.zoom, imgH * state.zoom);
+
+            // Draw All Bounding Boxes
+            state.boxes.forEach((box, index) => {
+                if (box.is_proposal) {
+                    if (!state.showProposals) return;
+                    if (box.proposal_status === "rejected" && !state.showRejectedProposals) return;
+                }
+
+                const isSelected = (index === state.selectedBoxIndex);
+                const rectImg = bboxNormToImageRect(box.bbox_norm, imgW, imgH);
+                const c1 = imageToCanvasCoords(rectImg.x1, rectImg.y1);
+                const c2 = imageToCanvasCoords(rectImg.x2, rectImg.y2);
+                const bw = c2.x - c1.x;
+                const bh = c2.y - c1.y;
+
+                const classDef = TAXONOMY_CLASSES.find(c => c.id === box.class_id) || TAXONOMY_CLASSES[0];
+                let boxColor = classDef.color;
+
+                const isProp = !!box.is_proposal;
+                const propStatus = box.proposal_status || "none";
+                const propCat = box.proposal_category || "";
+
+                if (isProp && propStatus === "pending") {
+                    if (propCat === "conflict") {
+                        boxColor = "#ef4444"; // Red for class conflict
+                    } else if (propCat === "candidate_addition") {
+                        boxColor = "#10b981"; // Emerald green for candidate addition
+                    } else {
+                        boxColor = "#f59e0b"; // Amber
+                    }
+                } else if (isProp && propStatus === "rejected") {
+                    boxColor = "#64748b"; // Muted slate
+                } else if (isProp && propStatus === "accepted") {
+                    boxColor = "#22c55e"; // Green for accepted
+                }
+
+                // Box Fill
+                if (isProp && propStatus === "rejected") {
+                    ctx.fillStyle = "rgba(100, 116, 139, 0.08)";
+                } else if (isSelected) {
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+                } else if (isProp) {
+                    ctx.fillStyle = (propCat === "conflict") ? "rgba(239, 68, 68, 0.08)" : "rgba(16, 185, 129, 0.08)";
+                } else {
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+                }
+                ctx.fillRect(c1.x, c1.y, bw, bh);
+
+                // Box Outline
+                ctx.strokeStyle = boxColor;
+                ctx.lineWidth = isSelected ? 3 : 2;
+                if (isProp && propStatus === "pending") {
+                    ctx.setLineDash([6, 3]);
+                } else if (isProp && propStatus === "rejected") {
+                    ctx.setLineDash([2, 4]);
+                } else if (isSelected) {
+                    ctx.setLineDash([4, 2]);
+                } else {
+                    ctx.setLineDash([]);
+                }
+                ctx.strokeRect(c1.x, c1.y, bw, bh);
+                ctx.setLineDash([]);
+
+                // Label Badge above box
+                let badgePrefix = "";
+                if (isProp) {
+                    if (propStatus === "accepted") badgePrefix = "✓ ";
+                    else if (propStatus === "rejected") badgePrefix = "✕ ";
+                    else if (propCat === "conflict") badgePrefix = "[CONFLICT] ";
+                    else if (propCat === "candidate_addition") badgePrefix = "[+NEW] ";
+                    else badgePrefix = "[PROP] ";
+                }
+                const labelText = `${badgePrefix}${box.class_name}${box.subtype ? ` • ${box.subtype}` : ""}${box.is_ambiguous ? " ⚠" : ""}`;
+                ctx.font = "bold 11px sans-serif";
+                const textWidth = ctx.measureText(labelText).width;
+                const badgeH = 18;
+                const badgeY = (c1.y - badgeH >= 0) ? (c1.y - badgeH) : c1.y;
+
+                ctx.fillStyle = boxColor;
+                ctx.fillRect(c1.x, badgeY, textWidth + 10, badgeH);
+
+                ctx.fillStyle = "#0f172a";
+                ctx.textAlign = "left";
+                ctx.textBaseline = "middle";
+                ctx.fillText(labelText, c1.x + 5, badgeY + badgeH / 2);
+
+                // 8 Handles for Selected Box
+                if (isSelected) {
+                    const handles = getBoxHandlePositions(c1.x, c1.y, bw, bh);
+                    ctx.fillStyle = "#ffffff";
+                    ctx.strokeStyle = "#0f172a";
+                    ctx.lineWidth = 1.5;
+                    const hSize = 7;
+
+                    Object.values(handles).forEach(pt => {
+                        ctx.fillRect(pt.x - hSize / 2, pt.y - hSize / 2, hSize, hSize);
+                        ctx.strokeRect(pt.x - hSize / 2, pt.y - hSize / 2, hSize, hSize);
+                    });
+                }
+            });
+
+            // Draw Box currently being drawn
+            if (state.mode === "DRAWING") {
+                const c1 = imageToCanvasCoords(state.dragStartX, state.dragStartY);
+                const c2 = imageToCanvasCoords(state.mouseImgX, state.mouseImgY);
+                const dw = c2.x - c1.x;
+                const dh = c2.y - c1.y;
+
+                const curClass = TAXONOMY_CLASSES.find(c => c.id === state.activeClassId) || TAXONOMY_CLASSES[0];
+                ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+                ctx.fillRect(c1.x, c1.y, dw, dh);
+                ctx.strokeStyle = curClass.color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 3]);
+                ctx.strokeRect(c1.x, c1.y, dw, dh);
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore();
+        }
+
+        // Handle Coordinates Calculation
+        function getBoxHandlePositions(cx, cy, w, h) {
+            const midX = cx + w / 2;
+            const midY = cy + h / 2;
+            return {
+                nw: { x: cx, y: cy },
+                n:  { x: midX, y: cy },
+                ne: { x: cx + w, y: cy },
+                e:  { x: cx + w, y: midY },
+                se: { x: cx + w, y: cy + h },
+                s:  { x: midX, y: cy + h },
+                sw: { x: cx, y: cy + h },
+                w:  { x: cx, y: midY }
+            };
+        }
+
+        function findHandleAt(canvasX, canvasY) {
+            if (state.selectedBoxIndex === null) return null;
+            const box = state.boxes[state.selectedBoxIndex];
+            if (!box || !state.imgLoaded) return null;
+
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+            const r = bboxNormToImageRect(box.bbox_norm, imgW, imgH);
+            const c1 = imageToCanvasCoords(r.x1, r.y1);
+            const c2 = imageToCanvasCoords(r.x2, r.y2);
+            const handles = getBoxHandlePositions(c1.x, c1.y, c2.x - c1.x, c2.y - c1.y);
+
+            const hitRadius = 8;
+            for (const [key, pt] of Object.entries(handles)) {
+                if (Math.hypot(canvasX - pt.x, canvasY - pt.y) <= hitRadius) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        function findBoxAt(imgX, imgY) {
+            if (!state.imgLoaded) return -1;
+            const imgW = state.imgElement.naturalWidth;
+            const imgH = state.imgElement.naturalHeight;
+
+            // Search in reverse order so topmost box is selected first
+            for (let i = state.boxes.length - 1; i >= 0; i--) {
+                const r = bboxNormToImageRect(state.boxes[i].bbox_norm, imgW, imgH);
+                if (imgX >= r.x1 && imgX <= r.x2 && imgY >= r.y1 && imgY <= r.y2) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Mouse & Canvas Events
+        canvas.addEventListener("mousedown", (e) => {
+            if (!state.imgLoaded) return;
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+            const imgPt = canvasToImageCoords(canvasX, canvasY);
+
+            // Middle Click or Space + Left Click = Pan
+            if (e.button === 1 || e.button === 2 || state.spacePressed) {
+                state.mode = "PANNING";
+                state.dragStartX = e.clientX - state.panX;
+                state.dragStartY = e.clientY - state.panY;
+                canvas.style.cursor = "grabbing";
+                e.preventDefault();
+                return;
+            }
+
+            if (e.button === 0) {
+                // Check if clicking a handle of selected box
+                const handle = findHandleAt(canvasX, canvasY);
+                if (handle) {
+                    pushUndo();
+                    state.mode = "RESIZING";
+                    state.dragHandle = handle;
+                    state.dragStartX = imgPt.x;
+                    state.dragStartY = imgPt.y;
+                    return;
+                }
+
+                // Check if clicking inside an existing box
+                const hitIdx = findBoxAt(imgPt.x, imgPt.y);
+                if (hitIdx !== -1) {
+                    state.selectedBoxIndex = hitIdx;
+                    updateInspector();
+                    updateBoxList();
+                    pushUndo();
+                    state.mode = "MOVING";
+                    state.dragStartX = imgPt.x;
+                    state.dragStartY = imgPt.y;
+                    renderCanvas();
+                    return;
+                }
+
+                // Clicked empty area: Deselect and start drawing new box
+                state.selectedBoxIndex = null;
+                updateInspector();
+                updateBoxList();
+                state.mode = "DRAWING";
+                state.dragStartX = imgPt.x;
+                state.dragStartY = imgPt.y;
+                state.mouseImgX = imgPt.x;
+                state.mouseImgY = imgPt.y;
+                renderCanvas();
+            }
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+            const imgPt = canvasToImageCoords(canvasX, canvasY);
+            state.mouseImgX = imgPt.x;
+            state.mouseImgY = imgPt.y;
+
+            if (state.mode === "PANNING") {
+                state.panX = e.clientX - state.dragStartX;
+                state.panY = e.clientY - state.dragStartY;
+                renderCanvas();
+                return;
+            }
+
+            if (state.mode === "DRAWING") {
+                renderCanvas();
+                return;
+            }
+
+            if (state.mode === "MOVING" && state.selectedBoxIndex !== null) {
+                const box = state.boxes[state.selectedBoxIndex];
+                const imgW = state.imgElement.naturalWidth;
+                const imgH = state.imgElement.naturalHeight;
+                const r = bboxNormToImageRect(box.bbox_norm, imgW, imgH);
+
+                const dx = imgPt.x - state.dragStartX;
+                const dy = imgPt.y - state.dragStartY;
+
+                let nx1 = r.x1 + dx;
+                let nx2 = r.x2 + dx;
+                let ny1 = r.y1 + dy;
+                let ny2 = r.y2 + dy;
+
+                // Clamp to image bounds
+                if (nx1 < 0) { nx2 -= nx1; nx1 = 0; }
+                if (ny1 < 0) { ny2 -= ny1; ny1 = 0; }
+                if (nx2 > imgW) { nx1 -= (nx2 - imgW); nx2 = imgW; }
+                if (ny2 > imgH) { ny1 -= (ny2 - imgH); ny2 = imgH; }
+
+                box.bbox_norm = imageRectToBboxNorm(nx1, ny1, nx2, ny2, imgW, imgH);
+                state.dragStartX = imgPt.x;
+                state.dragStartY = imgPt.y;
+
+                setDirty(true);
+                updateInspector();
+                renderCanvas();
+                return;
+            }
+
+            if (state.mode === "RESIZING" && state.selectedBoxIndex !== null) {
+                const box = state.boxes[state.selectedBoxIndex];
+                const imgW = state.imgElement.naturalWidth;
+                const imgH = state.imgElement.naturalHeight;
+                const r = bboxNormToImageRect(box.bbox_norm, imgW, imgH);
+
+                let { x1, y1, x2, y2 } = r;
+                const h = state.dragHandle;
+
+                if (h.includes("w")) x1 = imgPt.x;
+                if (h.includes("e")) x2 = imgPt.x;
+                if (h.includes("n")) y1 = imgPt.y;
+                if (h.includes("s")) y2 = imgPt.y;
+
+                box.bbox_norm = imageRectToBboxNorm(x1, y1, x2, y2, imgW, imgH);
+                setDirty(true);
+                updateInspector();
+                renderCanvas();
+                return;
+            }
+
+            // Hover Cursor Feedback
+            if (state.spacePressed) {
+                canvas.style.cursor = "grab";
+                return;
+            }
+
+            const handle = findHandleAt(canvasX, canvasY);
+            if (handle) {
+                const cursors = {
+                    nw: "nwse-resize", se: "nwse-resize",
+                    ne: "nesw-resize", sw: "nesw-resize",
+                    n: "ns-resize", s: "ns-resize",
+                    e: "ew-resize", w: "ew-resize"
+                };
+                canvas.style.cursor = cursors[handle] || "pointer";
+                return;
+            }
+
+            const hitIdx = findBoxAt(imgPt.x, imgPt.y);
+            if (hitIdx !== -1) {
+                canvas.style.cursor = (hitIdx === state.selectedBoxIndex) ? "move" : "pointer";
+                return;
+            }
+
+            canvas.style.cursor = "crosshair";
+        });
+
+        window.addEventListener("mouseup", (e) => {
+            if (state.mode === "PANNING") {
+                state.mode = "IDLE";
+                canvas.style.cursor = state.spacePressed ? "grab" : "default";
+                return;
+            }
+
+            if (state.mode === "DRAWING") {
+                const imgW = state.imgElement.naturalWidth;
+                const imgH = state.imgElement.naturalHeight;
+                const x1 = Math.min(state.dragStartX, state.mouseImgX);
+                const x2 = Math.max(state.dragStartX, state.mouseImgX);
+                const y1 = Math.min(state.dragStartY, state.mouseImgY);
+                const y2 = Math.max(state.dragStartY, state.mouseImgY);
+
+                // Require at least 4 pixels in both dimensions
+                if ((x2 - x1) >= 4 && (y2 - y1) >= 4) {
+                    pushUndo();
+                    const newId = generateUniqueInstanceId(state.boxes, state.currentFrameId);
+                    const classDef = TAXONOMY_CLASSES.find(c => c.id === state.activeClassId) || TAXONOMY_CLASSES[0];
+                    const defaultSubtype = (SUBTYPE_PRESETS[classDef.id] && SUBTYPE_PRESETS[classDef.id][0]) || "provisional";
+
+                    const newBox = {
+                        instance_id: newId,
+                        class_id: classDef.id,
+                        class_name: classDef.name,
+                        subtype: defaultSubtype,
+                        is_ambiguous: false,
+                        ambiguity_reason: "",
+                        bbox_norm: imageRectToBboxNorm(x1, y1, x2, y2, imgW, imgH),
+                        proposal_source: "manual_annotation"
+                    };
+
+                    state.boxes.push(newBox);
+                    state.selectedBoxIndex = state.boxes.length - 1;
+                    setDirty(true);
+                    updatePaletteCounts();
+                    updateInspector();
+                    updateBoxList();
+                }
+                state.mode = "IDLE";
+                renderCanvas();
+                return;
+            }
+
+            if (state.mode === "MOVING" || state.mode === "RESIZING") {
+                if (state.selectedBoxIndex !== null) {
+                    const selBox = state.boxes[state.selectedBoxIndex];
+                    if (selBox && selBox.is_proposal && selBox.proposal_status === "pending") {
+                        selBox.proposal_status = "accepted";
+                        selBox.proposal_source = (selBox.proposal_source || "") + " (human_adjusted)";
+                        updateInspector();
+                        updateBoxList();
+                    }
+                }
+                state.mode = "IDLE";
+                state.dragHandle = null;
+                renderCanvas();
+            }
+        });
+
+        // Wheel Zoom centered at cursor
+        canvas.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            if (!state.imgLoaded) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const factor = e.deltaY < 0 ? 1.15 : 0.85;
+            const newZoom = Math.max(0.08, Math.min(25.0, state.zoom * factor));
+
+            state.panX = mouseX - (mouseX - state.panX) * (newZoom / state.zoom);
+            state.panY = mouseY - (mouseY - state.panY) * (newZoom / state.zoom);
+            state.zoom = newZoom;
+
+            updateZoomDisplay();
+            renderCanvas();
+        }, { passive: false });
+
+        canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+        // Keyboard Shortcuts
+        window.addEventListener("keydown", (e) => {
+            // Ignore when typing inside input or textarea
+            if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+                return;
+            }
+
+            if (e.key === " ") {
+                state.spacePressed = true;
+                canvas.style.cursor = "grab";
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key >= "1" && e.key <= "5") {
+                const cid = parseInt(e.key, 10) - 1;
+                selectClass(cid);
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "Delete" || e.key === "Backspace") {
+                deleteSelectedBox();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key.toLowerCase() === "a" && !e.ctrlKey && !e.metaKey) {
+                acceptSelectedProposal();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key.toLowerCase() === "x" && !e.ctrlKey && !e.metaKey) {
+                rejectSelectedProposal();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey)) {
+                undo();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key.toLowerCase() === "s" && (e.ctrlKey || e.metaKey)) {
+                saveFrame("save_draft");
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                saveFrame("mark_verified");
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "[") {
+                navigateRelative(-1);
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "]") {
+                navigateRelative(1);
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key.toLowerCase() === "f") {
+                fitToScreen();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "Escape") {
+                state.selectedBoxIndex = null;
+                updateInspector();
+                updateBoxList();
+                renderCanvas();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.key === "?") {
+                document.getElementById("help-modal").showModal();
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if (e.key === " ") {
+                state.spacePressed = false;
+                canvas.style.cursor = "default";
+            }
+        });
+
+        // UI Viewport Toolbar Buttons
+        document.getElementById("tool-zoom-in").addEventListener("click", () => {
+            const rect = canvasContainer.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const newZoom = Math.min(25.0, state.zoom * 1.25);
+            state.panX = cx - (cx - state.panX) * (newZoom / state.zoom);
+            state.panY = cy - (cy - state.panY) * (newZoom / state.zoom);
+            state.zoom = newZoom;
+            updateZoomDisplay();
+            renderCanvas();
+        });
+
+        document.getElementById("tool-zoom-out").addEventListener("click", () => {
+            const rect = canvasContainer.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const newZoom = Math.max(0.08, state.zoom * 0.8);
+            state.panX = cx - (cx - state.panX) * (newZoom / state.zoom);
+            state.panY = cy - (cy - state.panY) * (newZoom / state.zoom);
+            state.zoom = newZoom;
+            updateZoomDisplay();
+            renderCanvas();
+        });
+
+        document.getElementById("tool-fit").addEventListener("click", fitToScreen);
+        document.getElementById("tool-reset").addEventListener("click", resetZoom);
+        document.getElementById("tool-undo").addEventListener("click", undo);
+        document.getElementById("btn-help").addEventListener("click", () => {
+            document.getElementById("help-modal").showModal();
+        });
+        document.getElementById("help-close").addEventListener("click", () => {
+            document.getElementById("help-modal").close();
+        });
+
+        // Class Selection Logic
+        function selectClass(cid) {
+            state.activeClassId = cid;
+            updatePaletteActive();
+
+            if (state.selectedBoxIndex !== null) {
+                const box = state.boxes[state.selectedBoxIndex];
+                if (box && box.class_id !== cid) {
+                    pushUndo();
+                    const classDef = TAXONOMY_CLASSES.find(c => c.id === cid);
+                    box.class_id = cid;
+                    box.class_name = classDef.name;
+                    box.subtype = (SUBTYPE_PRESETS[cid] && SUBTYPE_PRESETS[cid][0]) || "provisional";
+                    if (box.is_proposal && box.proposal_status === "pending") {
+                        box.proposal_status = "accepted";
+                        box.proposal_source = (box.proposal_source || "") + " (human_reclassified)";
+                    }
+                    setDirty(true);
+                    updatePaletteCounts();
+                    updateInspector();
+                    updateBoxList();
+                    renderCanvas();
+                }
+            }
+        }
+
+        function buildClassPalette() {
+            classPalette.innerHTML = "";
+            TAXONOMY_CLASSES.forEach(c => {
+                const btn = document.createElement("button");
+                btn.className = `class-btn ${c.id === state.activeClassId ? "active" : ""}`;
+                btn.id = `palette-btn-${c.id}`;
+                btn.style.borderColor = (c.id === state.activeClassId) ? c.color : "";
+
+                btn.innerHTML = `
+                    <div class="class-btn-left">
+                        <span class="class-dot" style="background-color: ${c.color};"></span>
+                        <span style="font-weight: 500;">${c.label}</span>
+                        <span class="class-hotkey">${c.key}</span>
+                    </div>
+                    <span class="class-count" id="count-class-${c.id}">0</span>
+                `;
+
+                btn.addEventListener("click", () => selectClass(c.id));
+                classPalette.appendChild(btn);
+            });
+        }
+
+        function updatePaletteActive() {
+            TAXONOMY_CLASSES.forEach(c => {
+                const btn = document.getElementById(`palette-btn-${c.id}`);
+                if (btn) {
+                    if (c.id === state.activeClassId) {
+                        btn.classList.add("active");
+                        btn.style.borderColor = c.color;
+                    } else {
+                        btn.classList.remove("active");
+                        btn.style.borderColor = "";
+                    }
+                }
+            });
+        }
+
+        function updatePaletteCounts() {
+            const counts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+            state.boxes.forEach(b => {
+                if (counts[b.class_id] !== undefined) counts[b.class_id]++;
+            });
+            TAXONOMY_CLASSES.forEach(c => {
+                const el = document.getElementById(`count-class-${c.id}`);
+                if (el) el.textContent = counts[c.id];
+            });
+            document.getElementById("meta-box-count").textContent = state.boxes.length;
+            document.getElementById("box-list-count").textContent = state.boxes.length;
+        }
+
+        // Inspector Updates
+        function updateInspector() {
+            if (state.selectedBoxIndex === null || !state.boxes[state.selectedBoxIndex]) {
+                inspectorContent.style.display = "none";
+                inspectorEmpty.style.display = "block";
+                document.getElementById("selected-inst-id").textContent = "-";
+                return;
+            }
+
+            inspectorContent.style.display = "block";
+            inspectorEmpty.style.display = "none";
+
+            const box = state.boxes[state.selectedBoxIndex];
+            document.getElementById("selected-inst-id").textContent = box.instance_id;
+
+            // Proposal Review Controls
+            const propGroup = document.getElementById("group-teacher-proposal");
+            if (propGroup) {
+                if (box.is_proposal) {
+                    propGroup.style.display = "block";
+                    const pCat = box.proposal_category || "candidate_addition";
+                    const pStat = box.proposal_status || "pending";
+                    const pBadgeCat = document.getElementById("proposal-badge-cat");
+                    const pBadgeStat = document.getElementById("proposal-status-badge");
+                    const pProv = document.getElementById("proposal-provenance");
+                    const pConf = document.getElementById("proposal-conflict-info");
+
+                    if (pCat === "conflict") {
+                        pBadgeCat.textContent = "⚠ Class Conflict";
+                        pBadgeCat.style.background = "rgba(239, 68, 68, 0.2)";
+                        pBadgeCat.style.color = "#f87171";
+                    } else if (pCat === "candidate_addition") {
+                        pBadgeCat.textContent = "+ Candidate Addition";
+                        pBadgeCat.style.background = "rgba(16, 185, 129, 0.2)";
+                        pBadgeCat.style.color = "#34d399";
+                    } else {
+                        pBadgeCat.textContent = pCat;
+                        pBadgeCat.style.background = "rgba(245, 158, 11, 0.2)";
+                        pBadgeCat.style.color = "#fbbf24";
+                    }
+
+                    if (pStat === "accepted") {
+                        pBadgeStat.textContent = "Accepted ✓";
+                        pBadgeStat.style.background = "#065f46";
+                        pBadgeStat.style.color = "#a7f3d0";
+                    } else if (pStat === "rejected") {
+                        pBadgeStat.textContent = "Rejected ✕";
+                        pBadgeStat.style.background = "#374151";
+                        pBadgeStat.style.color = "#9ca3af";
+                    } else {
+                        pBadgeStat.textContent = "Pending Review";
+                        pBadgeStat.style.background = "#854d0e";
+                        pBadgeStat.style.color = "#fef08a";
+                    }
+
+                    const m = box.proposal_method || "yolo26x";
+                    const conf = (box.confidence !== undefined && box.confidence !== null) ? `${(box.confidence * 100).toFixed(1)}%` : "N/A";
+                    const hits = box.tile_hits ? ` (${box.tile_hits} tile hits)` : "";
+                    pProv.textContent = `Model: YOLO26x • Method: ${m}${hits} • Conf: ${conf}`;
+
+                    if (pCat === "conflict" && box.human_class_name) {
+                        pConf.style.display = "block";
+                        pConf.textContent = `⚠ Conflict: Teacher proposed '${box.class_name}', human labeled '${box.human_class_name}' (${box.conflicting_instance_id || ''}).`;
+                    } else {
+                        pConf.style.display = "none";
+                    }
+                } else {
+                    propGroup.style.display = "none";
+                }
+            }
+
+            // Original Source Class & Provenance
+            const origGroup = document.getElementById("group-orig-class");
+            const origDisplay = document.getElementById("inspect-orig-class");
+            if (origGroup && origDisplay) {
+                if (box.original_source_class_name || box.proposal_source) {
+                    origGroup.style.display = "block";
+                    const srcName = box.original_source_class_name || "unknown";
+                    const srcCid = (box.original_source_class_id !== undefined && box.original_source_class_id !== null) ? box.original_source_class_id : "-";
+                    const propSrc = box.proposal_source || "manual";
+                    origDisplay.textContent = `Original: ${srcName} (ID ${srcCid}) • Source: ${propSrc}`;
+                } else {
+                    origGroup.style.display = "none";
+                }
+            }
+
+            // Class Select
+            const clsSelect = document.getElementById("inspect-class");
+            clsSelect.innerHTML = "";
+            TAXONOMY_CLASSES.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.id;
+                opt.textContent = `${c.id} - ${c.label}`;
+                opt.selected = (c.id === box.class_id);
+                clsSelect.appendChild(opt);
+            });
+
+            // Subtype Select & Presets
+            const subSelect = document.getElementById("inspect-subtype");
+            subSelect.innerHTML = "";
+            const presets = SUBTYPE_PRESETS[box.class_id] || [];
+            presets.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p;
+                opt.textContent = p;
+                opt.selected = (p === box.subtype);
+                subSelect.appendChild(opt);
+            });
+
+            const customOpt = document.createElement("option");
+            customOpt.value = "_custom";
+            customOpt.textContent = "Custom Subtype...";
+            if (!presets.includes(box.subtype) && box.subtype) {
+                customOpt.selected = true;
+            }
+            subSelect.appendChild(customOpt);
+
+            const customInput = document.getElementById("inspect-subtype-custom");
+            customInput.value = box.subtype || "";
+            customInput.style.display = (subSelect.value === "_custom") ? "block" : "none";
+
+            // Ambiguity
+            const ambCheck = document.getElementById("inspect-ambiguous");
+            ambCheck.checked = !!box.is_ambiguous;
+            const ambReasonGroup = document.getElementById("group-ambiguity-reason");
+            ambReasonGroup.style.display = box.is_ambiguous ? "block" : "none";
+            document.getElementById("inspect-ambiguity-reason").value = box.ambiguity_reason || "";
+
+            // Coordinates
+            const [xc, yc, w, h] = box.bbox_norm;
+            document.getElementById("inspect-coords").textContent = `xc: ${xc.toFixed(4)} | yc: ${yc.toFixed(4)} | w: ${w.toFixed(4)} | h: ${h.toFixed(4)}`;
+        }
+
+        // Inspector Form Event Listeners
+        document.getElementById("inspect-class").addEventListener("change", (e) => {
+            if (state.selectedBoxIndex === null) return;
+            const newCid = parseInt(e.target.value, 10);
+            selectClass(newCid);
+        });
+
+        document.getElementById("inspect-subtype").addEventListener("change", (e) => {
+            if (state.selectedBoxIndex === null) return;
+            const val = e.target.value;
+            const customInput = document.getElementById("inspect-subtype-custom");
+            if (val === "_custom") {
+                customInput.style.display = "block";
+                customInput.focus();
+            } else {
+                customInput.style.display = "none";
+                pushUndo();
+                state.boxes[state.selectedBoxIndex].subtype = val;
+                customInput.value = val;
+                setDirty(true);
+                updateBoxList();
+                renderCanvas();
+            }
+        });
+
+        document.getElementById("inspect-subtype-custom").addEventListener("input", (e) => {
+            if (state.selectedBoxIndex === null) return;
+            pushUndo();
+            state.boxes[state.selectedBoxIndex].subtype = e.target.value.trim();
+            setDirty(true);
+            updateBoxList();
+            renderCanvas();
+        });
+
+        document.getElementById("inspect-ambiguous").addEventListener("change", (e) => {
+            if (state.selectedBoxIndex === null) return;
+            pushUndo();
+            const checked = e.target.checked;
+            state.boxes[state.selectedBoxIndex].is_ambiguous = checked;
+            document.getElementById("group-ambiguity-reason").style.display = checked ? "block" : "none";
+            setDirty(true);
+            updateBoxList();
+            renderCanvas();
+        });
+
+        document.getElementById("inspect-ambiguity-reason").addEventListener("input", (e) => {
+            if (state.selectedBoxIndex === null) return;
+            state.boxes[state.selectedBoxIndex].ambiguity_reason = e.target.value.trim();
+            setDirty(true);
+        });
+
+        function acceptSelectedProposal() {
+            if (state.selectedBoxIndex === null) return;
+            const box = state.boxes[state.selectedBoxIndex];
+            if (!box || !box.is_proposal) return;
+            pushUndo();
+            box.proposal_status = "accepted";
+            setDirty(true);
+            updateInspector();
+            updateBoxList();
+            renderCanvas();
+        }
+
+        function rejectSelectedProposal() {
+            if (state.selectedBoxIndex === null) return;
+            const box = state.boxes[state.selectedBoxIndex];
+            if (!box || !box.is_proposal) return;
+            pushUndo();
+            box.proposal_status = "rejected";
+            setDirty(true);
+            updateInspector();
+            updateBoxList();
+            renderCanvas();
+        }
+
+        function acceptAllAdditions() {
+            pushUndo();
+            let count = 0;
+            state.boxes.forEach(box => {
+                if (box.is_proposal && box.proposal_category === "candidate_addition" && box.proposal_status === "pending") {
+                    box.proposal_status = "accepted";
+                    count++;
+                }
+            });
+            if (count > 0) {
+                setDirty(true);
+                updateInspector();
+                updateBoxList();
+                renderCanvas();
+                showToast(`Accepted ${count} candidate vehicle proposals`, "success");
+            } else {
+                showToast("No pending candidate additions found", "info");
+            }
+        }
+
+        function rejectAllRemainingProposals() {
+            pushUndo();
+            let count = 0;
+            state.boxes.forEach(box => {
+                if (box.is_proposal && box.proposal_status === "pending") {
+                    box.proposal_status = "rejected";
+                    count++;
+                }
+            });
+            if (count > 0) {
+                setDirty(true);
+                updateInspector();
+                updateBoxList();
+                renderCanvas();
+                showToast(`Rejected ${count} remaining proposals`, "info");
+            } else {
+                showToast("No pending proposals found", "info");
+            }
+        }
+
+        document.getElementById("btn-accept-proposal").addEventListener("click", acceptSelectedProposal);
+        document.getElementById("btn-reject-proposal").addEventListener("click", rejectSelectedProposal);
+        document.getElementById("btn-accept-all-additions").addEventListener("click", acceptAllAdditions);
+        document.getElementById("btn-reject-all-pending").addEventListener("click", rejectAllRemainingProposals);
+
+        document.getElementById("toggle-proposals").addEventListener("change", (e) => {
+            state.showProposals = e.target.checked;
+            updateBoxList();
+            renderCanvas();
+        });
+
+        document.getElementById("toggle-rejected-proposals").addEventListener("change", (e) => {
+            state.showRejectedProposals = e.target.checked;
+            updateBoxList();
+            renderCanvas();
+        });
+
+        function deleteSelectedBox() {
+            if (state.selectedBoxIndex === null) return;
+            pushUndo();
+            const curBox = state.boxes[state.selectedBoxIndex];
+            if (curBox && curBox.is_proposal) {
+                curBox.proposal_status = "rejected";
+            } else {
+                state.boxes.splice(state.selectedBoxIndex, 1);
+                state.selectedBoxIndex = null;
+            }
+            setDirty(true);
+            updatePaletteCounts();
+            updateInspector();
+            updateBoxList();
+            renderCanvas();
+        }
+
+        document.getElementById("btn-delete-box").addEventListener("click", deleteSelectedBox);
+
+        // Box List in Sidebar
+        function updateBoxList() {
+            boxList.innerHTML = "";
+            state.boxes.forEach((box, idx) => {
+                if (box.is_proposal) {
+                    if (!state.showProposals) return;
+                    if (box.proposal_status === "rejected" && !state.showRejectedProposals) return;
+                }
+
+                const item = document.createElement("div");
+                item.className = `box-item ${idx === state.selectedBoxIndex ? "selected" : ""}`;
+                const classDef = TAXONOMY_CLASSES.find(c => c.id === box.class_id) || TAXONOMY_CLASSES[0];
+
+                let tagHtml = "";
+                if (box.is_proposal) {
+                    if (box.proposal_status === "accepted") {
+                        tagHtml = '<span style="color:#10b981; font-weight:700; font-size:0.68rem; margin-left:4px;">✓</span>';
+                    } else if (box.proposal_status === "rejected") {
+                        tagHtml = '<span style="color:#64748b; font-weight:700; font-size:0.68rem; margin-left:4px; text-decoration:line-through;">✕</span>';
+                    } else if (box.proposal_category === "conflict") {
+                        tagHtml = '<span style="background:rgba(239,68,68,0.2); color:#f87171; font-size:0.60rem; padding:1px 4px; border-radius:3px; font-weight:700; margin-left:4px;">CONFLICT</span>';
+                    } else {
+                        tagHtml = '<span style="background:rgba(16,185,129,0.2); color:#34d399; font-size:0.60rem; padding:1px 4px; border-radius:3px; font-weight:700; margin-left:4px;">+NEW</span>';
+                    }
+                }
+
+                item.innerHTML = `
+                    <div class="box-item-left">
+                        <span class="class-dot" style="background-color: ${classDef.color};"></span>
+                        <span style="font-weight: 600;">${classDef.name}</span>
+                        <span class="box-item-id">(${box.instance_id.split('_').slice(-2).join('_')})</span>
+                        ${tagHtml}
+                        ${box.is_ambiguous ? '<span style="color:#fbbf24; font-size: 0.7rem;">⚠</span>' : ''}
+                    </div>
+                    <button class="box-item-del" title="${box.is_proposal ? 'Reject / Delete Proposal' : 'Delete'}">✕</button>
+                `;
+
+                item.addEventListener("click", (e) => {
+                    if (e.target.classList.contains("box-item-del")) return;
+                    state.selectedBoxIndex = idx;
+                    updateInspector();
+                    updateBoxList();
+                    renderCanvas();
+                });
+
+                item.querySelector(".box-item-del").addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    pushUndo();
+                    if (box.is_proposal) {
+                        box.proposal_status = "rejected";
+                    } else {
+                        state.boxes.splice(idx, 1);
+                        if (state.selectedBoxIndex === idx) {
+                            state.selectedBoxIndex = null;
+                        } else if (state.selectedBoxIndex > idx) {
+                            state.selectedBoxIndex--;
+                        }
+                    }
+                    setDirty(true);
+                    updatePaletteCounts();
+                    updateInspector();
+                    updateBoxList();
+                    renderCanvas();
+                });
+
+                boxList.appendChild(item);
+            });
+        }
+
+        // Frame-level Notes & Ambiguity
+        document.getElementById("frame-ambiguous").addEventListener("change", (e) => {
+            setDirty(true);
+        });
+
+        document.getElementById("frame-notes").addEventListener("input", (e) => {
+            setDirty(true);
+        });
+
+        // Navigation & Confirmation
+        function navigateRelative(delta) {
+            const nextIdx = state.currentFrameIndex + delta;
+            if (nextIdx < 0 || nextIdx >= state.filteredFrames.length) return;
+            switchFrame(nextIdx);
+        }
+
+        function switchFrame(newIndex) {
+            if (newIndex === state.currentFrameIndex && state.currentRecord) return;
+            if (state.isDirty) {
+                const modal = document.getElementById("unsaved-modal");
+                modal.showModal();
+
+                document.getElementById("modal-cancel").onclick = () => modal.close();
+                document.getElementById("modal-discard").onclick = () => {
+                    modal.close();
+                    setDirty(false);
+                    loadFrameByIndex(newIndex);
+                };
+                document.getElementById("modal-save-draft").onclick = async () => {
+                    modal.close();
+                    const saved = await saveFrame("save_draft");
+                    if (saved) {
+                        loadFrameByIndex(newIndex);
+                    }
+                };
+                return;
+            }
+            loadFrameByIndex(newIndex);
+        }
+
+        btnPrev.addEventListener("click", () => navigateRelative(-1));
+        btnNext.addEventListener("click", () => navigateRelative(1));
+
+        frameSelect.addEventListener("change", (e) => {
+            const selectedFid = e.target.value;
+            const idx = state.filteredFrames.findIndex(f => f.frame_id === selectedFid);
+            if (idx !== -1) {
+                switchFrame(idx);
+            }
+        });
+
+        window.addEventListener("beforeunload", (e) => {
+            if (state.isDirty) {
+                e.preventDefault();
+                e.returnValue = "";
+            }
+        });
+
+        // Filtering
+        document.querySelectorAll(".filter-chip").forEach(chip => {
+            chip.addEventListener("click", () => {
+                document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+                chip.classList.add("active");
+                state.currentFilter = chip.dataset.filter;
+                applyFilter();
+            });
+        });
+
+        function applyFilter() {
+            if (state.currentFilter === "all") {
+                state.filteredFrames = [...state.frames];
+            } else if (state.currentFilter === "unannotated") {
+                state.filteredFrames = state.frames.filter(f => f.is_unannotated);
+            } else {
+                state.filteredFrames = state.frames.filter(f => f.review_status === state.currentFilter && !f.is_unannotated);
+            }
+
+            updateFrameSelectOptions();
+            if (state.filteredFrames.length > 0) {
+                const foundIdx = state.filteredFrames.findIndex(f => f.frame_id === state.currentFrameId);
+                const targetIdx = (foundIdx !== -1) ? foundIdx : 0;
+                switchFrame(targetIdx);
+            } else {
+                showToast("No frames match this filter", "info");
+            }
+        }
+
+        function updateFrameSelectOptions() {
+            frameSelect.innerHTML = "";
+            state.filteredFrames.forEach((f, idx) => {
+                const opt = document.createElement("option");
+                opt.value = f.frame_id;
+                let statusTag = f.is_unannotated ? "UNANNOTATED" : f.review_status.toUpperCase();
+                opt.textContent = `${idx + 1}. ${f.frame_id} [${statusTag}] (${f.box_count} boxes)`;
+                frameSelect.appendChild(opt);
+            });
+        }
+
+        // Fetch Frame Data
+        async function loadFrameByIndex(idx) {
+            if (idx < 0 || idx >= state.filteredFrames.length) return;
+            state.currentFrameIndex = idx;
+            const target = state.filteredFrames[idx];
+            state.currentFrameId = target.frame_id;
+            frameSelect.value = target.frame_id;
+
+            btnPrev.disabled = (idx === 0);
+            btnNext.disabled = (idx === state.filteredFrames.length - 1);
+
+            state.imgLoaded = false;
+            state.boxes = [];
+            state.selectedBoxIndex = null;
+            state.undoStack = [];
+            setDirty(false);
+            renderCanvas();
+
+            try {
+                const resp = await fetch(`/api/frame/${target.frame_id}`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+                const data = await resp.json();
+
+                state.currentRecord = data.record;
+                state.baseEtag = data.base_etag;
+                state.boxes = JSON.parse(JSON.stringify(data.record.boxes || []));
+
+                // Populate Frame Metadata
+                document.getElementById("meta-camera").textContent = data.record.camera || "-";
+                document.getElementById("meta-lighting").textContent = data.record.lighting_type || "-";
+                document.getElementById("meta-group").textContent = data.record.diagnostic_group_label || data.record.diagnostic_group || "-";
+                document.getElementById("meta-origin").textContent = (data.record.data_origin === "external_ua_detrac") ? "UA-DETRAC (External)" : "Local CCTV (Thai)";
+                document.getElementById("meta-canonical-id").textContent = data.record.canonical_source_id || target.frame_id;
+                const dims = data.record.dimensions || [1920, 1080];
+                const dimW = dims.width || (Array.isArray(dims) ? dims[0] : 640);
+                const dimH = dims.height || (Array.isArray(dims) ? dims[1] : 640);
+                document.getElementById("meta-dim").textContent = `${dimW} × ${dimH}`;
+
+                // Populate Review Checklist & Tags
+                const tagsEl = document.getElementById("meta-tags");
+                tagsEl.innerHTML = "";
+                const tags = data.record.review_tags || [];
+                if (tags.length === 0) {
+                    tagsEl.innerHTML = '<span style="font-size:0.72rem; color:var(--text-muted);">None</span>';
+                } else {
+                    tags.forEach(t => {
+                        const span = document.createElement("span");
+                        span.className = "tag-badge";
+                        span.textContent = t;
+                        tagsEl.appendChild(span);
+                    });
+                }
+
+                const checksEl = document.getElementById("meta-checks");
+                checksEl.innerHTML = "";
+                const checks = data.record.required_human_checks || [];
+                if (checks.length === 0) {
+                    checksEl.innerHTML = '<span style="font-size:0.72rem; color:var(--text-muted);">No specific checks listed</span>';
+                } else {
+                    checks.forEach(c => {
+                        const div = document.createElement("label");
+                        div.className = "checklist-item";
+                        div.innerHTML = `<input type="checkbox"> <span>${c}</span>`;
+                        checksEl.appendChild(div);
+                    });
+                }
+
+                const risksEl = document.getElementById("meta-risks");
+                risksEl.innerHTML = "";
+                const risks = data.record.risk_factors || [];
+                if (risks.length === 0) {
+                    risksEl.innerHTML = '<span style="font-size:0.72rem; color:var(--text-muted);">None reported</span>';
+                } else {
+                    risks.forEach(r => {
+                        const div = document.createElement("div");
+                        div.className = "risk-item";
+                        div.innerHTML = `<span>⚠</span> <span>${r}</span>`;
+                        risksEl.appendChild(div);
+                    });
+                }
+
+                // Status Badge
+                const statusBadge = document.getElementById("frame-status-badge");
+                if (data.record.is_unannotated) {
+                    statusBadge.textContent = "UNANNOTATED";
+                    statusBadge.className = "status-badge status-unannotated-badge";
+                } else if (data.record.review_status === "verified") {
+                    statusBadge.textContent = "VERIFIED";
+                    statusBadge.className = "status-badge status-verified-badge";
+                } else if (data.record.review_status === "draft") {
+                    statusBadge.textContent = "DRAFT";
+                    statusBadge.className = "status-badge status-draft-badge";
+                } else if (data.record.review_status === "rejected") {
+                    statusBadge.textContent = "REJECTED";
+                    statusBadge.className = "status-badge status-rejected-badge";
+                } else if (data.record.review_status === "uncertain") {
+                    statusBadge.textContent = "UNCERTAIN";
+                    statusBadge.className = "status-badge status-uncertain-badge";
+                } else {
+                    statusBadge.textContent = "UNREVIEWED";
+                    statusBadge.className = "status-badge status-unreviewed-badge";
+                }
+
+                // Notes & Ambiguity
+                document.getElementById("frame-ambiguous").checked = !!data.record.is_ambiguous;
+                document.getElementById("frame-notes").value = data.record.reviewer_notes || "";
+
+                updatePaletteCounts();
+                updateInspector();
+                updateBoxList();
+
+                // Load Clean Image
+                state.imgElement.src = `/images/${target.frame_id}.jpg`;
+                state.imgElement.onload = () => {
+                    state.imgLoaded = true;
+                    fitToScreen();
+                };
+                state.imgElement.onerror = () => {
+                    showToast("Failed to load clean image", "error");
+                };
+
+            } catch (err) {
+                showToast(`Failed loading frame: ${err.message}`, "error");
+            }
+        }
+
+        // Save Frame Logic
+        async function saveFrame(action) {
+            if (!state.currentFrameId) return false;
+
+            btnSaveDraft.disabled = true;
+            btnMarkVerified.disabled = true;
+            btnMarkUncertain.disabled = true;
+            btnMarkRejected.disabled = true;
+
+            const payload = {
+                base_etag: state.baseEtag,
+                action: action, // "save_draft" | "mark_verified" | "mark_uncertain" | "mark_rejected"
+                boxes: state.boxes,
+                reviewer_notes: document.getElementById("frame-notes").value,
+                is_ambiguous: document.getElementById("frame-ambiguous").checked
+            };
+
+            try {
+                const resp = await fetch(`/api/frame/${state.currentFrameId}/save`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (resp.status === 409) {
+                    // Stale save conflict!
+                    const modal = document.getElementById("conflict-modal");
+                    modal.showModal();
+                    document.getElementById("conflict-reload").onclick = () => {
+                        modal.close();
+                        loadFrameByIndex(state.currentFrameIndex);
+                    };
+                    return false;
+                }
+
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(`Save failed (HTTP ${resp.status}): ${errText}`);
+                }
+
+                const resData = await resp.json();
+                state.baseEtag = resData.base_etag;
+                state.currentRecord = resData.record;
+                state.boxes = JSON.parse(JSON.stringify(resData.record.boxes || []));
+                setDirty(false);
+
+                // Update Status Badge
+                const statusBadge = document.getElementById("frame-status-badge");
+                const rStat = resData.record.review_status;
+                if (rStat === "verified") {
+                    statusBadge.textContent = "VERIFIED";
+                    statusBadge.className = "status-badge status-verified-badge";
+                } else if (rStat === "rejected") {
+                    statusBadge.textContent = "REJECTED";
+                    statusBadge.className = "status-badge status-rejected-badge";
+                } else if (rStat === "uncertain") {
+                    statusBadge.textContent = "UNCERTAIN";
+                    statusBadge.className = "status-badge status-uncertain-badge";
+                } else {
+                    statusBadge.textContent = "DRAFT";
+                    statusBadge.className = "status-badge status-draft-badge";
+                }
+
+                // Update summary in header
+                await refreshSummary();
+                let toastMsg = "Draft saved successfully";
+                if (action === "mark_verified") toastMsg = "Frame marked verified!";
+                else if (action === "mark_rejected") toastMsg = "Frame marked rejected (preserved on disk)";
+                else if (action === "mark_uncertain") toastMsg = "Frame marked uncertain / ambiguous";
+                showToast(toastMsg, "success");
+                return true;
+
+            } catch (err) {
+                showToast(err.message, "error");
+                return false;
+            } finally {
+                btnSaveDraft.disabled = false;
+                btnMarkVerified.disabled = false;
+                btnMarkUncertain.disabled = false;
+                btnMarkRejected.disabled = false;
+            }
+        }
+
+        btnSaveDraft.addEventListener("click", () => saveFrame("save_draft"));
+        btnMarkVerified.addEventListener("click", () => saveFrame("mark_verified"));
+        btnMarkUncertain.addEventListener("click", () => saveFrame("mark_uncertain"));
+        btnMarkRejected.addEventListener("click", () => saveFrame("mark_rejected"));
+
+        // Refresh Summary & Frame List
+        async function refreshSummary() {
+            try {
+                const resp = await fetch("/api/frames");
+                if (!resp.ok) return;
+                const data = await resp.json();
+                state.frames = data.frames;
+
+                // Update Header Summary Pills
+                const s = data.summary;
+                document.getElementById("count-verified").textContent = `${s.verified} Ver`;
+                document.getElementById("count-draft").textContent = `${s.draft} Draft`;
+                document.getElementById("count-unreviewed").textContent = `${s.unreviewed} Unrev`;
+                document.getElementById("count-unannotated").textContent = `${s.unannotated} Unann`;
+                document.getElementById("count-total-summary").textContent = `(${s.total} tot)`;
+
+                if (s.uncertain > 0) {
+                    document.getElementById("count-uncertain").textContent = `${s.uncertain} Uncert`;
+                    document.getElementById("count-uncertain").style.display = "inline";
+                    document.getElementById("sep-uncertain").style.display = "inline";
+                } else {
+                    document.getElementById("count-uncertain").style.display = "none";
+                    document.getElementById("sep-uncertain").style.display = "none";
+                }
+
+                if (s.rejected > 0) {
+                    document.getElementById("count-rejected").textContent = `${s.rejected} Rej`;
+                    document.getElementById("count-rejected").style.display = "inline";
+                    document.getElementById("sep-rejected").style.display = "inline";
+                } else {
+                    document.getElementById("count-rejected").style.display = "none";
+                    document.getElementById("sep-rejected").style.display = "none";
+                }
+
+                // Update Filter chip counts
+                document.querySelectorAll(".filter-chip").forEach(chip => {
+                    const f = chip.dataset.filter;
+                    if (f === "all") chip.textContent = `All (${s.total})`;
+                    else if (f === "verified") chip.textContent = `Verified (${s.verified})`;
+                    else if (f === "draft") chip.textContent = `Draft (${s.draft})`;
+                    else if (f === "unreviewed") chip.textContent = `Unreviewed (${s.unreviewed})`;
+                    else if (f === "uncertain") chip.textContent = `Uncertain (${s.uncertain || 0})`;
+                    else if (f === "rejected") chip.textContent = `Rejected (${s.rejected || 0})`;
+                    else if (f === "unannotated") chip.textContent = `Unannotated (${s.unannotated})`;
+                });
+
+                applyFilter();
+            } catch (e) {
+                console.error("Failed to refresh summary", e);
+            }
+        }
+
+        // Application Initialization
+        async function init() {
+            buildClassPalette();
+            resizeCanvas();
+
+            try {
+                const resp = await fetch("/api/frames");
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                state.frames = data.frames;
+                state.filteredFrames = [...state.frames];
+
+                const s = data.summary;
+                document.getElementById("count-verified").textContent = `${s.verified} Ver`;
+                document.getElementById("count-draft").textContent = `${s.draft} Draft`;
+                document.getElementById("count-unreviewed").textContent = `${s.unreviewed} Unrev`;
+                document.getElementById("count-unannotated").textContent = `${s.unannotated} Unann`;
+                document.getElementById("count-total-summary").textContent = `(${s.total} tot)`;
+
+                if (s.uncertain > 0) {
+                    document.getElementById("count-uncertain").textContent = `${s.uncertain} Uncert`;
+                    document.getElementById("count-uncertain").style.display = "inline";
+                    document.getElementById("sep-uncertain").style.display = "inline";
+                }
+                if (s.rejected > 0) {
+                    document.getElementById("count-rejected").textContent = `${s.rejected} Rej`;
+                    document.getElementById("count-rejected").style.display = "inline";
+                    document.getElementById("sep-rejected").style.display = "inline";
+                }
+
+                // Initialize filter chip labels
+                document.querySelectorAll(".filter-chip").forEach(chip => {
+                    const f = chip.dataset.filter;
+                    if (f === "all") chip.textContent = `All (${s.total})`;
+                    else if (f === "verified") chip.textContent = `Verified (${s.verified})`;
+                    else if (f === "draft") chip.textContent = `Draft (${s.draft})`;
+                    else if (f === "unreviewed") chip.textContent = `Unreviewed (${s.unreviewed})`;
+                    else if (f === "uncertain") chip.textContent = `Uncertain (${s.uncertain || 0})`;
+                    else if (f === "rejected") chip.textContent = `Rejected (${s.rejected || 0})`;
+                    else if (f === "unannotated") chip.textContent = `Unannotated (${s.unannotated})`;
+                });
+
+                updateFrameSelectOptions();
+                if (state.filteredFrames.length > 0) {
+                    loadFrameByIndex(0);
+                }
+            } catch (err) {
+                showToast(`Initialization error: ${err.message}`, "error");
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

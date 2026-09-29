@@ -1,11 +1,12 @@
 """
 Fine-tune YOLO26s on Aligned 5-Class Thai Traffic Dataset.
 Classes:
-  0: car (sedan, hatchback, SUV, taxi, van)
+  0: car (sedan, hatchback, SUV/PPV, taxi, passenger van, ordinary pickup, pickup-based songthaew)
   1: motorcycle (scooter, big bike, delivery bike)
   2: bus (transit bus, coach, Thai double-decker bus)
-  3: truck (pickup, delivery box pickup, flatbed, 6/10/18-wheeler)
+  3: truck (medium/heavy commercial truck, 6/10/18-wheeler, truck-based songthaew)
   4: three_wheeler (tuk-tuk, motorized saleng)
+Note: Detector classes model visual morphology. Downstream controller weights (e.g. PCE) are separate.
 """
 
 import multiprocessing

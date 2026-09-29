@@ -1,0 +1,64 @@
+{
+  "dataset_version": "v2.0",
+  "random_seed": 42,
+  "paths": {
+    "local_dataset_dir": "data/multiclass_dataset",
+    "external_ndjson_path": "data/usdetrac/ua-detrac-dataset-10kv1-2024-11-14-3-44pmyolov11.ndjson",
+    "eval_snapshot_manifest": "data/eval_snapshot_v1/manifest.json",
+    "output_dir": "data/training_manifests_v2",
+    "videos_dir": "videos",
+    "report_markdown": "docs/DATASET_PREPARATION_REPORT.md"
+  },
+  "local_split_strategy": {
+    "default_strategy": "contiguous_temporal_blocks",
+    "temporal_block_ratio": 0.80,
+    "temporal_buffer_seconds": 3.0,
+    "whole_recording_assignments": {
+      "cam45_northeast": "reserved_holdout"
+    }
+  },
+  "balancing": {
+    "external_cap_ratio_per_unique_local_frame": 0.5,
+    "sampling_strategy": "stratified_by_sequence_and_size",
+    "preserve_local_variants": true,
+    "delete_boxes_to_balance": false
+  },
+  "splits": {
+    "external_sequence_ratios": {
+      "train": 0.70,
+      "val": 0.15,
+      "test": 0.15
+    },
+    "temporal_buffer_seconds": 3.0,
+    "reserve_northeast_holdout": true,
+    "exclude_diagnostic_eval_frames": true
+  },
+  "taxonomy": {
+    "thai_5class": {
+      "0": "car",
+      "1": "motorcycle",
+      "2": "bus",
+      "3": "truck",
+      "4": "three_wheeler"
+    },
+    "external_to_thai_mapping": {
+      "0": 3,
+      "1": 0,
+      "2": 0,
+      "3": 2
+    },
+    "semantic_compatibility_flags": {
+      "3_van_to_0_car": "Passenger commuter vans (HiAce/Commuter) map to car (0). Truck-based cargo vans must be verified in spot-check.",
+      "2_truck_to_3_truck": "Medium/heavy trucks map to truck (3). Ordinary pickups and small flatbeds map to car (0). Must be verified in spot-check."
+    }
+  },
+  "spot_check": {
+    "counts": {
+      "external_vans": 10,
+      "external_trucks": 10,
+      "external_dense_small": 10,
+      "local_teacher_completed": 10,
+      "local_night_congestion": 10
+    }
+  }
+}

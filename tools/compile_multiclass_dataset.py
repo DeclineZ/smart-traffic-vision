@@ -44,27 +44,29 @@ CLASS_NAMES = {
 }
 
 # Source category folder to custom class mapping (5-Class Standard)
+# Note: Detection classes model visual morphology (light vs. heavy commercial vehicles).
+# Downstream traffic controller weights (e.g. PCE) are separate and not assigned here.
 CATEGORY_CONFIG = {
     "pickup": {
-        "class_id": 0,  # Passenger 4-wheeler (1.0 PCE, aligned with COCO car category)
+        "class_id": 0,  # Light vehicle visual morphology (ordinary pickups, Hilux, D-Max)
         "verified_dir": "data/pickup/verified_hits",
         "manifest_path": "data/pickup/mined_candidates/manifest.json",
         "raw_frames_dir": "data/pickup/mined_candidates/raw_frames",
     },
     "songthaew": {
-        "class_id": 0,  # Built on pickup chassis, passenger-class local transport (1.0 PCE)
+        "class_id": 0,  # Pickup-based songthaew (light vehicle visual morphology; truck-based songthaews are class 3)
         "verified_dir": "data/songthaew/verified_hits",
         "manifest_path": "data/songthaew/mined_candidates/manifest.json",
         "raw_frames_dir": "data/songthaew/mined_candidates/raw_frames",
     },
     "van": {
-        "class_id": 0,  # Aligned with COCO car category (minivans, passenger commuter vans)
+        "class_id": 0,  # Passenger commuter vans (HiAce, Commuter, light vehicle visual morphology)
         "verified_dir": "data/van/verified_hits",
         "manifest_path": "data/van/mined_candidates/manifest.json",
         "raw_frames_dir": "data/van/mined_candidates/raw_frames",
     },
     "truck_trailer": {
-        "class_id": 3,  # Heavy commercial transport only (6/10/18-wheelers)
+        "class_id": 3,  # Medium and heavy commercial transport (6/10/18-wheelers, articulated trailers)
         "verified_dir": "data/truck_trailer/verified_hits",
         "manifest_path": "data/truck_trailer/mined_candidates/manifest.json",
         "raw_frames_dir": "data/truck_trailer/mined_candidates/raw_frames",
