@@ -25,7 +25,7 @@ from ultralytics import YOLO
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, COCO_VEHICLES
+from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, suppress_duplicate_shadow_boxes, COCO_VEHICLES
 from algorithm.shadow_tracker import ShadowResilientTracker
 from trt_pipeline.payload import LaneMetricsManager
 from trt_pipeline.tools import initial_config
@@ -130,8 +130,8 @@ def run_gui(
                     b = contact_ref.trim_lateral_cast_shadow(b, gray)
                 dets.append([b[0], b[1], b[2], b[3], c, cls_id])
 
-            dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-            tracked = tracker.update(dets_arr)
+            dets_filtered = suppress_duplicate_shadow_boxes(dets, iou_thresh=0.35, ioa_thresh=0.60)
+            tracked = tracker.update(dets_filtered)
 
             # 3. Lane assignment
             vis = frame.copy()

@@ -1,15 +1,60 @@
 {
-  "_comment": "=== Calibrated Road Lanes for stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4 ===",
+  "_comment": "=== Calibrated Road Lanes for stock-footage-los-angeles-circa-overhead-view-of-traffic-on-busy-freeway-in-downtown-los-angeles.mp4 ===",
   "camera_info": {
     "camera_id": "CAM-CALIBRATED",
     "location": "Custom Intersection / Approach",
     "intersection_id": "INT-001",
-    "description": "Calibrated from stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4"
+    "description": "Calibrated from stock-footage-los-angeles-circa-overhead-view-of-traffic-on-busy-freeway-in-downtown-los-angeles.mp4"
   },
   "video": {
-    "path": "videos/stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4",
+    "path": "videos/stock-footage-los-angeles-circa-overhead-view-of-traffic-on-busy-freeway-in-downtown-los-angeles.mp4",
     "skip": 0,
     "max_frames": 0
+  },
+  "model": {
+    "engine_path": "models/yolov8s.engine",
+    "input_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "device": "cuda:0"
+  },
+  "tracker": {
+    "type": "ByteTrack",
+    "params": {
+      "min_conf": 0.3,
+      "track_thresh": 0.5,
+      "match_thresh": 0.7,
+      "track_buffer": 25,
+      "frame_rate": 25
+    }
+  },
+  "classes": {
+    "dict_class": {
+      "1": "bicycle",
+      "2": "car",
+      "3": "motorcycle",
+      "5": "bus",
+      "7": "truck"
+    }
+  },
+  "output": {
+    "base_dir": "./output/calibrated",
+    "save_crop": false,
+    "data_output_path": "output/calibrated/data.json"
+  },
+  "tracking": {
+    "zones": []
+  },
+  "density": {
+    "enabled": false
+  },
+  "processing": {
+    "opencv_threads": 0,
+    "use_opencl": false,
+    "video_queue_size": 2
   },
   "lane_metrics": {
     "enabled": true,
@@ -21,20 +66,20 @@
         "description": "Calibrated Lane_1",
         "polygon": [
           [
-            214,
-            9
+            287,
+            64
           ],
           [
-            328,
-            4
+            461,
+            77
           ],
           [
-            398,
-            335
+            575,
+            328
           ],
           [
-            7,
-            335
+            3,
+            294
           ]
         ]
       }

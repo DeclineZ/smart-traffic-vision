@@ -1,5 +1,5 @@
 from .weather_classifier import WeatherClassifier, WeatherResult
-from .shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, COCO_VEHICLES
+from .shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, suppress_duplicate_shadow_boxes, COCO_VEHICLES
 from .shadow_tracker import ShadowResilientTracker
 
 __all__ = [
@@ -10,5 +10,6 @@ __all__ = [
     "ShadowLaneAssigner",
     "ShadowResilientTracker",
     "remap_shadow_detection",
+    "suppress_duplicate_shadow_boxes",
     "COCO_VEHICLES",
 ]

@@ -27,7 +27,7 @@ from ultralytics import YOLO
 # Add repository root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection
+from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, suppress_duplicate_shadow_boxes
 from algorithm.shadow_tracker import ShadowResilientTracker
 from algorithm.sort import Sort
 from trt_pipeline.payload import LaneMetricsManager
@@ -234,8 +234,8 @@ def run_benchmark(
             if crop.size > 0 and np.mean(crop) < 55.0:
                 resilient_shadow_detections += 1
 
-        dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-        tracked = shadow_tracker.update(dets_arr)
+        dets_filtered = suppress_duplicate_shadow_boxes(dets, iou_thresh=0.35, ioa_thresh=0.60)
+        tracked = shadow_tracker.update(dets_filtered)
 
         if len(tracked) > 0:
             cxs, cys = contact_ref.get_contact_points_vectorized(tracked)

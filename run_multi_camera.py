@@ -101,7 +101,7 @@ class BatchedCameraPipeline:
 
         from algorithm.sort import Sort
         from algorithm.ocsort import OcSort
-        from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection
+        from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, suppress_duplicate_shadow_boxes
         from algorithm.shadow_tracker import ShadowResilientTracker
         from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
         from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
@@ -401,12 +401,12 @@ class BatchedCameraPipeline:
                                     xyxy = self.contact_refiners[idx].trim_lateral_cast_shadow(xyxy, gray_frame)
                                 dets.append([xyxy[0], xyxy[1], xyxy[2], xyxy[3], conf, cls_id])
 
-                        dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-
                         if self.tracker_type == "shadow":
-                            # ShadowResilientTracker accepts [x1, y1, x2, y2, conf, cls_id]
-                            tracked_objs = self.trackers[idx].update(dets_arr)
+                            # ShadowResilientTracker accepts [x1, y1, x2, y2, conf, cls_id] with shadow duplicate suppression
+                            dets_filtered = suppress_duplicate_shadow_boxes(dets, iou_thresh=0.35, ioa_thresh=0.60)
+                            tracked_objs = self.trackers[idx].update(dets_filtered)
                         else:
+                            dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
                             # SORT / OcSort accepts [x1, y1, x2, y2, conf]
                             track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
                             tracked_out = self.trackers[idx].update(track_input)
