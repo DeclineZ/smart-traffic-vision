@@ -46,6 +46,7 @@ class LaneMetricsManager:
                 }
         """
         self.lanes: dict[str, dict[str, Any]] = {}
+        self._track_to_lane: dict[int, str] = {}
         self._init_lanes(lane_config)
 
     def _init_lanes(self, lane_config: dict[str, dict[str, Any]]) -> None:
@@ -82,6 +83,7 @@ class LaneMetricsManager:
     ) -> None:
         """
         Register a vehicle detection in a lane for the current window.
+        Enforces single-lane exclusivity per track ID to eliminate cross-lane double-counting.
 
         Args:
             lane_id: Target lane ID (e.g. 'N1')
@@ -95,20 +97,33 @@ class LaneMetricsManager:
         category = classify_vehicle(vehicle_class)  # 'cars' or 'motorbike'
         state_key = "queued" if is_queued else "moving"
         other_key = "moving" if is_queued else "queued"
+        int_track_id = int(track_id)
+
+        # Enforce lane exclusivity: remove from previously claimed lane in this interval
+        prev_lane = self._track_to_lane.get(int_track_id)
+        if prev_lane is not None and prev_lane != lane_id and prev_lane in self.lanes:
+            prev_v = self.lanes[prev_lane]["vehicles"]
+            prev_v["queued"]["cars"].discard(int_track_id)
+            prev_v["queued"]["motorbike"].discard(int_track_id)
+            prev_v["moving"]["cars"].discard(int_track_id)
+            prev_v["moving"]["motorbike"].discard(int_track_id)
+
+        self._track_to_lane[int_track_id] = lane_id
 
         vehicles = self.lanes[lane_id]["vehicles"]
 
         # If it was previously marked in the opposite state in this interval,
         # update it to the latest detected state
-        if track_id in vehicles[other_key][category]:
-            vehicles[other_key][category].discard(track_id)
+        if int_track_id in vehicles[other_key][category]:
+            vehicles[other_key][category].discard(int_track_id)
 
-        vehicles[state_key][category].add(int(track_id))
+        vehicles[state_key][category].add(int_track_id)
 
     def reset(self) -> None:
         """Reset internal vehicle counters for the next interval."""
         for lane_id in self.lanes:
             self.lanes[lane_id]["vehicles"] = self._empty_vehicle_state()
+        self._track_to_lane.clear()
 
     def snapshot(self) -> list[dict[str, Any]]:
         """

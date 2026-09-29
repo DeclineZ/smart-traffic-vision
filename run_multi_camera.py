@@ -84,10 +84,14 @@ class BatchedCameraPipeline:
         mqtt_broker: str = "mqtt://localhost:1883",
         mqtt_topic: str = "traffic/counts",
         intersection_id: str = "INT-001",
+        enable_shadow_enhancer: bool = True,
+        use_contact_patch: bool = True,
+        tracker_type: str = "shadow",
     ):
         global cv, np, shapely, Point, Polygon, YOLO, Sort
         global AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
         global LaneMetricsManager, PayloadBuilder, MQTTPublisher, StreamBufferWorker
+        global ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, ShadowResilientTracker, OcSort
 
         import cv2 as cv
         import numpy as np
@@ -96,6 +100,9 @@ class BatchedCameraPipeline:
         from ultralytics import YOLO
 
         from algorithm.sort import Sort
+        from algorithm.ocsort import OcSort
+        from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner
+        from algorithm.shadow_tracker import ShadowResilientTracker
         from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
         from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
         from trt_pipeline.publisher import MQTTPublisher
@@ -114,6 +121,9 @@ class BatchedCameraPipeline:
         self.nvenc_out = nvenc_out
         self.pub_interval = pub_interval
         self.intersection_id = intersection_id
+        self.enable_shadow_enhancer = enable_shadow_enhancer
+        self.use_contact_patch = use_contact_patch
+        self.tracker_type = tracker_type.lower()
 
         # 1. Load Camera Configs, Lane Polygons & Metrics Managers
         self.camera_configs = []
@@ -138,12 +148,31 @@ class BatchedCameraPipeline:
             self.lane_configs.append(lane_dict)
             self.metrics_managers.append(LaneMetricsManager(lane_dict))
 
-        # 2. Trackers & Motion Memory per Camera
+        # 2. Trackers & Shadow Processors per Camera
         min_hits = 1 if self.skip_frames > 0 else 2
-        self.trackers = [
-            Sort(max_age=30, min_hits=min_hits, iou_threshold=0.3)
-            for _ in range(self.num_streams)
-        ]
+        if self.tracker_type == "shadow":
+            logger.info("Initializing ShadowResilientTracker (ByteTrack + OC-SORT + Velocity Coasting)...")
+            self.trackers = [
+                ShadowResilientTracker(det_thresh=0.40, min_conf=0.15, max_age=30, max_coast_frames=12, min_hits=min_hits)
+                for _ in range(self.num_streams)
+            ]
+        elif self.tracker_type == "ocsort":
+            logger.info("Initializing OcSort tracker...")
+            self.trackers = [
+                OcSort(det_thresh=0.40, max_age=30, min_hits=min_hits, use_byte=True)
+                for _ in range(self.num_streams)
+            ]
+        else:
+            logger.info("Initializing legacy Sort tracker...")
+            self.trackers = [
+                Sort(max_age=30, min_hits=min_hits, iou_threshold=0.3)
+                for _ in range(self.num_streams)
+            ]
+
+        self.shadow_equalizers = [ShadowContrastEqualizer() for _ in range(self.num_streams)]
+        self.contact_refiners = [ContactPatchRefiner() for _ in range(self.num_streams)]
+        self.lane_assigners = [ShadowLaneAssigner(hysteresis_frames=3) for _ in range(self.num_streams)]
+
         self.last_tracked: List[np.ndarray] = [np.empty((0, 6)) for _ in range(self.num_streams)]
         self.track_histories: List[Dict[int, deque]] = [{} for _ in range(self.num_streams)]
 
@@ -217,17 +246,25 @@ class BatchedCameraPipeline:
 
     def _evaluate_vectorized_lanes(self, cam_idx: int, tracked_objs: np.ndarray, frame_idx: int) -> None:
         """
-        High-performance vectorized spatial lane assignment:
-        Evaluates all tracked bounding box centroids against lane polygons using
-        C-accelerated shapely.contains_xy to eliminate Python loop overhead.
+        High-performance spatial lane assignment:
+        Evaluates tracked vehicles using bottom contact-patch anchors (tire-road interface)
+        and enforces single-lane exclusivity with temporal hysteresis debouncing.
         """
         if tracked_objs is None or len(tracked_objs) == 0:
             return
 
-        cxs = (tracked_objs[:, 0] + tracked_objs[:, 2]) * 0.5
-        cys = (tracked_objs[:, 1] + tracked_objs[:, 3]) * 0.5
+        if self.use_contact_patch:
+            cxs, cys = self.contact_refiners[cam_idx].get_contact_points_vectorized(tracked_objs)
+        else:
+            cxs = (tracked_objs[:, 0] + tracked_objs[:, 2]) * 0.5
+            cys = (tracked_objs[:, 1] + tracked_objs[:, 3]) * 0.5
+
         lane_cfg = self.lane_configs[cam_idx]
         metrics = self.metrics_managers[cam_idx]
+        assigner = self.lane_assigners[cam_idx]
+
+        num_objs = len(tracked_objs)
+        obj_candidate_lanes = [None] * num_objs
 
         for lane_id, linfo in lane_cfg.items():
             poly = linfo["polygon"]
@@ -235,7 +272,7 @@ class BatchedCameraPipeline:
                 continue
 
             try:
-                # Vectorized evaluation across all centroids simultaneously
+                # Vectorized evaluation across all contact patch coordinates simultaneously
                 inside_mask = shapely.contains_xy(poly, cxs, cys)
             except AttributeError:
                 # Fallback for older Shapely versions (< 2.0)
@@ -243,14 +280,25 @@ class BatchedCameraPipeline:
 
             inside_indices = np.where(inside_mask)[0]
             for idx in inside_indices:
-                obj = tracked_objs[idx]
-                track_id = int(obj[4])
-                cx, cy = float(cxs[idx]), float(cys[idx])
-                cls_id = int(obj[5]) if len(obj) >= 6 else 2
+                obj_candidate_lanes[idx] = lane_id
 
+        # Update confirmed lane with temporal hysteresis debouncing
+        for idx in range(num_objs):
+            obj = tracked_objs[idx]
+            track_id = int(obj[4])
+            cx, cy = float(cxs[idx]), float(cys[idx])
+            cls_id = int(obj[5]) if len(obj) >= 6 else 2
+
+            confirmed_lane = assigner.update_track_lane(
+                track_id=track_id,
+                candidate_lane_id=obj_candidate_lanes[idx],
+                frame_idx=frame_idx,
+            )
+
+            if confirmed_lane is not None:
                 is_q = self._is_queued(cam_idx, track_id, (cx, cy), frame_idx)
                 metrics.register_vehicle(
-                    lane_id=lane_id,
+                    lane_id=confirmed_lane,
                     track_id=track_id,
                     vehicle_class=cls_id,
                     is_queued=is_q,
@@ -309,11 +357,19 @@ class BatchedCameraPipeline:
                 fps_batch_counter += 1
                 should_run_yolo = (batch_idx % (self.skip_frames + 1)) == 0
 
-                # 2. Centralized Model Forward Pass
+                # 2. Centralized Model Forward Pass with optional Shadow Contrast Equalization
                 results = []
                 if should_run_yolo:
+                    if self.enable_shadow_enhancer:
+                        infer_frames = [
+                            self.shadow_equalizers[i].enhance(batch_frames[i])[0]
+                            for i in range(self.num_streams)
+                        ]
+                    else:
+                        infer_frames = batch_frames
+
                     results = self.model(
-                        batch_frames,
+                        infer_frames,
                         verbose=False,
                         device=self.device,
                         classes=list(COCO_CLASSES.keys()),
@@ -328,35 +384,46 @@ class BatchedCameraPipeline:
                 for idx in range(self.num_streams):
                     if should_run_yolo:
                         dets = []
+                        gray_frame = None
+                        if self.use_contact_patch and idx < len(batch_frames):
+                            gray_frame = cv.cvtColor(batch_frames[idx], cv.COLOR_BGR2GRAY)
+
                         if idx < len(results) and len(results[idx].boxes):
                             for box in results[idx].boxes:
-                                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                                xyxy = box.xyxy[0].cpu().numpy()
                                 conf = float(box.conf[0])
                                 cls_id = int(box.cls[0])
-                                dets.append([x1, y1, x2, y2, conf, cls_id])
+                                if self.use_contact_patch and gray_frame is not None:
+                                    xyxy = self.contact_refiners[idx].trim_lateral_cast_shadow(xyxy, gray_frame)
+                                dets.append([xyxy[0], xyxy[1], xyxy[2], xyxy[3], conf, cls_id])
 
                         dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-                        # SORT tracker update with detection boxes [x1, y1, x2, y2, conf]
-                        track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
-                        tracked_out = self.trackers[idx].update(track_input)
 
-                        # Re-associate class IDs from closest detections
-                        if len(tracked_out) > 0 and len(dets_arr) > 0:
-                            matched_tracked = []
-                            det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
-                            for tobj in tracked_out:
-                                t_cx = (tobj[0] + tobj[2]) * 0.5
-                                t_cy = (tobj[1] + tobj[3]) * 0.5
-                                dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
-                                c_id = int(dets_arr[np.argmin(dists), 5])
-                                matched_tracked.append(np.append(tobj[:5], c_id))
-                            tracked_objs = np.array(matched_tracked)
-                        elif len(tracked_out) > 0:
-                            # Default class: car (2)
-                            cls_col = np.full((len(tracked_out), 1), 2)
-                            tracked_objs = np.hstack([tracked_out[:, :5], cls_col])
+                        if self.tracker_type == "shadow":
+                            # ShadowResilientTracker accepts [x1, y1, x2, y2, conf, cls_id]
+                            tracked_objs = self.trackers[idx].update(dets_arr)
                         else:
-                            tracked_objs = np.empty((0, 6))
+                            # SORT / OcSort accepts [x1, y1, x2, y2, conf]
+                            track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
+                            tracked_out = self.trackers[idx].update(track_input)
+
+                            # Re-associate class IDs from closest detections
+                            if len(tracked_out) > 0 and len(dets_arr) > 0:
+                                matched_tracked = []
+                                det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
+                                for tobj in tracked_out:
+                                    t_cx = (tobj[0] + tobj[2]) * 0.5
+                                    t_cy = (tobj[1] + tobj[3]) * 0.5
+                                    dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
+                                    c_id = int(dets_arr[np.argmin(dists), 5])
+                                    matched_tracked.append(np.append(tobj[:5], c_id))
+                                tracked_objs = np.array(matched_tracked)
+                            elif len(tracked_out) > 0:
+                                # Default class: car (2)
+                                cls_col = np.full((len(tracked_out), 1), 2)
+                                tracked_objs = np.hstack([tracked_out[:, :5], cls_col])
+                            else:
+                                tracked_objs = np.empty((0, 6))
 
                         self.last_tracked[idx] = tracked_objs
                     else:
@@ -441,6 +508,9 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     parser.add_argument("--mqtt-broker", default="mqtt://localhost:1883", help="MQTT broker URL")
     parser.add_argument("--mqtt-topic", default="traffic/counts", help="MQTT destination topic")
     parser.add_argument("--intersection-id", default="INT-001", help="Intersection identifier string")
+    parser.add_argument("--no-shadow-enhancer", action="store_true", help="Disable adaptive shadow contrast equalizer (SCE)")
+    parser.add_argument("--no-contact-patch", action="store_true", help="Disable contact-patch anchor and use naive bbox center")
+    parser.add_argument("--tracker", default="shadow", choices=["shadow", "ocsort", "sort"], help="Tracker engine (shadow, ocsort, sort)")
     return parser
 
 
@@ -502,6 +572,9 @@ def main():
         mqtt_broker=args.mqtt_broker,
         mqtt_topic=args.mqtt_topic,
         intersection_id=args.intersection_id,
+        enable_shadow_enhancer=not args.no_shadow_enhancer,
+        use_contact_patch=not args.no_contact_patch,
+        tracker_type=args.tracker,
     )
 
     # Handle OS termination signals

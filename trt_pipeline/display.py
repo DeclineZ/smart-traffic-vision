@@ -284,6 +284,10 @@ class AsyncDisplayWorker:
 
                         color = (0, 255, 255) if cls_name in ("motorcycle", "bicycle") else (0, 220, 100)
                         cv.rectangle(vis, (bx1, by1), (bx2, by2), color, 2)
+                        # Contact patch anchor (road interface)
+                        cp_x = (bx1 + bx2) // 2
+                        cp_y = int(by2 - 0.05 * max(1, by2 - by1))
+                        cv.circle(vis, (cp_x, cp_y), 3, (0, 255, 255), -1)
                         label = f"#{int(track_id)} {cls_name}"
                         cv.putText(vis, label, (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv.LINE_AA)
 
