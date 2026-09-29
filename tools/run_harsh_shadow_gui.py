@@ -88,6 +88,7 @@ def run_gui(
 
     enable_sce = True
     enable_cp = True
+    enable_suppression = True
     paused = False
 
     window_name = "Harsh Shadow Vehicle Counting HUD"
@@ -130,8 +131,12 @@ def run_gui(
                     b = contact_ref.trim_lateral_cast_shadow(b, gray)
                 dets.append([b[0], b[1], b[2], b[3], c, cls_id])
 
-            dets_filtered = suppress_duplicate_shadow_boxes(dets, iou_thresh=0.35, ioa_thresh=0.60)
-            tracked = tracker.update(dets_filtered)
+            if enable_suppression:
+                dets_to_track = suppress_duplicate_shadow_boxes(dets, iou_thresh=0.35, ioa_thresh=0.60)
+            else:
+                dets_to_track = np.array(dets) if len(dets) else np.empty((0, 6))
+
+            tracked = tracker.update(dets_to_track)
 
             # 3. Lane assignment
             vis = frame.copy()
@@ -197,9 +202,10 @@ def run_gui(
                 f"FRAME: {frame_idx:05d} | FPS: {fps_calc:.1f} | "
                 f"SCE [S]: {'ON' if enable_sce else 'OFF'} | "
                 f"CONTACT-PATCH [C]: {'ON' if enable_cp else 'OFF'} | "
+                f"DUP-FILTER [D]: {'ON' if enable_suppression else 'OFF'} | "
                 f"ACTIVE TRACKS: {len(tracked)}"
             )
-            cv.putText(hud_bar, hud_text, (15, 24), cv.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 200), 2, cv.LINE_AA)
+            cv.putText(hud_bar, hud_text, (15, 24), cv.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 200), 2, cv.LINE_AA)
             display_frame = np.vstack([hud_bar, vis])
 
             cv.imshow(window_name, display_frame)
@@ -213,6 +219,9 @@ def run_gui(
         elif key == ord("c"):
             enable_cp = not enable_cp
             print(f"Contact-Patch Anchoring toggled: {'ON' if enable_cp else 'OFF'}")
+        elif key == ord("d"):
+            enable_suppression = not enable_suppression
+            print(f"Duplicate Shadow Filter toggled: {'ON' if enable_suppression else 'OFF'}")
         elif key == ord(" "):
             paused = not paused
 
