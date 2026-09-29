@@ -97,16 +97,10 @@ class ShadowContrastEqualizer:
             if not self._is_shadow_scene_active:
                 return bgr_image, False
 
-        # 1. Apply CLAHE to L-channel
+        # 1. Apply CLAHE directly to L-channel to preserve high-frequency edge gradients
         l_clahe = self.clahe.apply(l_chan)
 
-        # 2. Apply gamma expansion to pull vehicle textures out of deep shadows
-        l_gamma = cv.LUT(l_chan, self.gamma_lut)
-
-        # Combined candidate enhancement
-        l_candidate = np.maximum(l_clahe, l_gamma)
-
-        # 3. Soft shadow mask computation to smoothly blend enhancement
+        # 2. Soft shadow mask computation to smoothly blend enhancement
         # Mask = 1.0 in deep shadows (L <= shadow_thresh), smoothly decays to 0.0 at sun_thresh
         shadow_mask = np.clip(
             (self.sun_thresh - l_chan.astype(np.float32)) / (self.sun_thresh - self.shadow_thresh + 1e-5),
@@ -114,12 +108,35 @@ class ShadowContrastEqualizer:
             1.0,
         )
 
-        # Fast soft blending: L_out = L_orig * (1 - Mask) + L_candidate * Mask
-        l_out = (l_chan.astype(np.float32) * (1.0 - shadow_mask) + l_candidate.astype(np.float32) * shadow_mask).astype(np.uint8)
+        # Fast soft blending: L_out = L_orig * (1 - Mask) + L_clahe * Mask
+        l_out = (l_chan.astype(np.float32) * (1.0 - shadow_mask) + l_clahe.astype(np.float32) * shadow_mask).astype(np.uint8)
 
         lab[:, :, 0] = l_out
         enhanced_bgr = cv.cvtColor(lab, cv.COLOR_LAB2BGR)
         return enhanced_bgr, True
+
+
+COCO_VEHICLES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+# Common indoor/household classes YOLO confuses with dark vehicles under extreme pillar shadow
+SHADOW_CONFUSED_CLASSES = {
+    4: "airplane", 8: "boat", 13: "bench", 28: "suitcase", 56: "chair",
+    57: "couch", 59: "bed", 62: "tv", 67: "cell phone", 72: "refrigerator"
+}
+
+
+def remap_shadow_detection(cls_id: int, bbox: np.ndarray | List[float]) -> int:
+    """
+    Resolves YOLO classification confusion in deep shadows and bridge pillar occlusions.
+    If a vehicle-sized object (w >= 25, h >= 25) is misclassified under shadow,
+    remaps it to class 2 ('car').
+    """
+    if cls_id in COCO_VEHICLES:
+        return cls_id
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
+    if cls_id in SHADOW_CONFUSED_CLASSES and w >= 25 and h >= 25:
+        return 2  # Remap to car
+    return cls_id
 
 
 class ContactPatchRefiner:

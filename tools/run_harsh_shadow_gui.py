@@ -25,12 +25,10 @@ from ultralytics import YOLO
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner
+from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection, COCO_VEHICLES
 from algorithm.shadow_tracker import ShadowResilientTracker
 from trt_pipeline.payload import LaneMetricsManager
 from trt_pipeline.tools import initial_config
-
-COCO_VEHICLES = {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
 def run_gui(
@@ -85,7 +83,7 @@ def run_gui(
     shadow_eq = ShadowContrastEqualizer(dynamic_trigger=False)
     contact_ref = ContactPatchRefiner(ground_offset_ratio=0.05, trim_shadow_wings=True)
     lane_assigner = ShadowLaneAssigner(hysteresis_frames=3)
-    tracker = ShadowResilientTracker(det_thresh=0.40, min_conf=0.15, max_age=30, max_coast_frames=12, min_hits=2)
+    tracker = ShadowResilientTracker(det_thresh=0.35, min_conf=0.10, max_age=35, max_coast_frames=18, min_hits=2)
     metrics_mgr = LaneMetricsManager(lanes_dict)
 
     enable_sce = True
@@ -116,13 +114,18 @@ def run_gui(
 
             gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
-            # 2. Inference
-            res = model(proc_frame, conf=conf, verbose=False, device=device, classes=list(COCO_VEHICLES.keys()))[0]
+            # 2. Inference: run without hard class dropping so pillar-shadow confused vehicles are recovered
+            res = model(proc_frame, conf=conf, verbose=False, device=device)[0]
             dets = []
             for box in res.boxes:
                 b = box.xyxy[0].cpu().numpy()
                 c = float(box.conf[0])
-                cls_id = int(box.cls[0])
+                raw_cls = int(box.cls[0])
+                # Remap shadow confusion (e.g. dark car next to pillar misclassified as suitcase/chair)
+                cls_id = remap_shadow_detection(raw_cls, b)
+                if cls_id not in COCO_VEHICLES:
+                    continue
+
                 if enable_cp:
                     b = contact_ref.trim_lateral_cast_shadow(b, gray)
                 dets.append([b[0], b[1], b[2], b[3], c, cls_id])
@@ -223,7 +226,7 @@ def main():
     parser.add_argument("--config", default=None, help="Camera JSON configuration")
     parser.add_argument("--model", default="yolov8s.pt", help="YOLO model path")
     parser.add_argument("--device", default=None, help="Compute device (auto, cuda:0, mps, cpu)")
-    parser.add_argument("--conf", type=float, default=0.20, help="Confidence threshold")
+    parser.add_argument("--conf", type=float, default=0.10, help="Confidence threshold")
     args = parser.parse_args()
 
     import torch

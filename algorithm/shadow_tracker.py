@@ -150,10 +150,10 @@ class ShadowResilientTracker:
 
     def __init__(
         self,
-        det_thresh: float = 0.40,
-        min_conf: float = 0.15,
-        max_age: int = 30,
-        max_coast_frames: int = 12,
+        det_thresh: float = 0.35,
+        min_conf: float = 0.10,
+        max_age: int = 35,
+        max_coast_frames: int = 18,
         min_hits: int = 2,
         iou_threshold: float = 0.30,
         delta_t: int = 3,

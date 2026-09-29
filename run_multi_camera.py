@@ -101,7 +101,7 @@ class BatchedCameraPipeline:
 
         from algorithm.sort import Sort
         from algorithm.ocsort import OcSort
-        from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner
+        from algorithm.shadow_processor import ShadowContrastEqualizer, ContactPatchRefiner, ShadowLaneAssigner, remap_shadow_detection
         from algorithm.shadow_tracker import ShadowResilientTracker
         from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
         from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
@@ -153,7 +153,7 @@ class BatchedCameraPipeline:
         if self.tracker_type == "shadow":
             logger.info("Initializing ShadowResilientTracker (ByteTrack + OC-SORT + Velocity Coasting)...")
             self.trackers = [
-                ShadowResilientTracker(det_thresh=0.40, min_conf=0.15, max_age=30, max_coast_frames=12, min_hits=min_hits)
+                ShadowResilientTracker(det_thresh=0.35, min_conf=0.10, max_age=35, max_coast_frames=18, min_hits=min_hits)
                 for _ in range(self.num_streams)
             ]
         elif self.tracker_type == "ocsort":
@@ -368,11 +368,12 @@ class BatchedCameraPipeline:
                     else:
                         infer_frames = batch_frames
 
+                    infer_classes = None if self.tracker_type == "shadow" else list(COCO_CLASSES.keys())
                     results = self.model(
                         infer_frames,
                         verbose=False,
                         device=self.device,
-                        classes=list(COCO_CLASSES.keys()),
+                        classes=infer_classes,
                         conf=self.conf,
                     )
                     self.total_inferred_batches += 1
@@ -392,7 +393,10 @@ class BatchedCameraPipeline:
                             for box in results[idx].boxes:
                                 xyxy = box.xyxy[0].cpu().numpy()
                                 conf = float(box.conf[0])
-                                cls_id = int(box.cls[0])
+                                raw_cls = int(box.cls[0])
+                                cls_id = remap_shadow_detection(raw_cls, xyxy) if self.tracker_type == "shadow" else raw_cls
+                                if cls_id not in COCO_CLASSES:
+                                    continue
                                 if self.use_contact_patch and gray_frame is not None:
                                     xyxy = self.contact_refiners[idx].trim_lateral_cast_shadow(xyxy, gray_frame)
                                 dets.append([xyxy[0], xyxy[1], xyxy[2], xyxy[3], conf, cls_id])
@@ -498,7 +502,7 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     parser.add_argument("--videos", nargs="+", default=None, help="Custom video paths or RTSP stream URLs")
     parser.add_argument("--model", default="yolov8s.pt", help="YOLO model checkpoint or TensorRT .engine path")
     parser.add_argument("--device", default=None, help="Inference compute device: 'cuda:0', 'cpu' (default: auto)")
-    parser.add_argument("--conf", type=float, default=0.20, help="YOLO detection confidence threshold")
+    parser.add_argument("--conf", type=float, default=0.10, help="YOLO detection confidence threshold (default: 0.10 for shadow recovery)")
     parser.add_argument("--fps", type=float, default=25.0, help="Target ingestion frame rate per camera")
     parser.add_argument("--skip-frames", type=int, default=1, help="Frame skipping ratio (0=none, 1=1-in-2, 2=1-in-3)")
     parser.add_argument("--buffer-size", type=int, default=2, help="Ring buffer size for jitter absorption (default: 2)")

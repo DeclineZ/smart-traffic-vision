@@ -1,0 +1,43 @@
+{
+  "_comment": "=== Calibrated Road Lanes for stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4 ===",
+  "camera_info": {
+    "camera_id": "CAM-CALIBRATED",
+    "location": "Custom Intersection / Approach",
+    "intersection_id": "INT-001",
+    "description": "Calibrated from stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4"
+  },
+  "video": {
+    "path": "videos/stock-footage-istanbul-turkey-march-zincirlikuyu-district-in-night-metrobus-a-part-of-public.mp4",
+    "skip": 0,
+    "max_frames": 0
+  },
+  "lane_metrics": {
+    "enabled": true,
+    "publish_interval_frames": 50,
+    "queue_speed_threshold": 2.0,
+    "lanes": {
+      "Lane_1": {
+        "direction": "N",
+        "description": "Calibrated Lane_1",
+        "polygon": [
+          [
+            214,
+            9
+          ],
+          [
+            328,
+            4
+          ],
+          [
+            398,
+            335
+          ],
+          [
+            7,
+            335
+          ]
+        ]
+      }
+    }
+  }
+}
