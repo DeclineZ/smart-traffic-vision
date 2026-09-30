@@ -68,3 +68,19 @@ Copy the coordinate array into the `"polygon"` field of the corresponding lane i
   }
 }
 ```
+
+## Validating Lane Geometry
+
+Before running the multi-camera pipeline, validate lane configurations to ensure all polygons are non-self-intersecting, have positive area, and check for overlapping zones:
+
+```bash
+# Validate all bundled intersection configurations
+python -m tools.validate_calibration
+
+# Or validate specific configuration files
+python -m tools.validate_calibration --configs config/config_north.json config/config_south.json
+```
+
+- **Errors** (e.g. self-intersecting lines, duplicate points with zero area, non-finite coordinates) prevent the runner from starting and must be corrected.
+- **Warnings** report positive-area overlaps between lanes in the same camera that require operator review. Overlaps do not prevent saving or execution, but indicate calibration that should be checked against physical lane markings.
+

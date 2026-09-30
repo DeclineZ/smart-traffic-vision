@@ -106,6 +106,147 @@ class TestLaneMetricsManager(unittest.TestCase):
         n1 = next(l for l in snapshot if l["laneId"] == "N1")
         self.assertEqual(n1["vehicles"]["queued"]["cars"], 0)
 
+    def test_category_change_both_directions_counts_once(self):
+        # Track 1 starts as car
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["cars"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["motorbike"], 0)
+
+        # Changes to motorcycle
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="motorcycle", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["cars"], 0)
+        self.assertEqual(n1["vehicles"]["moving"]["motorbike"], 1)
+
+        # Changes back to car
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["cars"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["motorbike"], 0)
+
+    def test_category_and_state_change_together(self):
+        # Track 1 starts as moving car
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["movingCount"], 1)
+        self.assertEqual(n1["queuedCount"], 0)
+        self.assertEqual(n1["vehicles"]["moving"]["cars"], 1)
+
+        # Changes to queued motorbike
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="motorcycle", is_queued=True)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["movingCount"], 0)
+        self.assertEqual(n1["queuedCount"], 1)
+        self.assertEqual(n1["vehicles"]["queued"]["motorbike"], 1)
+        self.assertEqual(n1["vehicles"]["moving"]["cars"], 0)
+
+    def test_repeated_registration_idempotent(self):
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["queuedCount"], 1)
+        self.assertEqual(n1["vehicles"]["queued"]["cars"], 1)
+
+    def test_lane_transfer_latest_only(self):
+        # Register in N1
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        s1 = next(l for l in snap if l["laneId"] == "S1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(s1["count"], 0)
+
+        # Transfer to S1
+        self.manager.register_vehicle("S1", track_id=1, vehicle_class="car", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        s1 = next(l for l in snap if l["laneId"] == "S1")
+        self.assertEqual(n1["count"], 0)
+        self.assertEqual(s1["count"], 1)
+        self.assertEqual(sum(l["count"] for l in snap), 1)
+
+    def test_unknown_lane_leaves_valid_state_unchanged(self):
+        self.manager.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        # Attempt to register in nonexistent lane
+        self.manager.register_vehicle("NONEXISTENT", track_id=1, vehicle_class="motorcycle", is_queued=False)
+        snap = self.manager.snapshot()
+        n1 = next(l for l in snap if l["laneId"] == "N1")
+        self.assertEqual(n1["count"], 1)
+        self.assertEqual(n1["queuedCount"], 1)
+        self.assertEqual(n1["vehicles"]["queued"]["cars"], 1)
+        self.assertNotIn("NONEXISTENT", [l["laneId"] for l in snap])
+
+        # Attempt to register a brand new track in nonexistent lane
+        self.manager.register_vehicle("NONEXISTENT", track_id=999, vehicle_class="car", is_queued=False)
+        snap = self.manager.snapshot()
+        self.assertEqual(sum(l["count"] for l in snap), 1)
+
+    def test_separate_cameras_independent_track_ids(self):
+        cam0_mgr = LaneMetricsManager({"N1": {"direction": "N", "polygon": Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])}})
+        cam1_mgr = LaneMetricsManager({"S1": {"direction": "S", "polygon": Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])}})
+
+        cam0_mgr.register_vehicle("N1", track_id=42, vehicle_class="car", is_queued=True)
+        cam1_mgr.register_vehicle("S1", track_id=42, vehicle_class="motorcycle", is_queued=False)
+
+        snap0 = cam0_mgr.snapshot()
+        snap1 = cam1_mgr.snapshot()
+
+        self.assertEqual(snap0[0]["count"], 1)
+        self.assertEqual(snap0[0]["vehicles"]["queued"]["cars"], 1)
+        self.assertEqual(snap1[0]["count"], 1)
+        self.assertEqual(snap1[0]["vehicles"]["moving"]["motorbike"], 1)
+
+    def test_repeated_snapshots_do_not_mutate(self):
+        self.manager.register_vehicle("N1", track_id=10, vehicle_class="car", is_queued=True)
+        self.manager.register_vehicle("S1", track_id=20, vehicle_class="motorcycle", is_queued=False)
+        snap1 = self.manager.snapshot()
+        snap2 = self.manager.snapshot()
+        self.assertEqual(snap1, snap2)
+
+    def test_all_configured_lanes_present_and_satisfy_invariants(self):
+        config = {
+            "N1": {"direction": "N", "polygon": Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])},
+            "N2": {"direction": "N", "polygon": Polygon([(1, 0), (2, 0), (2, 1), (1, 1)])},
+            "S1": {"direction": "S", "polygon": Polygon([(2, 0), (3, 0), (3, 1), (2, 1)])},
+        }
+        mgr = LaneMetricsManager(config)
+        mgr.register_vehicle("N1", track_id=1, vehicle_class="car", is_queued=True)
+        mgr.register_vehicle("N1", track_id=2, vehicle_class="motorcycle", is_queued=False)
+
+        snapshot = mgr.snapshot()
+        self.assertEqual(len(snapshot), 3)
+        lane_ids = {l["laneId"] for l in snapshot}
+        self.assertEqual(lane_ids, {"N1", "N2", "S1"})
+
+        for lane in snapshot:
+            q_cars = lane["vehicles"]["queued"]["cars"]
+            q_bikes = lane["vehicles"]["queued"]["motorbike"]
+            m_cars = lane["vehicles"]["moving"]["cars"]
+            m_bikes = lane["vehicles"]["moving"]["motorbike"]
+
+            self.assertEqual(lane["queuedCount"], q_cars + q_bikes)
+            self.assertEqual(lane["movingCount"], m_cars + m_bikes)
+            self.assertEqual(lane["count"], lane["queuedCount"] + lane["movingCount"])
+
+        # Also test with PayloadBuilder
+        builder = PayloadBuilder("INT-001", "CAM-01")
+        payload = builder.build(1, snapshot)
+        self.assertEqual(len(payload["lanes"]), 3)
+
 
 class TestPayloadBuilder(unittest.TestCase):
     def setUp(self):

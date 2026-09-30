@@ -21,6 +21,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import json
 import logging
+import numpy as np
+import shapely
+from shapely.geometry import Point, Polygon
+
+from trt_pipeline.lane_validation import validate_camera_lanes, validate_config_file
 
 # Add root directory to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -127,33 +132,64 @@ class BatchedCameraPipeline:
         self.tracker_type = tracker_type.lower()
         self.imgsz = int(imgsz)
 
-        # 1. Load Camera Configs, Lane Polygons & Metrics Managers
-        self.camera_configs = []
-        self.lane_configs: List[Dict[str, Dict[str, Any]]] = []
-        self.metrics_managers: List[LaneMetricsManager] = []
-        self.queue_speed_thresholds: List[float] = []
+        # 1. Preflight Calibration Validation & Loading
+        all_errors = []
+        all_warnings = []
+        parsed_camera_configs = []
+        parsed_lane_dicts = []
+
+        for idx in range(self.num_streams):
+            cfg_path = config_paths[idx]
+            cam_name = camera_names[idx] if idx < len(camera_names) else f"cam_{idx}"
+            context_str = f"{cam_name} ({os.path.basename(cfg_path)})"
+
+            report = validate_config_file(cfg_path, context=context_str)
+            if report.errors:
+                all_errors.extend(report.errors)
+            if report.warnings:
+                all_warnings.extend(report.warnings)
+
+            # Do not construct lane dictionaries from invalid entries
+            if report.is_valid and report.raw_config is not None:
+                parsed_camera_configs.append(report.raw_config)
+                lane_dict = {}
+                raw_lanes = report.raw_config.get("lane_metrics", {}).get("lanes", {})
+                for lane_id, poly in report.valid_polygons.items():
+                    l_info = raw_lanes.get(lane_id, {}) if isinstance(raw_lanes, dict) else {}
+                    direction = l_info.get("direction", lane_id[0] if lane_id else "N") if isinstance(l_info, dict) else (lane_id[0] if lane_id else "N")
+                    lane_dict[lane_id] = {
+                        "direction": direction,
+                        "polygon": poly,
+                    }
+                parsed_lane_dicts.append(lane_dict)
+
+        # Log overlap warnings once at startup with context
+        for warn in all_warnings:
+            logger.warning(f"Calibration warning [{warn.context}]: {warn.message}")
+
+        # If any invalid configuration was found, fail immediately before allocating model, capture or MQTT resources
+        if all_errors:
+            error_details = "\n".join(
+                f"  - [{e.context}] Lane '{e.lane_id}': {e.reason}" if e.lane_id else f"  - [{e.context}] Config: {e.reason}"
+                for e in all_errors
+            )
+            msg = f"Fatal calibration validation error(s) detected during startup:\n{error_details}"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        self.camera_configs = parsed_camera_configs
+        self.lane_configs = parsed_lane_dicts
+        self.metrics_managers = [LaneMetricsManager(ld) for ld in parsed_lane_dicts]
+        self.queue_speed_thresholds = [
+            float(cfg.get("lane_metrics", {}).get("queue_speed_threshold", 2.0))
+            if isinstance(cfg.get("lane_metrics"), dict) else 2.0
+            for cfg in parsed_camera_configs
+        ]
 
         # 1.1 Virtual Counting Gates Manager
         self.gate_manager = GateFlowManager(camera_names=self.camera_names)
-
         for idx in range(self.num_streams):
-            cfg = initial_config(config_paths[idx])
-            self.camera_configs.append(cfg)
-            metrics_cfg = cfg.get("lane_metrics", {})
-            self.queue_speed_thresholds.append(float(metrics_cfg.get("queue_speed_threshold", 2.0)))
-
-            # Parse lane polygons
-            lane_dict = {}
-            for lane_id, l_info in metrics_cfg.get("lanes", {}).items():
-                poly_coords = l_info.get("polygon", [])
-                lane_dict[lane_id] = {
-                    "direction": l_info.get("direction", lane_id[0] if lane_id else "N"),
-                    "polygon": Polygon(poly_coords) if not isinstance(poly_coords, Polygon) else poly_coords,
-                }
-            self.lane_configs.append(lane_dict)
-            self.metrics_managers.append(LaneMetricsManager(lane_dict))
-
-            # Parse virtual counting gates
+            cfg = self.camera_configs[idx]
             if "gates" in cfg and isinstance(cfg["gates"], list):
                 for g_cfg in cfg["gates"]:
                     self.gate_manager.add_gate(VirtualGate(
@@ -301,14 +337,23 @@ class BatchedCameraPipeline:
         High-performance vectorized spatial lane assignment:
         Evaluates all tracked bounding box centroids against lane polygons using
         C-accelerated shapely.contains_xy to eliminate Python loop overhead.
+
+        NOTE: First-lane precedence (configuration insertion order) is a temporary
+        deterministic policy to prevent duplicate vehicle counting when polygons overlap,
+        not a substitute for calibration validation.
         """
+        metrics = self.metrics_managers[cam_idx]
+        metrics.reset()
+
         if tracked_objs is None or len(tracked_objs) == 0:
             return
 
         cxs = (tracked_objs[:, 0] + tracked_objs[:, 2]) * 0.5
         cys = (tracked_objs[:, 1] + tracked_objs[:, 3]) * 0.5
         lane_cfg = self.lane_configs[cam_idx]
-        metrics = self.metrics_managers[cam_idx]
+
+        assigned_indices = set()
+        assigned_track_ids = set()
 
         for lane_id, linfo in lane_cfg.items():
             poly = linfo["polygon"]
@@ -324,8 +369,17 @@ class BatchedCameraPipeline:
 
             inside_indices = np.where(inside_mask)[0]
             for idx in inside_indices:
+                if idx in assigned_indices:
+                    continue
+
                 obj = tracked_objs[idx]
                 track_id = int(obj[4])
+                if track_id in assigned_track_ids:
+                    continue
+
+                assigned_indices.add(idx)
+                assigned_track_ids.add(track_id)
+
                 cx, cy = float(cxs[idx]), float(cys[idx])
                 cls_id = int(obj[5]) if len(obj) >= 6 else self.default_car_cls
                 cls_name = self.class_names.get(cls_id, "car")
@@ -337,6 +391,9 @@ class BatchedCameraPipeline:
                     vehicle_class=cls_name,
                     is_queued=is_q,
                 )
+
+            if len(assigned_indices) == len(tracked_objs):
+                break
 
     def start(self) -> None:
         """Starts stream workers, background display, and MQTT publisher."""
@@ -555,7 +612,6 @@ class BatchedCameraPipeline:
                     combined_lanes = []
                     for m_mgr in self.metrics_managers:
                         combined_lanes.extend(m_mgr.snapshot())
-                        m_mgr.reset()
 
                     if combined_lanes:
                         telemetry = self.gate_manager.get_mqtt_telemetry()

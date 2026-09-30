@@ -58,6 +58,7 @@ class LaneMetricsManager:
                 }
         """
         self.lanes: dict[str, dict[str, Any]] = {}
+        self._tracks: dict[int, tuple[str, str, str]] = {}
         self._init_lanes(lane_config)
 
     def _init_lanes(self, lane_config: dict[str, dict[str, Any]]) -> None:
@@ -104,21 +105,23 @@ class LaneMetricsManager:
         if lane_id not in self.lanes:
             return
 
+        tid = int(track_id)
         category = classify_vehicle(vehicle_class)  # 'cars' or 'motorbike'
         state_key = "queued" if is_queued else "moving"
-        other_key = "moving" if is_queued else "queued"
+
+        # If track was previously registered in any lane/category/state, remove it first
+        if tid in self._tracks:
+            old_lane_id, old_category, old_state_key = self._tracks[tid]
+            if old_lane_id in self.lanes:
+                self.lanes[old_lane_id]["vehicles"][old_state_key][old_category].discard(tid)
 
         vehicles = self.lanes[lane_id]["vehicles"]
-
-        # If it was previously marked in the opposite state in this interval,
-        # update it to the latest detected state
-        if track_id in vehicles[other_key][category]:
-            vehicles[other_key][category].discard(track_id)
-
-        vehicles[state_key][category].add(int(track_id))
+        vehicles[state_key][category].add(tid)
+        self._tracks[tid] = (lane_id, category, state_key)
 
     def reset(self) -> None:
         """Reset internal vehicle counters for the next interval."""
+        self._tracks.clear()
         for lane_id in self.lanes:
             self.lanes[lane_id]["vehicles"] = self._empty_vehicle_state()
 

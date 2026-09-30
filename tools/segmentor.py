@@ -17,11 +17,17 @@ import math
 import os
 import shutil
 import sys
+import tempfile
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2 as cv
 import numpy as np
+
+# Add project root to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from trt_pipeline.lane_validation import validate_camera_lanes
 
 # Camera Approach Presets & Configuration Paths
 APPROACH_CONFIGS = {
@@ -131,28 +137,57 @@ def load_config_geometry(config_path: str) -> Tuple[Dict[str, Any], List[Dict[st
     if not os.path.exists(config_path):
         return {}, [], {}
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}, [], {}
 
-    lanes = copy.deepcopy(data.get("lane_metrics", {}).get("lanes", {}))
-    gates = copy.deepcopy(data.get("gates", []))
+    if not isinstance(data, dict):
+        return {}, [], {}
+
+    lm = data.get("lane_metrics")
+    lanes_raw = lm.get("lanes") if isinstance(lm, dict) else None
+    lanes = copy.deepcopy(lanes_raw) if isinstance(lanes_raw, dict) else {}
+    gates_raw = data.get("gates")
+    gates = copy.deepcopy(gates_raw) if isinstance(gates_raw, list) else []
     return lanes, gates, data
 
 
 def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Dict[str, Any]]) -> bool:
     """
     Saves calibrated lanes and gates back into the JSON config file.
-    Creates an automatic .bak backup of the original config.
+    Validates candidate geometry before modifying the destination or its backup.
+    Performs atomic file replacement using a temporary file in the destination directory.
     """
+    dest_name = os.path.basename(config_path)
+
+    # 1. Validate candidate lane geometry before touching existing files or creating backups
+    report = validate_camera_lanes(lanes, context=dest_name)
+    if report.warnings:
+        for w in report.warnings:
+            print(f"[WARNING] Calibration warning: {w.message}", file=sys.stderr)
+
+    if report.errors:
+        for err in report.errors:
+            target = f"Lane '{err.lane_id}'" if err.lane_id else "Config"
+            print(f"[ERROR] Cannot save invalid calibration for {config_path}: {target} - {err.reason}", file=sys.stderr)
+        return False
+
+    if not isinstance(gates, list):
+        print(f"[ERROR] Cannot save invalid calibration for {config_path}: 'gates' must be a list, got {type(gates).__name__}", file=sys.stderr)
+        return False
+
+    temp_path: Optional[str] = None
     try:
         raw_config: Dict[str, Any] = {}
         if os.path.exists(config_path):
-            backup_path = f"{config_path}.bak"
-            shutil.copy2(config_path, backup_path)
             with open(config_path, "r", encoding="utf-8") as f:
-                raw_config = json.load(f)
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    raw_config = loaded
 
-        if "lane_metrics" not in raw_config:
+        if not isinstance(raw_config.get("lane_metrics"), dict):
             raw_config["lane_metrics"] = {
                 "enabled": True,
                 "publish_interval_frames": 50,
@@ -165,15 +200,36 @@ def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Di
         raw_config["gates"] = gates
 
         # Ensure target directory exists
-        os.makedirs(os.path.dirname(os.path.abspath(config_path)), exist_ok=True)
+        dest_dir = os.path.dirname(os.path.abspath(config_path))
+        os.makedirs(dest_dir, exist_ok=True)
 
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(raw_config, f, indent=2)
+        # 2. Serialize to temporary file in the destination directory
+        prefix = f".tmp_{dest_name}_"
+        with tempfile.NamedTemporaryFile("w", dir=dest_dir, prefix=prefix, suffix=".tmp", delete=False, encoding="utf-8") as tf:
+            temp_path = tf.name
+            json.dump(raw_config, tf, indent=2)
+            tf.flush()
+            os.fsync(tf.fileno())
+
+        # 3. Create .bak backup only after temporary file is safely written and closed
+        if os.path.exists(config_path):
+            backup_path = f"{config_path}.bak"
+            shutil.copy2(config_path, backup_path)
+
+        # 4. Atomically replace destination
+        os.replace(temp_path, config_path)
+        temp_path = None
 
         return True
     except Exception as e:
         print(f"[ERROR] Failed to save config to {config_path}: {e}", file=sys.stderr)
         return False
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 
 class InteractiveCalibrator:
