@@ -142,6 +142,7 @@ Aggregated snapshots publish to `traffic/counts` every 2 seconds:
 - **[Hardware Benchmark Guide](docs/HARDWARE_BENCHMARK_GUIDE.md)**: Hardware profiling, latency stages, sizing evaluation, and telemetry export.
 - **[Lane Calibration Guide](docs/CALIBRATION_GUIDE.md)**: Perspective calibration guide for defining road lane boundaries.
 - **[Tracking Algorithms](algorithm/README.md)**: Details on SORT and OC-SORT tracker implementations.
+- **[Manual Labeling Guide](docs/MANUAL_LABELING_GUIDE.md)**: Hand-labeling workflow (frame selection, labeler UI, two-person sync, train and compare against the baseline). Partner instructions: [docs/MANUAL_LABELING_FRIEND.md](docs/MANUAL_LABELING_FRIEND.md).
 
 ## Repository Layout
 

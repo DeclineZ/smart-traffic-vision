@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traffic Labeler</title>
+<style>
+:root {
+  --bg: #111315; --panel: #1a1d20; --panel2: #22262a; --line: #2e3338; --text: #e4e6e8;
+  --muted: #8b9297; --accent: #e9b949; --ok: #4cc38a; --warn: #e9b949; --bad: #ef5b5b; --skip: #6b7680;
+  --c0: #4da3ff; --c1: #3ddc84; --c2: #ffa62b; --c3: #ff5c5c; --c4: #d17dff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+button:hover { border-color: #4a5158; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #2f6f4f; border-color: #3b8a62; }
+button.danger { background: #4a2326; border-color: #6b3035; }
+textarea, select, input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 7px; width: 100%; }
+textarea { resize: vertical; min-height: 54px; }
+kbd { font: 11px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--muted); }
+
+#app { display: grid; grid-template-rows: 44px 1fr; height: 100%; }
+header { display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--panel);
+  border-bottom: 1px solid var(--line); min-width: 0; }
+header .title { font-weight: 600; white-space: nowrap; }
+header .muted { color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--line); cursor: pointer; white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 4px 10px; }
+.seg button.on { background: var(--panel2); color: var(--accent); }
+#saveState { margin-left: auto; color: var(--muted); white-space: nowrap; }
+#saveState.dirty { color: var(--warn); }
+#saveState.err { color: var(--bad); }
+
+main { display: grid; grid-template-columns: 250px 1fr 290px; min-height: 0; }
+aside { background: var(--panel); min-height: 0; overflow: auto; }
+#left { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+#right { border-left: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+
+.prog { padding: 10px 10px 4px; display: grid; gap: 6px; }
+.prog .row { display: grid; grid-template-columns: 44px 1fr 60px; align-items: center; gap: 6px; font-size: 12px; }
+.bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--ok); }
+.filters { padding: 6px 10px 8px; display: grid; gap: 6px; border-bottom: 1px solid var(--line); }
+.filters .seg { width: 100%; }
+.filters .seg button { flex: 1; padding: 4px 4px; font-size: 12px; }
+#list { overflow: auto; flex: 1; }
+.item { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; padding: 6px 10px;
+  border-bottom: 1px solid #202427; cursor: pointer; }
+.item:hover { background: #1f2326; }
+.item.cur { background: #2a2f25; box-shadow: inset 3px 0 0 var(--accent); }
+.item .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dot.in_progress { background: var(--warn); } .dot.done { background: var(--ok); } .dot.skip { background: var(--skip); }
+.item .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .sub { color: var(--muted); font-size: 11px; }
+.badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--panel2); color: var(--muted);
+  border: 1px solid var(--line); text-transform: uppercase; letter-spacing: .03em; }
+.badge.val { color: #8fc7ff; } .badge.calib { color: var(--accent); } .badge.issue { color: var(--bad); border-color: #6b3035; }
+.badge.night { color: #b9a6ff; }
+
+#stage { position: relative; min-width: 0; min-height: 0; background: #0b0c0d; overflow: hidden; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#cv.pan { cursor: grab; } #cv.panning { cursor: grabbing; } #cv.move { cursor: move; }
+#hud { position: absolute; left: 8px; bottom: 8px; background: rgba(17,19,21,.85); border: 1px solid var(--line);
+  padding: 3px 8px; border-radius: 6px; color: var(--muted); font: 11px ui-monospace, Consolas, monospace; pointer-events: none; }
+#banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: rgba(17,19,21,.9);
+  border: 1px solid var(--line); padding: 4px 12px; border-radius: 6px; display: none; white-space: nowrap; }
+#empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+
+.card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 9px; display: grid; gap: 7px; }
+.card h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.classes { display: grid; gap: 4px; }
+.cls { display: grid; grid-template-columns: 18px 12px 1fr auto; align-items: center; gap: 7px; padding: 4px 7px;
+  border-radius: 6px; border: 1px solid transparent; cursor: pointer; background: var(--bg); text-align: left; }
+.cls.on { border-color: var(--accent); }
+.cls .sw { width: 12px; height: 12px; border-radius: 3px; }
+.cls .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.kv { display: flex; justify-content: space-between; gap: 8px; }
+.kv span:first-child { color: var(--muted); }
+.row2 { display: flex; gap: 6px; flex-wrap: wrap; }
+.row2 > button { flex: 1; }
+.note { color: var(--warn); font-size: 12px; }
+.status { font-weight: 600; text-transform: capitalize; }
+.status.done { color: var(--ok); } .status.in_progress { color: var(--warn); } .status.skip { color: var(--skip); }
+.review { border-left: 3px solid var(--ok); padding-left: 7px; font-size: 12px; }
+.review.issue { border-color: var(--bad); }
+.rules { font-size: 12px; color: #c3c8cc; display: grid; gap: 3px; }
+.rules b { color: var(--text); }
+
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center;
+  justify-content: center; z-index: 20; padding: 16px; }
+.overlay.show { display: flex; }
+.modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px;
+  width: min(720px, 100%); max-height: 90vh; overflow: auto; }
+.modal h2 { margin: 0 0 4px; font-size: 18px; }
+.who { display: grid; gap: 8px; margin-top: 14px; }
+.who button { display: flex; justify-content: space-between; padding: 12px 14px; font-size: 15px; }
+.help { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-top: 12px; }
+.help div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid #23272b; }
+.help h4 { grid-column: 1 / -1; margin: 12px 0 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--panel2);
+  border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; display: none; z-index: 30; }
+#toast.err { border-color: var(--bad); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="title">Traffic Labeler</span>
+    <span class="muted" id="packName"></span>
+    <span class="chip" id="userChip" title="Switch annotator">👤 <b id="userName">-</b></span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="label" class="on">Label my frames</button>
+      <button data-mode="review">Review partner</button>
+    </div>
+    <span id="saveState">-</span>
+    <button id="helpBtn" title="Shortcuts and rules (?)">? Help</button>
+  </header>
+  <main>
+    <aside id="left">
+      <div class="prog" id="prog"></div>
+      <div class="filters">
+        <div class="seg" id="filterSeg">
+          <button data-f="todo" class="on">To do</button>
+          <button data-f="done">Done</button>
+          <button data-f="flag">Flagged</button>
+          <button data-f="all">All</button>
+        </div>
+        <select id="splitSel">
+          <option value="all">All splits</option>
+          <option value="calib">Calibration (everyone)</option>
+          <option value="val">Validation</option>
+          <option value="train">Train</option>
+        </select>
+      </div>
+      <div id="list"></div>
+    </aside>
+    <section id="stage">
+      <canvas id="cv"></canvas>
+      <div id="empty">Pick a frame on the left.</div>
+      <div id="banner"></div>
+      <div id="hud"></div>
+    </section>
+    <aside id="right">
+      <div class="card">
+        <h3>Class <span style="float:right;text-transform:none;letter-spacing:0">keys 1-5</span></h3>
+        <div class="classes" id="classes"></div>
+      </div>
+      <div class="card" id="selCard">
+        <h3>Selected box</h3>
+        <div id="selInfo" class="muted">Nothing selected. Click a box, or drag on the image to draw one.</div>
+        <div class="row2" id="selBtns" style="display:none">
+          <button id="confirmBtn" title="Mark this pre-label as checked (C)">✓ Looks right <kbd>C</kbd></button>
+          <button id="delBtn" class="danger">Delete <kbd>Del</kbd></button>
+        </div>
+      </div>
+      <div class="card" id="frameCard" style="display:none">
+        <h3>Frame</h3>
+        <div id="frameInfo"></div>
+        <div class="row2" id="checkRow"></div>
+        <div class="row2" id="labelBtns">
+          <button id="doneBtn" class="primary" title="Ctrl+Enter">Done → next <kbd>Ctrl+⏎</kbd></button>
+        </div>
+        <div class="row2" id="labelBtns2">
+          <button id="skipBtn" title="Unusable frame: corrupted, frozen, camera moved">Skip frame</button>
+          <button id="resetBtn" title="Throw away my edits and start again from the machine boxes">Reset to pre-labels</button>
+        </div>
+        <textarea id="notes" placeholder="Notes for this frame (optional)"></textarea>
+      </div>
+      <div class="card" id="reviewCard" style="display:none">
+        <h3 id="reviewTitle">Review</h3>
+        <div id="reviewList"></div>
+        <div id="reviewForm" style="display:none; gap:6px" class="card">
+          <div class="row2">
+            <button id="revOk">👍 Looks good</button>
+            <button id="revIssue" class="danger">⚠ Needs fixes</button>
+          </div>
+          <textarea id="revComment" placeholder="What should be fixed? e.g. 'missed 3 parked cars top-left', 'red songthaew should be car'"></textarea>
+          <div class="row2"><button id="revSave" class="primary">Save review</button><button id="revClear">Clear</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Rules (short)</h3>
+        <div class="rules">
+          <div><b>Label every vehicle you can see</b>, parked and far away too.</div>
+          <div><b>car</b>: sedan, SUV, taxi, <b>pickup</b>, high-cage pickup, <b>van</b>, pickup songthaew</div>
+          <div><b>truck</b>: 6/10/18-wheeler, box truck, dump, mixer, truck-chassis songthaew</div>
+          <div><b>three_wheeler</b>: tuk-tuk, saleng</div>
+          <div><b>motorcycle</b>: box covers bike + rider(s)</div>
+          <div>Tight boxes. Occluded: box the visible part. Full rules in <kbd>?</kbd></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="overlay" id="login">
+  <div class="modal">
+    <h2>Who is labeling?</h2>
+    <div class="muted">Each person only gets their own frames, so two people never label the same image.
+      Your work is saved to <code>work/&lt;name&gt;/</code> inside the pack.</div>
+    <div class="who" id="whoList"></div>
+  </div>
+</div>
+
+<div class="overlay" id="help">
+  <div class="modal">
+    <h2>Shortcuts</h2>
+    <div class="help">
+      <h4>Boxes</h4>
+      <div><span>Draw a box</span><span>drag on the image</span></div>
+      <div><span>Select (click again to cycle overlaps)</span><span>click</span></div>
+      <div><span>Move selected</span><span>drag inside it</span></div>
+      <div><span>Resize selected</span><span>drag a handle</span></div>
+      <div><span>Set class / change selected</span><span><kbd>1</kbd>–<kbd>5</kbd></span></div>
+      <div><span>Delete selected</span><span><kbd>Del</kbd> <kbd>Backspace</kbd></span></div>
+      <div><span>Next / previous box</span><span><kbd>Tab</kbd> <kbd>Shift+Tab</kbd></span></div>
+      <div><span>Jump to next "?" box</span><span><kbd>N</kbd></span></div>
+      <div><span>"?" box looks right</span><span><kbd>C</kbd></span></div>
+      <div><span>Nudge selected (×10 with Shift)</span><span>arrows</span></div>
+      <div><span>Undo / redo</span><span><kbd>Ctrl+Z</kbd> <kbd>Ctrl+Y</kbd></span></div>
+      <div><span>Deselect / cancel</span><span><kbd>Esc</kbd></span></div>
+      <h4>View</h4>
+      <div><span>Zoom</span><span>mouse wheel</span></div>
+      <div><span>Pan</span><span>right/middle drag, or <kbd>Space</kbd>+drag</span></div>
+      <div><span>Fit to screen</span><span><kbd>F</kbd></span></div>
+      <div><span>Hide boxes (peek underneath)</span><span>hold <kbd>H</kbd></span></div>
+      <div><span>Toggle class tags</span><span><kbd>L</kbd></span></div>
+      <div><span>Brighten (night frames)</span><span><kbd>B</kbd></span></div>
+      <div><span>Toggle crosshair</span><span><kbd>X</kbd></span></div>
+      <h4>Frames</h4>
+      <div><span>Done → next frame</span><span><kbd>Ctrl+Enter</kbd></span></div>
+      <div><span>Previous / next in list</span><span><kbd>A</kbd> / <kbd>D</kbd></span></div>
+      <div><span>Save now (autosaves anyway)</span><span><kbd>Ctrl+S</kbd></span></div>
+      <div><span>This help</span><span><kbd>?</kbd></span></div>
+    </div>
+    <h2 style="margin-top:18px">Labeling rules</h2>
+    <div class="rules" style="font-size:13px; gap:6px">
+      <div>1. <b>Every vehicle you can recognise as a vehicle gets a box</b>: moving, queued, parked on the roadside or in a lot, far in the background. If you can tell it's a vehicle but not which kind, pick the most likely class (usually car). Skipping visible cars is the exact mistake we're fixing.</div>
+      <div>2. <b>car</b> (key 1): sedans, hatchbacks, taxis, SUVs/PPVs, <b>all 1-ton pickups</b> (Hilux, D-Max, Navara, Ranger, Triton), high-cage pickups (รถคอก), <b>passenger vans</b> (Commuter/HiAce), and <b>pickup-based songthaews</b> (red/blue/white songthaew built on a pickup).</div>
+      <div>3. <b>truck</b> (key 4): medium and heavy commercial trucks: 6-wheelers, 10-wheelers, 18-wheelers (one box for cab + trailer), box/delivery trucks with a separate cab, dump trucks, mixers, and songthaews built on a truck chassis (Isuzu Elf-type, dual rear wheels). <b>Rule of thumb: dual rear wheels or a separate box body = truck, pickup bed = car.</b></div>
+      <div>4. <b>bus</b> (key 3): city buses, coaches, minibuses with bus bodies. Passenger vans are car.</div>
+      <div>5. <b>motorcycle</b> (key 2): one box around bike + rider(s) + anything carried. Parked motorcycles count. Bicycles: no box.</div>
+      <div>6. <b>three_wheeler</b> (key 5): tuk-tuks and salengs (motorcycle with a sidecar/cargo bucket). The box covers the whole thing.</div>
+      <div>7. <b>Boxes are tight</b> around the visible part of the vehicle. Mostly hidden behind another vehicle: box what you can see if it's at least ~25% visible.</div>
+      <div>8. Dashed boxes with <b>?</b> are machine guesses the models disagreed on. Fix or confirm (<kbd>C</kbd>) each one. Solid boxes are still machine guesses: look at them all, and look for missing vehicles everywhere, especially small ones near the horizon and between big vehicles.</div>
+      <div>9. Ignore people, animals, bicycles, pushcarts and vehicles shown on billboards or reflections.</div>
+      <div>10. Bad frame (frozen, glitched, camera turned)? <b>Skip frame</b> with a note.</div>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="dialog">
+  <div class="modal" style="width:min(440px,100%)">
+    <h2 id="dlgTitle"></h2>
+    <div class="muted" id="dlgMsg" style="margin:6px 0 12px"></div>
+    <input id="dlgInput" style="display:none; margin-bottom:12px">
+    <div class="row2"><button id="dlgCancel">Cancel <kbd>Esc</kbd></button><button id="dlgOk" class="primary">OK <kbd>⏎</kbd></button></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const CLASS_NAMES = ["car", "motorcycle", "bus", "truck", "three_wheeler"];
+const SHORT = ["car", "moto", "bus", "truck", "3w"];
+const COLORS = ["#4da3ff", "#3ddc84", "#ffa62b", "#ff5c5c", "#d17dff"];
+const $ = (id) => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+
+const S = {
+  session: null, user: null, mode: "label", queue: [], filter: "todo", split: "all",
+  cur: null, boxes: [], sel: -1, hover: -1, curClass: 0, status: "todo", notes: "",
+  undo: [], redo: [], dirty: false, saving: false, saveTimer: null, readOnly: false,
+  img: null, imgCache: new Map(), view: { zoom: 1, x: 0, y: 0 }, fitZoom: 1,
+  show: { boxes: true, labels: true, bright: false, cross: true },
+  drag: null, mouse: { sx: 0, sy: 0, ix: 0, iy: 0, in: false }, space: false, cycleIdx: 0,
+};
+
+// ------------------------------------------------------------------ api
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+function toast(msg, err) {
+  const t = $("toast");
+  t.textContent = msg; t.className = err ? "err" : ""; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => (t.style.display = "none"), err ? 5000 : 2200);
+}
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// ------------------------------------------------------------------ session / user
+async function init() {
+  S.session = await api("/api/session");
+  $("packName").textContent = S.session.pack_id;
+  buildClassButtons();
+  const fromUrl = new URLSearchParams(location.search).get("user");
+  const saved = store.get("labeler.user");
+  const u = [fromUrl, saved].find((x) => x && S.session.annotators.includes(x));
+  if (u) await setUser(u); else showLogin();
+}
+function showLogin() {
+  const list = $("whoList"); list.innerHTML = "";
+  for (const a of S.session.annotators) {
+    const p = S.session.progress[a];
+    const b = document.createElement("button");
+    b.innerHTML = `<span>${a}</span><span class="muted">${p.done} / ${p.total} done</span>`;
+    b.onclick = () => { $("login").classList.remove("show"); setUser(a); };
+    list.appendChild(b);
+  }
+  $("login").classList.add("show");
+}
+async function setUser(u) {
+  if (S.dirty) await save();
+  S.user = u; store.set("labeler.user", u);
+  $("userName").textContent = u;
+  const url = new URL(location); url.searchParams.set("user", u); history.replaceState(null, "", url);
+  await loadQueue();
+  const last = store.get(`labeler.last.${u}.${S.mode}`);
+  const pick = S.queue.find((f) => f.id === last && S.mode === "label")
+    || S.queue.find((f) => f.status === "in_progress" || f.status === "todo") || S.queue[0];
+  if (pick) openFrame(pick.id, pick.owner); else clearStage();
+}
+async function setMode(m) {
+  if (S.dirty) await save();
+  S.mode = m;
+  for (const b of $("modeSeg").children) b.classList.toggle("on", b.dataset.mode === m);
+  S.filter = m === "review" ? "done" : "todo";
+  for (const b of $("filterSeg").children) b.classList.toggle("on", b.dataset.f === S.filter);
+  await loadQueue();
+  const pick = visibleQueue()[0];
+  if (pick) openFrame(pick.id, pick.owner); else clearStage();
+}
+
+// ------------------------------------------------------------------ queue / list
+async function loadQueue() {
+  const data = await api(`/api/queue?user=${S.user}&mode=${S.mode}`);
+  S.queue = data.frames;
+  renderList(); renderProgress();
+}
+function isFlagged(f) { return S.mode === "label" ? f.review_issue : f.my_review === "issue"; }
+function visibleQueue() {
+  return S.queue.filter((f) => {
+    if (S.split !== "all" && f.split !== S.split) return false;
+    if (S.filter === "todo") return S.mode === "label" ? (f.status === "todo" || f.status === "in_progress") : !f.my_review;
+    if (S.filter === "done") return S.mode === "label" ? (f.status === "done" || f.status === "skip") : f.status === "done";
+    if (S.filter === "flag") return isFlagged(f);
+    return true;
+  });
+}
+function renderProgress() {
+  const el = $("prog"); el.innerHTML = "";
+  if (S.mode === "review") {
+    const synced = S.queue.filter((f) => f.has_label_file).length;
+    const reviewed = S.queue.filter((f) => f.my_review).length;
+    el.innerHTML = `<div class="muted" style="font-size:12px">Partner frames synced into this pack: <b>${synced}</b> / ${S.queue.length}.
+      Reviewed by you: <b>${reviewed}</b>.<br>Only frames whose partner folder you copied in have boxes.</div>`;
+    return;
+  }
+  for (const split of ["calib", "val", "train"]) {
+    const fs = S.queue.filter((f) => f.split === split);
+    if (!fs.length) continue;
+    const done = fs.filter((f) => f.status === "done" || f.status === "skip").length;
+    const row = document.createElement("div"); row.className = "row";
+    row.innerHTML = `<span>${split}</span><div class="bar"><i style="width:${(100 * done / fs.length).toFixed(1)}%"></i></div>
+      <span class="muted" style="text-align:right">${done}/${fs.length}</span>`;
+    el.appendChild(row);
+  }
+}
+function renderList() {
+  const list = $("list"); list.innerHTML = "";
+  const vis = visibleQueue();
+  if (!vis.length) { list.innerHTML = `<div class="muted" style="padding:14px">Nothing here.</div>`; return; }
+  for (const f of vis) {
+    const d = document.createElement("div");
+    d.className = "item" + (S.cur && f.id === S.cur.frame.id && f.owner === S.cur.owner ? " cur" : "");
+    const cam = f.camera.replace(/_night$/, "");
+    const badges = [`<span class="badge ${f.split}">${f.split}</span>`];
+    if (f.night) badges.push(`<span class="badge night">night</span>`);
+    if (isFlagged(f)) badges.push(`<span class="badge issue">fix</span>`);
+    const who = S.mode === "review" ? ` · ${f.owner}${f.has_label_file ? "" : " (not synced)"}` : "";
+    d.innerHTML = `<span class="dot ${f.status}"></span>
+      <div class="name">${cam} <span class="sub">${f.id.split("_f").pop()}${who}</span><div>${badges.join(" ")}</div></div>
+      <span class="sub">${f.n_boxes ?? ""}</span>`;
+    d.onclick = () => openFrame(f.id, f.owner);
+    list.appendChild(d);
+  }
+  const cur = list.querySelector(".cur");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+function queueItem(id, owner) { return S.queue.find((f) => f.id === id && f.owner === owner); }
+
+// ------------------------------------------------------------------ frame load / save
+function loadImage(id) {
+  if (S.imgCache.has(id)) return S.imgCache.get(id);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error(`image ${id} failed to load`));
+    im.src = `/img/${id}.jpg`;
+  });
+  S.imgCache.set(id, p);
+  if (S.imgCache.size > 12) S.imgCache.delete(S.imgCache.keys().next().value);
+  return p;
+}
+async function openFrame(id, owner, opts = {}) {
+  if (S.dirty) await save();
+  owner = owner || S.user;
+  try {
+    const q = `/api/frame?id=${encodeURIComponent(id)}&user=${S.user}&owner=${owner}${opts.prelabel ? "&prelabel=1" : ""}`;
+    const [data, img] = await Promise.all([api(q), loadImage(id)]);
+    S.cur = data; S.img = img;
+    S.boxes = data.boxes.map((b) => ({ cls: b.cls, x1: b.xyxy[0], y1: b.xyxy[1], x2: b.xyxy[2], y2: b.xyxy[3],
+      check: !!b.check, note: b.note || "", conf: b.conf ?? null }));
+    S.status = data.status; S.notes = data.notes || "";
+    S.readOnly = owner !== S.user;
+    S.sel = -1; S.hover = -1; S.undo = []; S.redo = []; S.dirty = false;
+    if (opts.prelabel) { S.dirty = true; if (S.status === "todo") S.status = "in_progress"; scheduleSave(); }
+    if (S.mode === "label") store.set(`labeler.last.${S.user}.label`, id);
+    $("empty").style.display = "none";
+    fit(); render(); renderPanel(); renderList(); setSaveState();
+    const vis = visibleQueue(), i = vis.findIndex((f) => f.id === id);
+    if (vis[i + 1]) loadImage(vis[i + 1].id).catch(() => {});
+  } catch (e) { toast(e.message, true); }
+}
+function clearStage() {
+  S.cur = null; S.img = null; S.boxes = []; $("empty").style.display = "flex"; render(); renderPanel();
+}
+function payloadBoxes() {
+  return S.boxes.map((b) => ({ cls: b.cls, xyxy: [b.x1, b.y1, b.x2, b.y2], check: b.check, note: b.note }));
+}
+async function save(statusOverride) {
+  if (!S.cur || S.readOnly) return;
+  clearTimeout(S.saveTimer);
+  if (statusOverride) S.status = statusOverride;
+  const body = { id: S.cur.frame.id, user: S.user, status: S.status, notes: S.notes, boxes: payloadBoxes() };
+  S.saving = true; setSaveState();
+  try {
+    const r = await api("/api/save", body);
+    S.dirty = false;
+    const it = queueItem(body.id, S.user);
+    if (it) { it.status = body.status; it.n_boxes = r.n_boxes; it.has_label_file = true; }
+    renderProgress();
+  } catch (e) {
+    toast("Save failed: " + e.message, true);
+    S.saving = false; setSaveState(true); throw e;
+  }
+  S.saving = false; setSaveState();
+}
+function scheduleSave() { clearTimeout(S.saveTimer); S.saveTimer = setTimeout(() => save().catch(() => {}), 1200); }
+function setSaveState(err) {
+  const el = $("saveState");
+  el.className = err ? "err" : S.dirty ? "dirty" : "";
+  if (!S.cur) el.textContent = "-";
+  else if (S.readOnly) el.textContent = "read-only (partner's labels)";
+  else el.textContent = err ? "save failed - retrying on next change" : S.saving ? "saving…" : S.dirty ? "unsaved changes" : "all changes saved";
+}
+window.addEventListener("beforeunload", () => {
+  if (S.dirty && S.cur && !S.readOnly) {
+    const body = { id: S.cur.frame.id, user: S.user, status: S.status, notes: S.notes, boxes: payloadBoxes() };
+    navigator.sendBeacon("/api/save", new Blob([JSON.stringify(body)], { type: "application/json" }));
+  }
+});
+
+// ------------------------------------------------------------------ edits
+function snapshot() {
+  S.undo.push(JSON.stringify(S.boxes));
+  if (S.undo.length > 200) S.undo.shift();
+  S.redo = [];
+}
+function changed() {
+  S.dirty = true;
+  if (S.status === "todo") S.status = "in_progress";
+  setSaveState(); scheduleSave(); renderPanel(); render();
+}
+function undo() {
+  if (!S.undo.length) return;
+  S.redo.push(JSON.stringify(S.boxes)); S.boxes = JSON.parse(S.undo.pop()); S.sel = -1; changed();
+}
+function redo() {
+  if (!S.redo.length) return;
+  S.undo.push(JSON.stringify(S.boxes)); S.boxes = JSON.parse(S.redo.pop()); S.sel = -1; changed();
+}
+function setClass(c) {
+  S.curClass = c;
+  if (S.sel >= 0 && !S.readOnly) {
+    const b = S.boxes[S.sel];
+    snapshot(); b.cls = c; b.check = false; changed();
+  }
+  renderPanel();
+}
+function deleteSel() {
+  if (S.sel < 0 || S.readOnly) return;
+  snapshot(); S.boxes.splice(S.sel, 1); S.sel = -1; S.hover = -1; changed();
+}
+function confirmSel() {
+  if (S.sel < 0 || S.readOnly || !S.boxes[S.sel].check) return;
+  snapshot(); S.boxes[S.sel].check = false; changed();
+  nextCheck(true);
+}
+function nextCheck(quiet) {
+  const n = S.boxes.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (Math.max(S.sel, -1) + k) % n;
+    if (S.boxes[i].check) { S.sel = i; centerOn(S.boxes[i]); renderPanel(); render(); return; }
+  }
+  if (!quiet) toast("No '?' boxes left in this frame");
+}
+function cycleSel(dir) {
+  const n = S.boxes.length; if (!n) return;
+  S.sel = S.sel < 0 ? (dir > 0 ? 0 : n - 1) : (S.sel + dir + n) % n;
+  centerOn(S.boxes[S.sel], true); renderPanel(); render();
+}
+async function doneAndNext() {
+  if (!S.cur || S.readOnly) return;
+  const left = S.boxes.filter((b) => b.check).length;
+  if (left && !(await ask(`${left} box(es) still marked "?"`, "Treat them as correct and mark the frame done?", { ok: "Mark done" }))) return;
+  if (left) { snapshot(); S.boxes.forEach((b) => (b.check = false)); }
+  await save("done");
+  goNext(true);
+}
+async function toggleSkip() {
+  if (!S.cur || S.readOnly) return;
+  if (S.status === "skip") { await save("in_progress"); renderPanel(); renderList(); return; }
+  const why = await ask("Skip this frame?", "Skipped frames are left out of the dataset. Why? (frozen / glitched / camera moved / other)", { input: S.notes || "", ok: "Skip frame" });
+  if (why === null) return;
+  S.notes = why; $("notes").value = why;
+  await save("skip"); goNext(true);
+}
+async function resetToPrelabels() {
+  if (!S.cur || S.readOnly) return;
+  if (!(await ask("Reset to pre-labels?", "Your edits on this frame are thrown away and the machine boxes come back.", { ok: "Reset", danger: true }))) return;
+  await openFrame(S.cur.frame.id, S.user, { prelabel: true });
+}
+function goNext(onlyOpen) {
+  const order = S.cur ? S.cur.frame.order : -1;
+  const pool = onlyOpen && S.mode === "label"
+    ? S.queue.filter((f) => (f.status === "todo" || f.status === "in_progress") && (S.split === "all" || f.split === S.split))
+    : visibleQueue();
+  const next = pool.find((f) => f.order > order) || pool[0];
+  if (next && !(S.cur && next.id === S.cur.frame.id && next.owner === S.cur.owner)) openFrame(next.id, next.owner);
+  else { renderList(); renderPanel(); toast(onlyOpen ? "Nothing left to do in this list 🎉" : "End of list"); }
+}
+function goPrev() {
+  const vis = visibleQueue(); if (!vis.length) return;
+  const order = S.cur ? S.cur.frame.order : Infinity;
+  const prev = [...vis].reverse().find((f) => f.order < order) || vis[vis.length - 1];
+  openFrame(prev.id, prev.owner);
+}
+
+// ------------------------------------------------------------------ reviews
+async function saveReview(verdict) {
+  if (!S.cur || !S.readOnly) return;
+  try {
+    await api("/api/review", { id: S.cur.frame.id, owner: S.cur.owner, user: S.user, verdict, comment: $("revComment").value });
+    const it = queueItem(S.cur.frame.id, S.cur.owner); if (it) it.my_review = verdict;
+    S.cur.my_review = verdict ? { verdict, comment: $("revComment").value } : null;
+    toast(verdict ? "Review saved" : "Review cleared"); renderList(); renderPanel(); renderProgress();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ------------------------------------------------------------------ view math
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  render();
+}
+function cw() { return cv.clientWidth; } function ch() { return cv.clientHeight; }
+function fit() {
+  if (!S.img) return;
+  const z = Math.min(cw() / S.img.width, ch() / S.img.height);
+  S.fitZoom = z; S.view = { zoom: z, x: (cw() - S.img.width * z) / 2, y: (ch() - S.img.height * z) / 2 };
+}
+const toScreen = (ix, iy) => [S.view.x + ix * S.view.zoom, S.view.y + iy * S.view.zoom];
+const toImage = (sx, sy) => [(sx - S.view.x) / S.view.zoom, (sy - S.view.y) / S.view.zoom];
+function clampImg(v, max) { return Math.max(0, Math.min(max, v)); }
+function zoomAt(sx, sy, factor) {
+  const z = Math.max(S.fitZoom * 0.5, Math.min(40, S.view.zoom * factor));
+  const [ix, iy] = toImage(sx, sy);
+  S.view.zoom = z; S.view.x = sx - ix * z; S.view.y = sy - iy * z; render();
+}
+function centerOn(b, keepZoom) {
+  const bw = b.x2 - b.x1, bh = b.y2 - b.y1;
+  if (!keepZoom) {
+    const want = Math.min(cw() / (bw * 10), ch() / (bh * 10), 3.5);
+    if (want > S.view.zoom) S.view.zoom = want;
+  }
+  const z = S.view.zoom, cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
+  const [sx, sy] = toScreen(cx, cy);
+  if (keepZoom && sx > 40 && sx < cw() - 40 && sy > 40 && sy < ch() - 40) return;
+  S.view.x = cw() / 2 - cx * z; S.view.y = ch() / 2 - cy * z;
+}
+function boxesAt(ix, iy) {
+  const hits = [];
+  S.boxes.forEach((b, i) => { if (ix >= b.x1 && ix <= b.x2 && iy >= b.y1 && iy <= b.y2) hits.push(i); });
+  return hits.sort((a, b) => area(S.boxes[a]) - area(S.boxes[b]));
+}
+function area(b) { return (b.x2 - b.x1) * (b.y2 - b.y1); }
+const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+function handlePoints(b) {
+  const [x1, y1] = toScreen(b.x1, b.y1), [x2, y2] = toScreen(b.x2, b.y2), mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  return { nw: [x1, y1], n: [mx, y1], ne: [x2, y1], e: [x2, my], se: [x2, y2], s: [mx, y2], sw: [x1, y2], w: [x1, my] };
+}
+function handleAt(sx, sy) {
+  if (S.sel < 0) return null;
+  const pts = handlePoints(S.boxes[S.sel]);
+  for (const h of HANDLES) if (Math.abs(pts[h][0] - sx) <= 6 && Math.abs(pts[h][1] - sy) <= 6) return h;
+  return null;
+}
+
+// ------------------------------------------------------------------ render
+function render() {
+  ctx.clearRect(0, 0, cw(), ch());
+  if (!S.img) return;
+  const z = S.view.zoom;
+  ctx.save();
+  ctx.imageSmoothingEnabled = z < 3;
+  if (S.show.bright) ctx.filter = "brightness(1.8) contrast(1.15)";
+  ctx.drawImage(S.img, S.view.x, S.view.y, S.img.width * z, S.img.height * z);
+  ctx.restore();
+
+  if (S.show.boxes) {
+    const order = S.boxes.map((_, i) => i).filter((i) => i !== S.sel);
+    if (S.sel >= 0) order.push(S.sel);
+    ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "bottom";
+    for (const i of order) drawBox(S.boxes[i], i === S.sel, i === S.hover);
+  }
+  const d = S.drag;
+  if (d && d.type === "draw") {
+    const [x1, y1] = toScreen(Math.min(d.ix0, d.ix1), Math.min(d.iy0, d.iy1));
+    const [x2, y2] = toScreen(Math.max(d.ix0, d.ix1), Math.max(d.iy0, d.iy1));
+    ctx.save(); ctx.setLineDash([4, 3]); ctx.strokeStyle = COLORS[S.curClass]; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1); ctx.restore();
+  }
+  if (S.show.cross && S.mouse.in && !S.readOnly && (!d || d.type === "draw" || d.type === "pending")) {
+    ctx.save(); ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(S.mouse.sx + .5, 0); ctx.lineTo(S.mouse.sx + .5, ch());
+    ctx.moveTo(0, S.mouse.sy + .5); ctx.lineTo(cw(), S.mouse.sy + .5); ctx.stroke(); ctx.restore();
+  }
+  renderHud();
+}
+function drawBox(b, selected, hovered) {
+  const [x1, y1] = toScreen(b.x1, b.y1), [x2, y2] = toScreen(b.x2, b.y2);
+  const w = x2 - x1, h = y2 - y1, col = COLORS[b.cls];
+  ctx.save();
+  if (hovered || selected) { ctx.fillStyle = col + (selected ? "33" : "22"); ctx.fillRect(x1, y1, w, h); }
+  if (b.check) ctx.setLineDash([5, 3]);
+  ctx.strokeStyle = col; ctx.lineWidth = selected ? 2.5 : 1.5;
+  ctx.strokeRect(x1, y1, w, h);
+  ctx.setLineDash([]);
+  if (b.check) {  // "?" marker: always drawn, even on tiny boxes, so they are easy to spot
+    ctx.fillStyle = "#e9b949"; ctx.beginPath(); ctx.arc(x2, y1, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.font = "bold 10px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("?", x2, y1 + .5);
+  }
+  if (S.show.labels && (selected || hovered || (w > 22 && h > 14))) {
+    const t = SHORT[b.cls];
+    ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    const tw = ctx.measureText(t).width + 6;
+    ctx.fillStyle = col; ctx.fillRect(x1 - 0.75, y1 - 14, tw, 14);
+    ctx.fillStyle = "#0b0c0d"; ctx.fillText(t, x1 + 2.5, y1 - 1.5);
+  }
+  if (selected && !S.readOnly) {
+    const pts = handlePoints(b);
+    for (const k of HANDLES) {
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1;
+      ctx.fillRect(pts[k][0] - 3.5, pts[k][1] - 3.5, 7, 7); ctx.strokeRect(pts[k][0] - 3.5, pts[k][1] - 3.5, 7, 7);
+    }
+  }
+  ctx.restore();
+}
+function renderHud() {
+  const parts = [`${Math.round(S.view.zoom * 100)}%`];
+  if (S.mouse.in && S.img) parts.push(`x ${Math.round(S.mouse.ix)} y ${Math.round(S.mouse.iy)}`);
+  const d = S.drag;
+  if (d && d.type === "draw") parts.push(`new ${Math.round(Math.abs(d.ix1 - d.ix0))}×${Math.round(Math.abs(d.iy1 - d.iy0))} px`);
+  else if (S.sel >= 0 && S.boxes[S.sel]) { const b = S.boxes[S.sel]; parts.push(`sel ${Math.round(b.x2 - b.x1)}×${Math.round(b.y2 - b.y1)} px`); }
+  if (S.show.bright) parts.push("bright");
+  if (!S.show.boxes) parts.push("boxes hidden");
+  $("hud").textContent = parts.join("  ·  ");
+}
+
+// ------------------------------------------------------------------ side panel
+function buildClassButtons() {
+  const el = $("classes"); el.innerHTML = "";
+  CLASS_NAMES.forEach((name, i) => {
+    const b = document.createElement("button");
+    b.className = "cls"; b.dataset.c = i;
+    b.innerHTML = `<kbd>${i + 1}</kbd><span class="sw" style="background:${COLORS[i]}"></span><span>${name}</span><span class="n" id="cnt${i}">0</span>`;
+    b.onclick = () => setClass(i);
+    el.appendChild(b);
+  });
+}
+function renderPanel() {
+  const counts = [0, 0, 0, 0, 0];
+  S.boxes.forEach((b) => counts[b.cls]++);
+  CLASS_NAMES.forEach((_, i) => { $("cnt" + i).textContent = counts[i]; });
+  for (const b of $("classes").children) b.classList.toggle("on", +b.dataset.c === S.curClass);
+
+  const sel = S.sel >= 0 ? S.boxes[S.sel] : null;
+  $("selBtns").style.display = sel && !S.readOnly ? "flex" : "none";
+  if (sel) {
+    const w = Math.round(sel.x2 - sel.x1), h = Math.round(sel.y2 - sel.y1);
+    $("selInfo").innerHTML = `<div class="kv"><span>Class</span><b style="color:${COLORS[sel.cls]}">${CLASS_NAMES[sel.cls]}</b></div>
+      <div class="kv"><span>Size</span><span>${w} × ${h} px</span></div>
+      ${sel.conf != null ? `<div class="kv"><span>Model confidence</span><span>${sel.conf.toFixed(2)}</span></div>` : ""}
+      ${sel.check ? `<div class="note">? ${sel.note || "please check this box"}</div>` : ""}`;
+    $("confirmBtn").disabled = !sel.check;
+  } else {
+    $("selInfo").textContent = S.readOnly ? "Read-only: this is your partner's frame." : "Nothing selected. Click a box, or drag on the image to draw one.";
+  }
+
+  const f = S.cur && S.cur.frame;
+  $("frameCard").style.display = f ? "grid" : "none";
+  if (f) {
+    const checks = S.boxes.filter((b) => b.check).length;
+    $("frameInfo").innerHTML = `<div class="kv"><span>Frame</span><span>${f.camera} · ${f.id.split("_f").pop()}</span></div>
+      <div class="kv"><span>Split</span><span><span class="badge ${f.split}">${f.split}</span>${f.night ? ' <span class="badge night">night</span>' : ""}</span></div>
+      ${S.readOnly ? `<div class="kv"><span>Labeled by</span><b>${S.cur.owner}</b></div>` : ""}
+      <div class="kv"><span>Status</span><span class="status ${S.status}">${S.status.replace("_", " ")}</span></div>
+      <div class="kv"><span>Boxes</span><span>${S.boxes.length}${S.cur.source === "prelabel" && !S.dirty ? " (machine pre-labels)" : ""}</span></div>
+      ${f.split === "calib" ? `<div class="note">Calibration frame: everyone labels this one on their own. Don't compare before you're done.</div>` : ""}`;
+    $("checkRow").innerHTML = checks && !S.readOnly
+      ? `<button id="nextCheckBtn" style="flex:1">Next "?" box (${checks} left) <kbd>N</kbd></button>` : "";
+    if (checks && !S.readOnly) $("nextCheckBtn").onclick = () => nextCheck();
+    for (const id of ["labelBtns", "labelBtns2"]) $(id).style.display = S.readOnly ? "none" : "flex";
+    $("skipBtn").textContent = S.status === "skip" ? "Un-skip frame" : "Skip frame";
+    $("notes").readOnly = S.readOnly;
+    if (document.activeElement !== $("notes")) $("notes").value = S.notes;
+  }
+  renderReviews();
+  renderHud();
+}
+function renderReviews() {
+  const card = $("reviewCard");
+  if (!S.cur) { card.style.display = "none"; return; }
+  const revs = S.cur.reviews || [];
+  const list = revs.map((r) => `<div class="review ${r.verdict}"><b>${r.reviewer}</b>: ${r.verdict === "ok" ? "looks good" : "needs fixes"}
+      ${r.comment ? `<div>${escapeHtml(r.comment)}</div>` : ""}</div>`).join("");
+  if (S.readOnly) {
+    card.style.display = "grid";
+    $("reviewTitle").textContent = "Your review";
+    $("reviewList").innerHTML = list;
+    $("reviewForm").style.display = "grid";
+    const mine = S.cur.my_review;
+    if (document.activeElement !== $("revComment")) $("revComment").value = mine ? mine.comment || "" : "";
+    $("revOk").classList.toggle("primary", !!mine && mine.verdict === "ok");
+    $("revIssue").style.outline = mine && mine.verdict === "issue" ? "2px solid var(--bad)" : "";
+  } else {
+    card.style.display = revs.length ? "grid" : "none";
+    $("reviewTitle").textContent = "Partner review";
+    $("reviewList").innerHTML = list;
+    $("reviewForm").style.display = "none";
+  }
+}
+// in-page replacement for confirm()/prompt(): resolves true / the typed text, or null on cancel
+function ask(title, msg, opt = {}) {
+  return new Promise((resolve) => {
+    const dlg = $("dialog"), input = $("dlgInput"), ok = $("dlgOk");
+    $("dlgTitle").textContent = title; $("dlgMsg").textContent = msg;
+    ok.firstChild.textContent = (opt.ok || "OK") + " ";
+    ok.className = opt.danger ? "danger" : "primary";
+    const hasInput = opt.input !== undefined;
+    input.style.display = hasInput ? "block" : "none"; input.value = hasInput ? opt.input : "";
+    dlg.classList.add("show");
+    (hasInput ? input : ok).focus();
+    const done = (v) => { dlg.classList.remove("show"); document.removeEventListener("keydown", key, true); resolve(v); };
+    const key = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(null); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); done(hasInput ? input.value : true); }
+      else if (!hasInput) e.stopPropagation();
+    };
+    document.addEventListener("keydown", key, true);
+    ok.onclick = () => done(hasInput ? input.value : true);
+    $("dlgCancel").onclick = () => done(null);
+  });
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// ------------------------------------------------------------------ mouse
+function mousePos(e) {
+  const r = cv.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const [ix, iy] = toImage(sx, sy);
+  S.mouse = { sx, sy, ix, iy, in: true };
+  return S.mouse;
+}
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("mousedown", (e) => {
+  if (!S.img) return;
+  const m = mousePos(e);
+  if (e.button === 1 || e.button === 2 || (e.button === 0 && (S.space || S.readOnly))) {
+    S.drag = { type: "pan", sx: m.sx, sy: m.sy, vx: S.view.x, vy: S.view.y, moved: false, button: e.button };
+    cv.className = "panning"; e.preventDefault(); return;
+  }
+  if (e.button !== 0) return;
+  const h = handleAt(m.sx, m.sy);
+  if (h) {
+    S.drag = { type: "resize", h, orig: { ...S.boxes[S.sel] }, moved: false };
+    return;
+  }
+  const b = S.sel >= 0 ? S.boxes[S.sel] : null;
+  if (b && m.ix >= b.x1 && m.ix <= b.x2 && m.iy >= b.y1 && m.iy <= b.y2) {
+    S.drag = { type: "move", ix0: m.ix, iy0: m.iy, orig: { ...b }, moved: false, sx: m.sx, sy: m.sy };
+    return;
+  }
+  S.drag = { type: "pending", ix0: clampImg(m.ix, S.img.width), iy0: clampImg(m.iy, S.img.height), sx: m.sx, sy: m.sy };
+});
+window.addEventListener("mousemove", (e) => {
+  if (!S.img) return;
+  const m = mousePos(e);
+  const d = S.drag;
+  if (!d) {
+    const r = cv.getBoundingClientRect();
+    m.in = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!m.in) { render(); return; }
+    const hits = boxesAt(m.ix, m.iy);
+    S.hover = hits.length ? hits[0] : -1;
+    const h = handleAt(m.sx, m.sy);
+    const selB = S.sel >= 0 ? S.boxes[S.sel] : null;
+    const insideSel = selB && m.ix >= selB.x1 && m.ix <= selB.x2 && m.iy >= selB.y1 && m.iy <= selB.y2;
+    cv.style.cursor = S.space || S.readOnly ? "grab"
+      : h ? ({ nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize", n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize" })[h]
+      : insideSel ? "move" : "crosshair";
+    render(); return;
+  }
+  if (d.type === "pan") {
+    S.view.x = d.vx + (m.sx - d.sx); S.view.y = d.vy + (m.sy - d.sy);
+    if (Math.abs(m.sx - d.sx) + Math.abs(m.sy - d.sy) > 3) d.moved = true;
+  } else if (d.type === "pending") {
+    if (Math.abs(m.sx - d.sx) + Math.abs(m.sy - d.sy) > 3) {
+      d.type = "draw"; d.ix1 = clampImg(m.ix, S.img.width); d.iy1 = clampImg(m.iy, S.img.height);
+    }
+  } else if (d.type === "draw") {
+    d.ix1 = clampImg(m.ix, S.img.width); d.iy1 = clampImg(m.iy, S.img.height);
+  } else if (d.type === "move") {
+    if (!d.moved && Math.abs(m.sx - d.sx) + Math.abs(m.sy - d.sy) <= 3) return;
+    if (!d.moved) { snapshot(); d.moved = true; }
+    const b = S.boxes[S.sel], o = d.orig, W = S.img.width, H = S.img.height;
+    let dx = m.ix - d.ix0, dy = m.iy - d.iy0;
+    dx = Math.max(-o.x1, Math.min(W - o.x2, dx)); dy = Math.max(-o.y1, Math.min(H - o.y2, dy));
+    b.x1 = o.x1 + dx; b.x2 = o.x2 + dx; b.y1 = o.y1 + dy; b.y2 = o.y2 + dy;
+  } else if (d.type === "resize") {
+    if (!d.moved) { snapshot(); d.moved = true; }
+    const b = S.boxes[S.sel], o = d.orig, x = clampImg(m.ix, S.img.width), y = clampImg(m.iy, S.img.height);
+    Object.assign(b, { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2 });
+    if (d.h.includes("w")) b.x1 = x; if (d.h.includes("e")) b.x2 = x;
+    if (d.h.includes("n")) b.y1 = y; if (d.h.includes("s")) b.y2 = y;
+  }
+  render();
+});
+window.addEventListener("mouseup", (e) => {
+  const d = S.drag; if (!d) return;
+  S.drag = null; cv.className = "";
+  if (d.type === "draw") {
+    const x1 = Math.min(d.ix0, d.ix1), x2 = Math.max(d.ix0, d.ix1), y1 = Math.min(d.iy0, d.iy1), y2 = Math.max(d.iy0, d.iy1);
+    if (x2 - x1 >= 3 && y2 - y1 >= 3) {
+      snapshot();
+      S.boxes.push({ cls: S.curClass, x1, y1, x2, y2, check: false, note: "", conf: null });
+      S.sel = S.boxes.length - 1; changed();
+    }
+  } else if (d.type === "pending" || (d.type === "move" && !d.moved)) {
+    // plain click: select the smallest box under the cursor, clicking again cycles through overlaps
+    const hits = boxesAt(S.mouse.ix, S.mouse.iy);
+    if (!hits.length) S.sel = -1;
+    else { const k = hits.indexOf(S.sel); S.sel = k >= 0 ? hits[(k + 1) % hits.length] : hits[0]; }
+    renderPanel();
+  } else if ((d.type === "move" || d.type === "resize") && d.moved) {
+    const b = S.boxes[S.sel];
+    [b.x1, b.x2] = [Math.min(b.x1, b.x2), Math.max(b.x1, b.x2)];
+    [b.y1, b.y2] = [Math.min(b.y1, b.y2), Math.max(b.y1, b.y2)];
+    if (b.x2 - b.x1 < 2 || b.y2 - b.y1 < 2) Object.assign(b, d.orig);
+    b.check = false; changed();
+  } else if (d.type === "pan" && !d.moved && d.button === 0 && S.readOnly) {
+    const hits = boxesAt(S.mouse.ix, S.mouse.iy);
+    S.sel = hits.length ? hits[0] : -1; renderPanel();
+  }
+  render();
+});
+cv.addEventListener("mouseleave", () => { S.mouse.in = false; S.hover = -1; render(); });
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault(); if (!S.img) return;
+  const m = mousePos(e);
+  zoomAt(m.sx, m.sy, Math.pow(1.0015, -e.deltaY));
+}, { passive: false });
+
+// ------------------------------------------------------------------ keyboard
+document.addEventListener("keydown", (e) => {
+  const typing = ["TEXTAREA", "INPUT", "SELECT"].includes(e.target.tagName);
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key.toLowerCase() === "s") { e.preventDefault(); save().catch(() => {}); return; }
+  if (ctrl && e.key === "Enter") { e.preventDefault(); doneAndNext(); return; }
+  if (e.key === "Escape") {
+    if ($("help").classList.contains("show")) { $("help").classList.remove("show"); return; }
+    if (typing) { e.target.blur(); return; }
+    S.drag = null; S.sel = -1; renderPanel(); render(); return;
+  }
+  if (typing) return;
+  const k = e.key.toLowerCase();
+  if (ctrl && k === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if (ctrl && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); redo(); return; }
+  if (ctrl) return;
+  if (e.key >= "1" && e.key <= "5") { setClass(+e.key - 1); return; }
+  if (e.key === "?") { $("help").classList.toggle("show"); return; }
+  if (e.key === " ") { e.preventDefault(); if (!S.space) { S.space = true; cv.style.cursor = "grab"; } return; }
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); return; }
+  if (e.key === "Tab") { e.preventDefault(); cycleSel(e.shiftKey ? -1 : 1); return; }
+  if (e.key.startsWith("Arrow") && S.sel >= 0 && !S.readOnly) {
+    e.preventDefault();
+    const step = e.shiftKey ? 10 : 1, b = S.boxes[S.sel];
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    if (!e.repeat || !S.nudging) { snapshot(); S.nudging = true; }
+    const ddx = Math.max(-b.x1, Math.min(S.img.width - b.x2, dx)), ddy = Math.max(-b.y1, Math.min(S.img.height - b.y2, dy));
+    b.x1 += ddx; b.x2 += ddx; b.y1 += ddy; b.y2 += ddy; b.check = false; changed(); return;
+  }
+  switch (k) {
+    case "n": nextCheck(); break;
+    case "c": confirmSel(); break;
+    case "f": fit(); render(); break;
+    case "h": if (!e.repeat) { S.show.boxes = false; render(); } break;
+    case "l": S.show.labels = !S.show.labels; render(); break;
+    case "b": S.show.bright = !S.show.bright; render(); break;
+    case "x": S.show.cross = !S.show.cross; render(); break;
+    case "a": case "[": goPrev(); break;
+    case "d": case "]": goNext(false); break;
+  }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.key === " ") { S.space = false; cv.style.cursor = "crosshair"; }
+  if (e.key.toLowerCase() === "h") { S.show.boxes = true; render(); }
+  if (e.key.startsWith("Arrow")) S.nudging = false;
+});
+
+// ------------------------------------------------------------------ wiring
+$("userChip").onclick = async () => { if (S.dirty) await save(); S.session = await api("/api/session"); showLogin(); };
+for (const b of $("modeSeg").children) b.onclick = () => setMode(b.dataset.mode);
+for (const b of $("filterSeg").children) b.onclick = () => {
+  S.filter = b.dataset.f;
+  for (const x of $("filterSeg").children) x.classList.toggle("on", x === b);
+  renderList();
+};
+$("splitSel").onchange = (e) => { S.split = e.target.value; renderList(); };
+$("helpBtn").onclick = () => $("help").classList.add("show");
+$("help").onclick = (e) => { if (e.target.id === "help") $("help").classList.remove("show"); };
+$("confirmBtn").onclick = confirmSel;
+$("delBtn").onclick = deleteSel;
+$("doneBtn").onclick = doneAndNext;
+$("skipBtn").onclick = toggleSkip;
+$("resetBtn").onclick = resetToPrelabels;
+$("notes").addEventListener("input", (e) => { S.notes = e.target.value; S.dirty = true; setSaveState(); scheduleSave(); });
+$("revOk").onclick = () => saveReview("ok");
+$("revIssue").onclick = () => saveReview("issue");
+$("revSave").onclick = () => saveReview(S.cur && S.cur.my_review ? S.cur.my_review.verdict : "issue");
+$("revClear").onclick = () => { $("revComment").value = ""; saveReview(null); };
+new ResizeObserver(() => { const keep = S.img && Math.abs(S.view.zoom - S.fitZoom) < 1e-6; resize(); if (keep) { fit(); render(); } }).observe($("stage"));
+init().catch((e) => toast("Could not reach the labeling server: " + e.message, true));
+</script>
+</body>
+</html>
