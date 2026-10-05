@@ -84,3 +84,33 @@ python -m tools.validate_calibration --configs config/config_north.json config/c
 - **Errors** (e.g. self-intersecting lines, duplicate points with zero area, non-finite coordinates) prevent the runner from starting and must be corrected.
 - **Warnings** report positive-area overlaps between lanes in the same camera that require operator review. Overlaps do not prevent saving or execution, but indicate calibration that should be checked against physical lane markings.
 
+## Measurement conventions the polygons must match
+
+- **Lane membership uses the road-contact point**: the bottom-centre of each vehicle box (`lane_metrics.anchor: "bottom_center"`, the default). Draw lanes on the road surface where tyres touch, extending to the stop line. A polygon drawn around vehicle bodies misses vehicles whose bottom edge falls outside it. Polygons calibrated with the older box-centre convention can be kept temporarily with `"anchor": "center"`, but redraw them.
+- **Overlaps**: a vehicle counts in the first lane (configuration order) whose polygon contains its point. The validator warns about every positive-area overlap; remove them unless deliberate.
+- **Range**: end lanes where vehicles are still large enough to detect reliably. A lane reaching the vanishing point reports a lower bound there.
+- **Gates** need an explicit approach, `"target_dir": "N" | "S" | "E" | "W"` (the approach whose traffic the gate measures), and an ID unique across all cameras. The segmentor fills `target_dir` from the gate ID (`GATE_N_STOPLINE` → `N`) or the camera's approach, and refuses to save gates without one.
+- **Camera IDs** (`camera_info.camera_id`) must be registered in the controller's `cameras` table (INT-001 uses `INT-001-CAM-N/S/E/W/NE`, see smart-traffic-sys migration 012). Lane IDs must be listed in the intersection's `topology.lanes`.
+
+## Revisions, reference frames and rollback
+
+Each save from the segmentor:
+
+1. validates lanes and gates; nothing is written if they are invalid;
+2. records `calibration.revision`, `saved_by` (set `CALIBRATION_OPERATOR` to your name), `saved_at`, the frame `resolution` and a `reference_image` (the frame you calibrated on, in `config/reference/`);
+3. archives the saved file under `config/history/<config name>/<revision>.json`, and keeps the previous file as `.bak`.
+
+The runner reads these at startup:
+
+- frames whose resolution differs from `calibration.resolution` are not used, and the camera is reported `resolution_mismatch`;
+- every 30 s the live view is matched to the reference image (ORB features with a RANSAC fit, so passing vehicles are ignored). A shift of more than 12 px in three consecutive checks marks the camera `camera_shifted`, and its lanes become invalid until the view is restored or the camera is recalibrated. On the recordings the measured shift of the fixed cameras stayed within 4.2 px. A night view rarely matches a daytime reference, so the check is inconclusive (never flagged) at night; add a night reference if night shift detection is needed.
+
+Calibrate from a live frame at commissioning so the reference matches the installed camera. The current reference images were taken from the recordings.
+
+```bash
+.venv\Scripts\python.exe -m tools.calibration_history list config/config_north.json
+.venv\Scripts\python.exe -m tools.calibration_history restore config/config_north.json <revision>
+```
+
+A restore validates the archived revision before replacing the config. **Restart the runner after any save or restore**: calibration is read only at startup, and the revision in use is published in each payload (`cameras[].calibrationRevision`).
+

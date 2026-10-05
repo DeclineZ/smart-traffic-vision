@@ -1,233 +1,388 @@
 """
-Unit tests for Batch 1: Correct current lane occupancy and prevent duplicate vehicle counting.
-Tests runner-level and evaluation-level behaviors with synthetic inputs.
-No GPU, cameras, or live MQTT brokers required.
+Runner-level lane occupancy and payload behaviour, exercised through the real
+BatchedCameraPipeline with fake sources/model/publisher (no GPU, camera or broker).
 """
 
 import os
+import shutil
 import sys
+import time
 import unittest
-from unittest.mock import MagicMock
-import numpy as np
-from shapely.geometry import Polygon
+from unittest.mock import patch
 
-# Ensure project root is in sys.path
+import numpy as np
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from run_multi_camera import BatchedCameraPipeline
-from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
-from trt_pipeline.gates import GateFlowManager
+from tests.helpers import SQUARE, FakeModel, FakePublisher, make_pipeline, tmpdir
 
 
-class TestLaneOccupancyRunner(unittest.TestCase):
+def box(x, y, w=20, h=20, conf=0.9, cls=0):
+    """Detection whose bottom-centre (road contact point) is at (x, y)."""
+    return [x - w / 2, y - h, x + w / 2, y, conf, cls]
+
+
+class ScriptedModel(FakeModel):
+    """Detections chosen by the current scenario dict: cam index -> list of boxes."""
+
+    def __init__(self):
+        super().__init__()
+        self.scene = {}
+        self.order = []
+
+    def __call__(self, frames, **kwargs):
+        self.calls.append(len(frames))
+        out = []
+        from tests.helpers import FakeResult
+        for i in range(len(frames)):
+            cam = self.order[i] if i < len(self.order) else 0
+            out.append(FakeResult(np.array(self.scene.get(cam, []), dtype=float).reshape(-1, 6)))
+        return out
+
+
+class RunnerTestBase(unittest.TestCase):
     def setUp(self):
-        self.pipeline = BatchedCameraPipeline.__new__(BatchedCameraPipeline)
-        self.pipeline.num_streams = 1
-        self.pipeline.camera_names = ["cam_north"]
-        self.pipeline.skip_frames = 1
-        self.pipeline.is_file_mode = False
-        self.pipeline.default_car_cls = 0
-        self.pipeline.class_names = {0: "car", 1: "motorcycle", 2: "bus", 3: "truck", 4: "three_wheeler"}
-        self.pipeline.queue_speed_thresholds = [2.0]
-        self.pipeline.track_histories = [{}]
+        self.dir = tmpdir()
+        self.model = ScriptedModel()
+        self.pub = FakePublisher()
 
-        # Standard polygon: [0, 0] to [100, 100]
-        self.lanes = {
-            "N1": {
-                "direction": "N",
-                "polygon": Polygon([(0, 0), (100, 0), (100, 100), (0, 100)]),
-            }
-        }
-        self.pipeline.lane_configs = [self.lanes]
-        self.pipeline.metrics_managers = [LaneMetricsManager(self.lanes)]
-        self.pipeline.last_tracked = [np.empty((0, 6))]
-        self.pipeline.gate_manager = GateFlowManager(camera_names=["cam_north"])
-        self.pipeline.publisher = MagicMock()
-        self.pipeline.payload_builder = PayloadBuilder("INT-001", "MULTI-CAM")
-        self.pipeline.pub_interval = 2.0
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def pipeline(self, cameras, **kw):
+        p, sources = make_pipeline(self.dir, cameras, model=self.model, publisher=self.pub, **kw)
+        for cam in p.cams:
+            cam.tracker.min_hits = 1  # confirm tracks on first sight so single-frame scenarios are observable
+        return p, sources
+
+    def frame(self, p, sources, t, cams=None, **push_kw):
+        cams = list(range(len(sources))) if cams is None else cams
+        for c in cams:
+            sources[c].push(obs_t=t, **push_kw)
+        self.model.order = cams
+        p.step()
+
+    @staticmethod
+    def lane(payload, lane_id):
+        return next(l for l in payload["lanes"] if l["laneId"] == lane_id)
+
+
+class TestLaneOccupancy(RunnerTestBase):
+    def one_cam(self, **kw):
+        return self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}}}, **kw)
 
     def test_nonempty_then_empty_evaluation_clears_occupancy(self):
-        # Frame 0: 1 car in N1
-        tracked_objs = np.array([[10, 10, 30, 30, 101, 0]], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs, frame_idx=0)
-        snap0 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap0[0]["count"], 1)
-
-        # Frame 1: Empty frame (0 tracks)
-        empty_tracked = np.empty((0, 6), dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, empty_tracked, frame_idx=1)
-        snap1 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap1[0]["count"], 0)
-        self.assertEqual(snap1[0]["queuedCount"], 0)
-        self.assertEqual(snap1[0]["movingCount"], 0)
-        self.assertEqual(snap1[0]["vehicles"]["queued"]["cars"], 0)
-        self.assertEqual(snap1[0]["vehicles"]["moving"]["cars"], 0)
-
-        # Frame 2: Non-empty again, then None frame
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs, frame_idx=2)
-        self.assertEqual(self.pipeline.metrics_managers[0].snapshot()[0]["count"], 1)
-        self.pipeline._evaluate_vectorized_lanes(0, None, frame_idx=3)
-        snap3 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap3[0]["count"], 0)
+        p, s = self.one_cam()
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 1)
+        self.model.scene = {0: []}
+        self.frame(p, s, 0.1)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 0)
 
     def test_track_moves_outside_polygons_disappears(self):
-        # Frame 0: track inside polygon (centroid at 20, 20)
-        tracked_objs_inside = np.array([[10, 10, 30, 30, 101, 0]], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs_inside, frame_idx=0)
-        self.assertEqual(self.pipeline.metrics_managers[0].snapshot()[0]["count"], 1)
+        p, s = self.one_cam()
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        self.model.scene = {0: [box(52, 99), ]}
+        self.frame(p, s, 0.1)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 1)
+        self.model.scene = {0: [box(55, 160)]}  # contact point now below the lane
+        self.frame(p, s, 0.2)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 0)
 
-        # Frame 1: track moves outside polygon (centroid at 510, 510)
-        tracked_objs_outside = np.array([[500, 500, 520, 520, 101, 0]], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs_outside, frame_idx=1)
-        snap1 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap1[0]["count"], 0)
+    def test_overlapping_polygons_first_lane_wins_and_count_once(self):
+        p, s = self.pipeline({"north": {"lanes": {
+            "N1": {"direction": "N", "polygon": [[0, 0], [60, 0], [60, 100], [0, 100]]},
+            "N2": {"direction": "N", "polygon": [[40, 0], [100, 0], [100, 100], [40, 100]]},
+        }}})
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        snap = {l["laneId"]: l["count"] for l in p.cams[0].metrics.snapshot()}
+        self.assertEqual(snap, {"N1": 1, "N2": 0})
 
-    def test_successive_evaluations_different_ids(self):
-        # Frame 0: IDs 101 and 102
-        frame0_tracks = np.array([
-            [10, 10, 30, 30, 101, 0],
-            [40, 40, 60, 60, 102, 0],
-        ], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, frame0_tracks, frame_idx=0)
-        snap0 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap0[0]["count"], 2)
+    def test_boundary_point_is_counted(self):
+        p, s = self.one_cam()
+        self.model.scene = {0: [box(50, 100)]}  # contact point exactly on the bottom edge
+        self.frame(p, s, 0.0)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 1)
 
-        # Frame 1: IDs 201 and 202 (completely new IDs)
-        frame1_tracks = np.array([
-            [20, 20, 40, 40, 201, 0],
-            [50, 50, 70, 70, 202, 0],
-        ], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, frame1_tracks, frame_idx=1)
-        snap1 = self.pipeline.metrics_managers[0].snapshot()
-        self.assertEqual(snap1[0]["count"], 2)
+    def test_bottom_centre_anchor_vs_centre(self):
+        # Box centre inside the lane but road contact point outside: not in the lane by default.
+        lanes = {"N1": {"direction": "N", "polygon": [[0, 0], [100, 0], [100, 60], [0, 60]]}}
+        p, s = self.pipeline({"north": {"lanes": lanes}})
+        self.model.scene = {0: [box(50, 80, h=40)]}  # centre y=60..., bottom y=80
+        self.frame(p, s, 0.0)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 0)
 
-        vehicles = self.pipeline.metrics_managers[0].lanes["N1"]["vehicles"]
-        active_ids = vehicles["queued"]["cars"] | vehicles["moving"]["cars"]
-        self.assertEqual(active_ids, {201, 202})
-        self.assertNotIn(101, active_ids)
-        self.assertNotIn(102, active_ids)
+        p2, s2 = self.pipeline({"north": {"lanes": lanes, "extra": {}}})
+        p2.cams[0].anchor = "center"
+        self.frame(p2, s2, 0.0)
+        self.assertEqual(p2.cams[0].metrics.snapshot()[0]["count"], 1)
 
-    def test_overlapping_polygons_first_lane_precedence_and_single_is_queued(self):
-        overlap_lanes = {
-            "LaneA": {
-                "direction": "N",
-                "polygon": Polygon([(0, 0), (100, 0), (100, 100), (0, 100)]),
-            },
-            "LaneB": {
-                "direction": "N",
-                "polygon": Polygon([(50, 0), (150, 0), (150, 100), (50, 100)]),
-            },
-        }
-        self.pipeline.lane_configs = [overlap_lanes]
-        self.pipeline.metrics_managers = [LaneMetricsManager(overlap_lanes)]
-
-        # Track centroid at (70, 50), which is inside LaneA (0..100) AND LaneB (50..150)
-        tracked_objs = np.array([[60, 40, 80, 60, 55, 0]], dtype=float)
-
-        is_queued_calls = []
-        original_is_queued = self.pipeline._is_queued
-
-        def spy_is_queued(cam_idx, track_id, pt, frame_idx):
-            is_queued_calls.append((cam_idx, track_id, pt, frame_idx))
-            return original_is_queued(cam_idx, track_id, pt, frame_idx)
-
-        self.pipeline._is_queued = spy_is_queued
-
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs, frame_idx=0)
-        snap = self.pipeline.metrics_managers[0].snapshot()
-
-        lane_a = next(l for l in snap if l["laneId"] == "LaneA")
-        lane_b = next(l for l in snap if l["laneId"] == "LaneB")
-
-        # Must be assigned to LaneA (first in config order), not LaneB
-        self.assertEqual(lane_a["count"], 1)
-        self.assertEqual(lane_b["count"], 0)
-        self.assertEqual(sum(l["count"] for l in snap), 1)
-
-        # _is_queued must be called exactly once
-        self.assertEqual(len(is_queued_calls), 1)
-        self.assertEqual(is_queued_calls[0][1], 55)
-
-    def test_repeated_held_boxes_do_not_accumulate(self):
-        # Frame 0: inference frame
-        tracked_objs = np.array([[10, 10, 30, 30, 10, 0]], dtype=float)
-        self.pipeline._evaluate_vectorized_lanes(0, tracked_objs, frame_idx=0)
-        self.assertEqual(self.pipeline.metrics_managers[0].snapshot()[0]["count"], 1)
-
-        # Frames 1-3: skipped frames holding the same tracked_objs
-        for f in range(1, 4):
-            self.pipeline._evaluate_vectorized_lanes(0, tracked_objs, frame_idx=f)
-            snap = self.pipeline.metrics_managers[0].snapshot()
-            self.assertEqual(snap[0]["count"], 1)
+    def test_skipped_frames_do_not_update_occupancy_or_motion(self):
+        p, s = self.one_cam(skip_frames=1)
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)  # inferred
+        self.assertEqual(len(self.model.calls), 1)
+        tid = next(iter(p.cams[0].motion._tracks))
+        hist_before = len(p.cams[0].motion._tracks[tid].samples)
+        self.frame(p, s, 0.04)  # skipped: no inference, no new motion sample
+        self.assertEqual(len(self.model.calls), 1)
+        self.assertEqual(len(p.cams[0].motion._tracks[tid].samples), hist_before)
+        self.assertEqual(p.cams[0].metrics.snapshot()[0]["count"], 1)
 
     def test_publication_does_not_consume_occupancy(self):
-        """
-        Executes BatchedCameraPipeline.run() through its actual production publication branch.
-        Stubs external capture, model/tracker outputs, and publisher while keeping real
-        lane evaluation, metrics aggregation, and payload construction.
-        Stops deterministically immediately on publication, before subsequent frames can run,
-        verifying that publication does not reset or consume evaluated lane occupancy.
-        """
-        self.pipeline.skip_frames = 0
-        self.pipeline.is_file_mode = False
-        self.pipeline.target_classes = None
-        self.pipeline.device = "cpu"
-        self.pipeline.conf = 0.20
-        self.pipeline.imgsz = 640
-        self.pipeline.total_inferred_batches = 0
-        self.pipeline.total_skipped_batches = 0
-        self.pipeline.total_processed_batches = 0
-        self.pipeline.tracker_type = "byetrack"
+        p, s = self.one_cam()
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        payload = p.publish_once()
+        lane = self.lane(payload, "N1")
+        self.assertEqual(lane["count"], 1)
+        self.assertEqual(lane["unknownStateCount"], 1)  # no motion history yet
+        retained = p.cams[0].metrics.snapshot()[0]
+        self.assertEqual(retained["count"], 1)
+        payload2 = p.publish_once()
+        self.assertEqual(self.lane(payload2, "N1")["count"], 1)
 
-        # Pub interval 0.0 ensures publication branch executes on the first batch
-        self.pipeline.pub_interval = 0.0
+    def test_tracker_class_is_used_not_nearest_neighbour(self):
+        # Two overlapping detections of different classes; each track must keep its own class.
+        p, s = self.one_cam(enable_voting=False)
+        self.model.scene = {0: [box(40, 50, cls=0), box(60, 50, cls=1)]}
+        for i in range(3):
+            self.frame(p, s, i * 0.1)
+        classes = p.cams[0].metrics.snapshot()[0]["classes"]
+        self.assertEqual(classes["car"], 1)
+        self.assertEqual(classes["motorcycle"], 1)
 
-        # Stub stream worker supplying dummy frames
-        worker = MagicMock()
-        worker.get_frame.return_value = (0, np.zeros((100, 100, 3), dtype=np.uint8))
-        self.pipeline.stream_workers = [worker]
-        self.pipeline.file_caps = []
-        self.pipeline.display_worker = None
 
-        # Stub model forward pass to return empty boxes (avoiding torch/GPU dependency)
-        self.pipeline.model = MagicMock(return_value=[MagicMock(boxes=[])])
+class TestQueueStatesThroughRunner(RunnerTestBase):
+    def test_stopped_vehicle_becomes_queued_moving_vehicle_moving(self):
+        p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": [[0, 0], [1000, 0], [1000, 1000], [0, 1000]]}}}})
+        for i in range(40):
+            t = i * 0.1
+            self.model.scene = {0: [box(100, 500), box(300 + 40 * t, 500)]}  # 2nd: 2 box-heights/s
+            self.frame(p, s, t)
+        lane = p.cams[0].metrics.snapshot()[0]
+        self.assertEqual(lane["queuedCount"], 1)
+        self.assertEqual(lane["movingCount"], 1)
 
-        # Stub tracker to return 1 vehicle inside lane N1 (centroid at 20, 20), ID 101, class 0 (car)
-        tracker = MagicMock()
-        tracker.update.return_value = np.array([[10.0, 10.0, 30.0, 30.0, 101, 0]], dtype=float)
-        self.pipeline.trackers = [tracker]
-        from trt_pipeline.voter import TrackClassVotingFilter
-        self.pipeline.class_voter = TrackClassVotingFilter(num_streams=1)
 
-        # Publisher spy that captures the payload and stops the pipeline immediately
-        published_payloads = []
+class TestCameraIndependence(RunnerTestBase):
+    def two_cams(self, **kw):
+        return self.pipeline({
+            "north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}},
+            "south": {"lanes": {"S1": {"direction": "S", "polygon": SQUARE}}},
+        }, **kw)
 
-        def spy_publish(payload):
-            published_payloads.append(payload)
-            # Stop immediately on publication, before another lane evaluation can run
-            self.pipeline.running = False
+    def test_missing_camera_does_not_block_healthy_camera(self):
+        p, s = self.two_cams(max_observation_age_s=0.5)
+        self.model.scene = {0: [box(50, 50)], 1: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        # south goes silent; north keeps delivering
+        for i in range(1, 4):
+            self.frame(p, s, i * 0.1, cams=[0])
+        p.cams[1].last_obs_wall = time.time() - 5  # south's last observation is old
+        p.cams[1].last_obs_mono = time.monotonic() - 5
+        payload = p.publish_once()
+        n1, s1 = self.lane(payload, "N1"), self.lane(payload, "S1")
+        self.assertTrue(n1["valid"])
+        self.assertEqual(n1["count"], 1)
+        self.assertFalse(s1["valid"])
+        self.assertIsNone(s1["count"])  # unknown, never zero
+        self.assertIsNone(s1["queuedCount"])
+        cams = {c["name"]: c["status"] for c in payload["cameras"]}
+        self.assertEqual(cams, {"north": "ok", "south": "stale"})
 
-        self.pipeline.publisher = MagicMock()
-        self.pipeline.publisher.publish.side_effect = spy_publish
+    def test_camera_never_seen_is_invalid(self):
+        p, s = self.two_cams()
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0, cams=[0])
+        payload = p.publish_once()
+        self.assertFalse(self.lane(payload, "S1")["valid"])
+        self.assertEqual(self.lane(payload, "S1")["invalidReason"], "starting")
 
-        # Execute production run() loop
-        self.pipeline.run()
+    def test_stale_frame_is_not_processed(self):
+        p, s = self.two_cams(max_frame_age_s=0.5)
+        s[0].push(obs_t=0.0, captured_wall=time.time() - 3)
+        p.step()
+        self.assertEqual(self.model.calls, [])
+        self.assertEqual(p.cams[0].stale_frames_dropped, 1)
 
-        # Verify publication branch executed exactly once
-        self.assertEqual(len(published_payloads), 1)
-        pub_lanes = published_payloads[0]["lanes"]
-        n1_pub = next(l for l in pub_lanes if l["laneId"] == "N1")
-        self.assertEqual(n1_pub["count"], 1)
-        self.assertEqual(n1_pub["movingCount"], 1)
-        self.assertEqual(n1_pub["vehicles"]["moving"]["cars"], 1)
+    def test_resolution_mismatch_invalidates_camera(self):
+        p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}},
+                                        "extra": {"calibration": {"resolution": [1920, 1080]}}}})
+        self.frame(p, s, 0.0)  # fake frames are 100x100
+        self.assertEqual(self.model.calls, [])
+        payload = p.publish_once()
+        self.assertFalse(self.lane(payload, "N1")["valid"])
+        self.assertEqual(payload["cameras"][0]["reason"], "resolution_mismatch")
 
-        # Verify that the metrics manager retained occupancy and was NOT reset by publication
-        retained_snapshot = self.pipeline.metrics_managers[0].snapshot()
-        n1_retained = next(l for l in retained_snapshot if l["laneId"] == "N1")
-        self.assertEqual(n1_retained["count"], 1)
-        self.assertEqual(n1_retained["movingCount"], 1)
-        self.assertEqual(n1_retained["vehicles"]["moving"]["cars"], 1)
-        self.assertEqual(pub_lanes, retained_snapshot)
+    def test_epoch_change_resets_camera_state(self):
+        p, s = self.two_cams()
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0, cams=[0])
+        self.frame(p, s, 0.1, cams=[0])
+        old_tracker = p.cams[0].tracker
+        self.assertGreater(len(p.cams[0].motion), 0)
+        s[0].push(obs_t=0.0, epoch=2)  # reconnect / file loop
+        self.model.order = [0]
+        self.model.scene = {0: []}
+        p.step()
+        self.assertIsNot(p.cams[0].tracker, old_tracker)
+        self.assertEqual(len(p.cams[0].motion), 0)
+
+
+class TestPayloadContract(RunnerTestBase):
+    def test_schema_session_sequence_and_invariants(self):
+        p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE},
+                                                   "N2": {"direction": "N", "polygon": [[200, 0], [300, 0], [300, 100], [200, 100]]}}}})
+        self.model.scene = {0: [box(50, 50), box(60, 80, cls=1)]}
+        self.frame(p, s, 0.0)
+        a, b = p.publish_once(), p.publish_once()
+        self.assertEqual(a["schemaVersion"], "2.0")
+        self.assertEqual(a["sessionId"], b["sessionId"])
+        self.assertEqual(b["sequence"], a["sequence"] + 1)
+        self.assertEqual(a["cameraId"], "VISION-INT-001")
+        for lane in a["lanes"]:
+            self.assertEqual(lane["count"], lane["queuedCount"] + lane["movingCount"] + lane["unknownStateCount"])
+            self.assertEqual(lane["count"], sum(lane["classes"].values()))
+            self.assertEqual(lane["cameraId"], "CAM-NORTH")
+            self.assertTrue(lane["valid"])
+        self.assertLessEqual(a["observedAt"], a["publishedAt"])
+
+    def test_failed_publish_keeps_gate_interval(self):
+        gate = {"gate_id": "G_N", "p1": [0, 50], "p2": [100, 50], "type": "stopline",
+                "direction": [0, 1], "target_dir": "N"}
+        self.pub.succeed = False
+        with patch("trt_pipeline.gates.time.monotonic", return_value=0) as clock:
+            p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}, "gates": [gate]}})
+            for i, y in enumerate([36, 44, 52, 60]):
+                clock.return_value = i * .1
+                self.model.scene = {0: [box(50, y)]}
+                self.frame(p, s, i * .1)
+            clock.return_value = .31
+            first = p.publish_once()
+            self.assertEqual(first["traffic_flow"]["interval"]["gates"][0]["count"], 1)
+            clock.return_value = .32
+            second = p.publish_once()  # failed publication must retain the crossing
+            self.assertEqual(second["traffic_flow"]["interval"]["gates"][0]["count"], 1)
+            self.pub.succeed = True
+            clock.return_value = .33
+            p.publish_once()
+            for t in (.4, .5):
+                clock.return_value = t
+                self.frame(p, s, t)
+            clock.return_value = .51
+            third = p.publish_once()
+            self.assertEqual(third["traffic_flow"]["interval"]["gates"][0]["count"], 0)
+
+    def test_health_published_with_each_payload(self):
+        p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}}})
+        self.frame(p, s, 0.0)
+        p.publish_once()
+        self.assertEqual(self.pub.health[-1]["status"], "online")
+        self.assertEqual(self.pub.health[-1]["validCameras"], 1)
+
+
+class TestStartupValidation(RunnerTestBase):
+    def test_duplicate_gate_ids_rejected(self):
+        g = {"gate_id": "G1", "p1": [0, 50], "p2": [100, 50], "type": "stopline", "target_dir": "N"}
+        with self.assertRaises(ValueError):
+            self.pipeline({
+                "north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}, "gates": [g]},
+                "south": {"lanes": {"S1": {"direction": "S", "polygon": SQUARE}}, "gates": [g]},
+            })
+
+    def test_gate_without_direction_rejected(self):
+        g = {"gate_id": "G1", "p1": [0, 50], "p2": [100, 50], "type": "stopline"}
+        with self.assertRaises(ValueError):
+            self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}, "gates": [g]}})
+
+    def test_lane_without_valid_direction_rejected(self):
+        with self.assertRaises(ValueError):
+            self.pipeline({"north": {"lanes": {"N1": {"direction": "X", "polygon": SQUARE}}}})
+
+    def test_duplicate_lane_ids_across_cameras_rejected(self):
+        with self.assertRaises(ValueError):
+            self.pipeline({
+                "north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}},
+                "south": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}},
+            })
+
+    def test_missing_model_file_fails(self):
+        from run_multi_camera import BatchedCameraPipeline
+        from tests.helpers import FakeSource, write_config
+        cfg = write_config(self.dir, "north", {"N1": {"direction": "N", "polygon": SQUARE}})
+        with self.assertRaises(FileNotFoundError):
+            BatchedCameraPipeline(["north"], [cfg], ["fake://x"], model_path=os.path.join(self.dir, "missing.pt"),
+                                  publisher=FakePublisher(), sources=[FakeSource()])
+
+
+class TestRolesAndMaintenance(RunnerTestBase):
+    def test_lane_role_published_and_validated(self):
+        p, s = self.pipeline({"northeast": {"lanes": {"NE1": {"direction": "N", "role": "upstream", "polygon": SQUARE}}}})
+        self.frame(p, s, 0.0)
+        self.assertEqual(p.publish_once()["lanes"][0]["role"], "upstream")
+        with self.assertRaises(ValueError):
+            self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "role": "stopline", "polygon": SQUARE}}}})
+
+    def test_maintenance_file_marks_camera_unknown_until_removed(self):
+        import json as _json
+        mfile = os.path.join(self.dir, "maintenance.json")
+        p, s = self.pipeline({"north": {"lanes": {"N1": {"direction": "N", "polygon": SQUARE}}}},
+                             maintenance_file=mfile)
+        self.model.scene = {0: [box(50, 50)]}
+        self.frame(p, s, 0.0)
+        self.assertTrue(self.lane(p.publish_once(), "N1")["valid"])
+        with open(mfile, "w", encoding="utf-8") as f:
+            _json.dump({"north": "lens cleaning"}, f)
+        payload = p.publish_once()
+        self.assertFalse(self.lane(payload, "N1")["valid"])
+        self.assertIsNone(self.lane(payload, "N1")["count"])
+        self.assertEqual(payload["cameras"][0]["status"], "maintenance")
+        self.assertEqual(payload["cameras"][0]["reason"], "lens cleaning")
+        os.remove(mfile)
+        self.assertFalse(self.lane(p.publish_once(), "N1")["valid"])
+        self.frame(p, s, .1)
+        self.frame(p, s, .2)  # fresh tracker confirmation after maintenance
+        self.assertTrue(self.lane(p.publish_once(), "N1")["valid"])
+
+
+class TestRunPlan(unittest.TestCase):
+    def parse(self, *argv):
+        from run_multi_camera import build_pipeline_args
+        return build_pipeline_args().parse_args(list(argv))
+
+    def test_default_is_all_five_cameras(self):
+        from run_multi_camera import resolve_run_plan
+        names, configs, sources = resolve_run_plan(self.parse())
+        self.assertEqual(names, ["north", "south", "east", "west", "northeast"])
+        self.assertEqual(len(sources), 5)
+
+    def test_source_count_must_match(self):
+        from run_multi_camera import resolve_run_plan
+        with self.assertRaises(ValueError):
+            resolve_run_plan(self.parse("--cameras", "north", "south", "--videos", "rtsp://a/1"))
+
+    def test_unknown_camera_rejected(self):
+        from run_multi_camera import resolve_run_plan
+        with self.assertRaises(ValueError):
+            resolve_run_plan(self.parse("--cameras", "north_2"))
+
+    def test_sources_file_must_cover_every_camera(self):
+        from run_multi_camera import resolve_run_plan
+        d = tmpdir()
+        try:
+            path = os.path.join(d, "sources.json")
+            with open(path, "w") as f:
+                f.write('{"north": "rtsp://user:pw@10.0.0.1/stream"}')
+            names, _, sources = resolve_run_plan(self.parse("--cameras", "north", "--sources-file", path))
+            self.assertEqual(sources, ["rtsp://user:pw@10.0.0.1/stream"])
+            with self.assertRaises(ValueError):
+                resolve_run_plan(self.parse("--cameras", "north", "south", "--sources-file", path))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -359,7 +359,7 @@ class TestSafeConfigurationSaving(unittest.TestCase):
             "N1": {"direction": "N", "polygon": [[0, 0], [20, 0], [20, 20], [0, 20]]},
             "N2": {"direction": "N", "polygon": [[20, 0], [40, 0], [40, 20], [20, 20]]},
         }
-        new_gates = [{"gate_id": "GATE_1", "p1": [0, 0], "p2": [10, 0]}]
+        new_gates = [{"gate_id": "GATE_1", "p1": [0, 0], "p2": [10, 0], "target_dir": "N"}]
 
         success = save_config_geometry(cfg_path, new_lanes, new_gates)
         self.assertTrue(success)
@@ -378,6 +378,38 @@ class TestSafeConfigurationSaving(unittest.TestCase):
         self.assertEqual(updated_data["unrelated_setting"], 999)
         self.assertEqual(len(updated_data["lane_metrics"]["lanes"]), 2)
         self.assertEqual(len(updated_data["gates"]), 1)
+
+    def test_save_records_revision_and_archives_history(self):
+        import numpy as np
+        from tools.calibration_history import list_revisions, restore
+        cfg_path = os.path.join(self.test_dir, "versioned.json")
+        lanes_a = {"N1": {"direction": "N", "polygon": [[0, 0], [20, 0], [20, 20], [0, 20]]}}
+        lanes_b = {"N1": {"direction": "N", "polygon": [[0, 0], [30, 0], [30, 30], [0, 30]]}}
+        frame = np.zeros((48, 64, 3), dtype=np.uint8)
+        self.assertTrue(save_config_geometry(cfg_path, lanes_a, [], frame=frame, operator="tester"))
+        with open(cfg_path, encoding="utf-8") as f:
+            first = json.load(f)["calibration"]
+        self.assertEqual(first["resolution"], [64, 48])
+        self.assertEqual(first["saved_by"], "tester")
+        self.assertTrue(os.path.exists(os.path.join(self.test_dir, first["reference_image"])))
+        import time as _t
+        _t.sleep(0.01)
+        self.assertTrue(save_config_geometry(cfg_path, lanes_b, [], operator="tester"))
+        revs = list_revisions(cfg_path)
+        self.assertEqual(len(revs), 2)
+        self.assertTrue(revs[-1]["current"])
+        self.assertEqual(restore(cfg_path, first["revision"]), 0)
+        with open(cfg_path, encoding="utf-8") as f:
+            restored = json.load(f)
+        self.assertEqual(restored["lane_metrics"]["lanes"]["N1"]["polygon"][1], [20, 0])
+
+    def test_gates_without_direction_or_with_duplicate_ids_are_not_saved(self):
+        cfg_path = os.path.join(self.test_dir, "gates.json")
+        lanes = {"N1": {"direction": "N", "polygon": [[0, 0], [20, 0], [20, 20], [0, 20]]}}
+        self.assertFalse(save_config_geometry(cfg_path, lanes, [{"gate_id": "G", "p1": [0, 0], "p2": [9, 0]}]))
+        dup = [{"gate_id": "G", "p1": [0, 0], "p2": [9, 0], "target_dir": "N"}] * 2
+        self.assertFalse(save_config_geometry(cfg_path, lanes, dup))
+        self.assertFalse(os.path.exists(cfg_path))
 
     def test_simulated_serialization_and_write_failure_preserves_original(self):
         valid_lanes = {"N1": {"direction": "N", "polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]}}

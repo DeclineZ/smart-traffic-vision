@@ -1,0 +1,343 @@
+test_assignment_never_returns_over_threshold_pairs (test_byetrack.TestByteTrack.test_assignment_never_returns_over_threshold_pairs) ... ok
+test_bounding_box_output_integrity (test_byetrack.TestByteTrack.test_bounding_box_output_integrity) ... ok
+test_low_confidence_secondary_association_during_occlusion (test_byetrack.TestByteTrack.test_low_confidence_secondary_association_during_occlusion) ... ok
+test_min_hits_confirmation (test_byetrack.TestByteTrack.test_min_hits_confirmation) ... ok
+test_output_carries_matched_class_and_score (test_byetrack.TestByteTrack.test_output_carries_matched_class_and_score) ... ok
+test_single_object_tracking_and_id_persistence (test_byetrack.TestByteTrack.test_single_object_tracking_and_id_persistence) ... ok
+test_threshold_aware_assignment_keeps_feasible_match (test_byetrack.TestByteTrack.test_threshold_aware_assignment_keeps_feasible_match) ... ok
+test_untracked_removal_after_max_age (test_byetrack.TestByteTrack.test_untracked_removal_after_max_age) ... ok
+test_black_frame (test_camera_health.TestImageHealth.test_black_frame) ... ok
+test_camera_shift_needs_consecutive_confirmations (test_camera_health.TestImageHealth.test_camera_shift_needs_consecutive_confirmations) ... ok
+test_low_detail_is_degraded_not_invalid (test_camera_health.TestImageHealth.test_low_detail_is_degraded_not_invalid) ... ok
+test_normal_scene_is_healthy (test_camera_health.TestImageHealth.test_normal_scene_is_healthy) ... ok
+test_repeated_identical_frames_are_frozen_but_noisy_stationary_scene_is_not (test_camera_health.TestImageHealth.test_repeated_identical_frames_are_frozen_but_noisy_stationary_scene_is_not) ... ok
+test_unshifted_view_with_traffic_changes_is_not_shifted (test_camera_health.TestImageHealth.test_unshifted_view_with_traffic_changes_is_not_shifted) ... ok
+test_adapter_output_through_real_intake_aggregation_decision_and_stale_fallback (test_controller_main.TestCommittedMain.test_adapter_output_through_real_intake_aggregation_decision_and_stale_fallback) ... ok
+test_main_snapshot_integrity_and_local_commit_when_available (test_controller_main.TestCommittedMain.test_main_snapshot_integrity_and_local_commit_when_available) ... ok
+test_real_model_wire_fixture_is_accepted_by_main (test_controller_main.TestCommittedMain.test_real_model_wire_fixture_is_accepted_by_main) ... ok
+test_shipped_profile_matches_real_calibrations (test_controller_main.TestCommittedMain.test_shipped_profile_matches_real_calibrations) ... ok
+test_soak_rejects_wrong_controller_behavior_during_both_outage_roles (test_controller_main.TestCommittedMain.test_soak_rejects_wrong_controller_behavior_during_both_outage_roles) ... ok
+test_missing_duplicate_extra_and_wrong_intersection_suppress (test_controller_main.TestMainAdapter.test_missing_duplicate_extra_and_wrong_intersection_suppress) ... ok
+test_occupancy_all_twelve_lanes_and_registered_counting_source (test_controller_main.TestMainAdapter.test_occupancy_all_twelve_lanes_and_registered_counting_source) ... ok
+test_oldest_required_observation_and_measured_zero (test_controller_main.TestMainAdapter.test_oldest_required_observation_and_measured_zero) ... ok
+test_one_bad_required_lane_suppresses_entire_snapshot (test_controller_main.TestMainAdapter.test_one_bad_required_lane_suppresses_entire_snapshot) ... ok
+test_profile_rejects_partial_wrong_direction_and_bad_budget (test_controller_main.TestMainAdapter.test_profile_rejects_partial_wrong_direction_and_bad_budget) ... ok
+test_broker_failure_not_claimed_as_success (test_controller_main.TestMainRunner.test_broker_failure_not_claimed_as_success) ... 2026-10-04 22:12:51,185 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: disconnected; broker_delivery_failed
+ok
+test_default_profile_requires_all_stopline_calibrations (test_controller_main.TestMainRunner.test_default_profile_requires_all_stopline_calibrations) ... ok
+test_main_publisher_uses_qos_zero (test_controller_main.TestMainRunner.test_main_publisher_uses_qos_zero) ... ok
+test_operator_health_check_reports_blocked_output_with_healthy_cameras (test_controller_main.TestMainRunner.test_operator_health_check_reports_blocked_output_with_healthy_cameras) ... ok
+test_real_publish_failure_suppression_health_and_recovery (test_controller_main.TestMainRunner.test_real_publish_failure_suppression_health_and_recovery) ... 2026-10-04 22:12:51,255 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: publishing; complete stop-line occupancy
+2026-10-04 22:12:51,256 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: suppressed; E1:stale
+2026-10-04 22:12:51,265 | INFO | ProductionMultiCameraRunner | [east] observation discontinuity (epoch 1): temporal state reset
+2026-10-04 22:12:51,266 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: publishing; complete stop-line occupancy
+ok
+test_recorded_footage_requires_explicit_isolated_opt_in (test_controller_main.TestMainRunner.test_recorded_footage_requires_explicit_isolated_opt_in) ... ok
+test_required_camera_maintenance_suppresses_counts (test_controller_main.TestMainRunner.test_required_camera_maintenance_suppresses_counts) ... 2026-10-04 22:12:51,303 | WARNING | ProductionMultiCameraRunner | Maintenance mode: {'east': 'lens cleaning'}
+2026-10-04 22:12:51,303 | INFO | ProductionMultiCameraRunner | [east] observation discontinuity (epoch 0): temporal state reset
+2026-10-04 22:12:51,309 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: suppressed; E1:lens cleaning
+ok
+test_upstream_outage_does_not_block_stopline_counts (test_controller_main.TestMainRunner.test_upstream_outage_does_not_block_stopline_counts) ... 2026-10-04 22:12:51,327 | WARNING | ProductionMultiCameraRunner | Controller-main delivery: publishing; complete stop-line occupancy
+ok
+test_coverage_counts_only_continuous_observation (test_gates.TestGateFlowManager.test_coverage_counts_only_continuous_observation) ... ok
+test_crossing_across_short_occlusion_is_counted (test_gates.TestGateFlowManager.test_crossing_across_short_occlusion_is_counted) ... ok
+test_duplicate_gate_ids_rejected (test_gates.TestGateFlowManager.test_duplicate_gate_ids_rejected) ... ok
+test_empty_frame_does_not_clear_recent_tracks (test_gates.TestGateFlowManager.test_empty_frame_does_not_clear_recent_tracks) ... ok
+test_interval_report_counts_and_resets (test_gates.TestGateFlowManager.test_interval_report_counts_and_resets) ... ok
+test_long_gap_is_not_bridged (test_gates.TestGateFlowManager.test_long_gap_is_not_bridged) ... ok
+test_long_gap_without_intermediate_frames_is_not_bridged (test_gates.TestGateFlowManager.test_long_gap_without_intermediate_frames_is_not_bridged) ... ok
+test_reset_camera_drops_history (test_gates.TestGateFlowManager.test_reset_camera_drops_history) ... ok
+test_unobserved_gate_is_invalid_not_zero (test_gates.TestGateFlowManager.test_unobserved_gate_is_invalid_not_zero) ... ok
+test_crossed_ids_pruned_by_time_not_unbounded (test_gates.TestVirtualGates.test_crossed_ids_pruned_by_time_not_unbounded) ... ok
+test_deduplication_per_track_id (test_gates.TestVirtualGates.test_deduplication_per_track_id) ... ok
+test_direction_and_type_are_required_and_validated (test_gates.TestVirtualGates.test_direction_and_type_are_required_and_validated) ... ok
+test_forward_crossing_increments_count (test_gates.TestVirtualGates.test_forward_crossing_increments_count) ... ok
+test_reverse_crossing_rejected (test_gates.TestVirtualGates.test_reverse_crossing_rejected) ... ok
+test_segment_intersection (test_gates.TestVirtualGates.test_segment_intersection) ... ok
+test_subpixel_jitter_on_line_is_not_a_crossing (test_gates.TestVirtualGates.test_subpixel_jitter_on_line_is_not_a_crossing) ... ok
+test_camera_never_seen_is_invalid (test_lane_occupancy.TestCameraIndependence.test_camera_never_seen_is_invalid) ... ok
+test_epoch_change_resets_camera_state (test_lane_occupancy.TestCameraIndependence.test_epoch_change_resets_camera_state) ... 2026-10-04 22:12:51,847 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 2): temporal state reset
+ok
+test_missing_camera_does_not_block_healthy_camera (test_lane_occupancy.TestCameraIndependence.test_missing_camera_does_not_block_healthy_camera) ... ok
+test_resolution_mismatch_invalidates_camera (test_lane_occupancy.TestCameraIndependence.test_resolution_mismatch_invalidates_camera) ... 2026-10-04 22:12:51,859 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 1): temporal state reset
+2026-10-04 22:12:51,859 | ERROR | ProductionMultiCameraRunner | [north] frame 100x100 does not match calibration 1920x1080
+ok
+test_stale_frame_is_not_processed (test_lane_occupancy.TestCameraIndependence.test_stale_frame_is_not_processed) ... ok
+test_bottom_centre_anchor_vs_centre (test_lane_occupancy.TestLaneOccupancy.test_bottom_centre_anchor_vs_centre) ... ok
+test_boundary_point_is_counted (test_lane_occupancy.TestLaneOccupancy.test_boundary_point_is_counted) ... ok
+test_nonempty_then_empty_evaluation_clears_occupancy (test_lane_occupancy.TestLaneOccupancy.test_nonempty_then_empty_evaluation_clears_occupancy) ... ok
+test_overlapping_polygons_first_lane_wins_and_count_once (test_lane_occupancy.TestLaneOccupancy.test_overlapping_polygons_first_lane_wins_and_count_once) ... 2026-10-04 22:12:51,886 | WARNING | ProductionMultiCameraRunner | Calibration warning [north (config_north.json)]: Lanes 'N1' and 'N2' overlap by 2000.0 sq px (requires calibration review)
+ok
+test_publication_does_not_consume_occupancy (test_lane_occupancy.TestLaneOccupancy.test_publication_does_not_consume_occupancy) ... ok
+test_skipped_frames_do_not_update_occupancy_or_motion (test_lane_occupancy.TestLaneOccupancy.test_skipped_frames_do_not_update_occupancy_or_motion) ... ok
+test_track_moves_outside_polygons_disappears (test_lane_occupancy.TestLaneOccupancy.test_track_moves_outside_polygons_disappears) ... ok
+test_tracker_class_is_used_not_nearest_neighbour (test_lane_occupancy.TestLaneOccupancy.test_tracker_class_is_used_not_nearest_neighbour) ... ok
+test_failed_publish_keeps_gate_interval (test_lane_occupancy.TestPayloadContract.test_failed_publish_keeps_gate_interval) ... ok
+test_health_published_with_each_payload (test_lane_occupancy.TestPayloadContract.test_health_published_with_each_payload) ... ok
+test_schema_session_sequence_and_invariants (test_lane_occupancy.TestPayloadContract.test_schema_session_sequence_and_invariants) ... ok
+test_stopped_vehicle_becomes_queued_moving_vehicle_moving (test_lane_occupancy.TestQueueStatesThroughRunner.test_stopped_vehicle_becomes_queued_moving_vehicle_moving) ... ok
+test_lane_role_published_and_validated (test_lane_occupancy.TestRolesAndMaintenance.test_lane_role_published_and_validated) ... 2026-10-04 22:12:51,968 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [north (config_north.json)] Lane 'N1': lane 'role' must be one of ('queue', 'upstream')
+ok
+test_maintenance_file_marks_camera_unknown_until_removed (test_lane_occupancy.TestRolesAndMaintenance.test_maintenance_file_marks_camera_unknown_until_removed) ... 2026-10-04 22:12:51,976 | WARNING | ProductionMultiCameraRunner | Maintenance mode: {'north': 'lens cleaning'}
+2026-10-04 22:12:51,976 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 1): temporal state reset
+2026-10-04 22:12:51,977 | INFO | ProductionMultiCameraRunner | Maintenance file removed: all cameras back in service
+2026-10-04 22:12:51,977 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 1): temporal state reset
+ok
+test_default_is_all_five_cameras (test_lane_occupancy.TestRunPlan.test_default_is_all_five_cameras) ... ok
+test_source_count_must_match (test_lane_occupancy.TestRunPlan.test_source_count_must_match) ... ok
+test_sources_file_must_cover_every_camera (test_lane_occupancy.TestRunPlan.test_sources_file_must_cover_every_camera) ... ok
+test_unknown_camera_rejected (test_lane_occupancy.TestRunPlan.test_unknown_camera_rejected) ... ok
+test_duplicate_gate_ids_rejected (test_lane_occupancy.TestStartupValidation.test_duplicate_gate_ids_rejected) ... ok
+test_duplicate_lane_ids_across_cameras_rejected (test_lane_occupancy.TestStartupValidation.test_duplicate_lane_ids_across_cameras_rejected) ... 2026-10-04 22:12:51,998 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [south] Lane 'N1': duplicate lane ID (also defined for north)
+ok
+test_gate_without_direction_rejected (test_lane_occupancy.TestStartupValidation.test_gate_without_direction_rejected) ... ok
+test_lane_without_valid_direction_rejected (test_lane_occupancy.TestStartupValidation.test_lane_without_valid_direction_rejected) ... 2026-10-04 22:12:52,004 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [north (config_north.json)] Lane 'N1': lane 'direction' must be one of N, S, E, W
+ok
+test_missing_model_file_fails (test_lane_occupancy.TestStartupValidation.test_missing_model_file_fails) ... ok
+test_lane_entry_structure_validation (test_lane_validation.TestContainerAndStructureValidation.test_lane_entry_structure_validation) ... ok
+test_root_and_metrics_container_types (test_lane_validation.TestContainerAndStructureValidation.test_root_and_metrics_container_types) ... ok
+test_empty_lane_collection (test_lane_validation.TestLaneGeometryValidation.test_empty_lane_collection) ... ok
+test_malformed_nonnumeric_nan_infinity (test_lane_validation.TestLaneGeometryValidation.test_malformed_nonnumeric_nan_infinity) ... ok
+test_no_comparisons_between_different_cameras (test_lane_validation.TestLaneGeometryValidation.test_no_comparisons_between_different_cameras) ... ok
+test_overlap_calculation_failure_reported_as_warning_not_swallowed (test_lane_validation.TestLaneGeometryValidation.test_overlap_calculation_failure_reported_as_warning_not_swallowed) ... ok
+test_overlap_warning_vs_shared_edge_and_vertex (test_lane_validation.TestLaneGeometryValidation.test_overlap_warning_vs_shared_edge_and_vertex) ... ok
+test_small_positive_overlap_preserves_precision (test_lane_validation.TestLaneGeometryValidation.test_small_positive_overlap_preserves_precision) ... ok
+test_too_few_distinct_vertices_zero_area_self_intersection (test_lane_validation.TestLaneGeometryValidation.test_too_few_distinct_vertices_zero_area_self_intersection) ... ok
+test_valid_polygon_and_repeated_closing_point (test_lane_validation.TestLaneGeometryValidation.test_valid_polygon_and_repeated_closing_point) ... ok
+test_editor_loader_can_load_invalid_polygon (test_lane_validation.TestSafeConfigurationSaving.test_editor_loader_can_load_invalid_polygon) ... ok
+test_gates_without_direction_or_with_duplicate_ids_are_not_saved (test_lane_validation.TestSafeConfigurationSaving.test_gates_without_direction_or_with_duplicate_ids_are_not_saved) ... [ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmpyzkir5m8\gates.json: gate 'G': target_dir must be one of ('N', 'S', 'E', 'W') (which approach it measures)
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmpyzkir5m8\gates.json: duplicate gate_id 'G'
+ok
+test_invalid_save_preserves_destination_and_backup (test_lane_validation.TestSafeConfigurationSaving.test_invalid_save_preserves_destination_and_backup) ... [ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmpp9u1luhn\test_config.json: Lane 'N1' - Polygon area must be positive, got 0.0
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmpp9u1luhn\test_config.json: Lane 'N1' - Invalid polygon geometry: Self-intersection[5 5]
+ok
+test_malformed_save_inputs_preserve_destination_and_backup (test_lane_validation.TestSafeConfigurationSaving.test_malformed_save_inputs_preserve_destination_and_backup) ... [ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Config - 'lanes' collection must be an object, got list
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Config - 'lanes' collection must be an object, got NoneType
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Config - 'lanes' collection must be an object, got str
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Lane entry must be an object, got NoneType
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Lane entry must be an object, got list
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Lane entry must be an object, got str
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Missing 'polygon' key in lane entry
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Polygon coordinates cannot be None
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: Lane 'BAD' - Polygon coordinates must be a list/tuple of coordinate pairs, got str
+[ERROR] Cannot save invalid calibration for C:\Users\Lenovo\AppData\Local\Temp\tmp2ajkfme0\strict_save.json: 'gates' must be a list, got str
+ok
+test_save_records_revision_and_archives_history (test_lane_validation.TestSafeConfigurationSaving.test_save_records_revision_and_archives_history) ... ok
+test_simulated_serialization_and_write_failure_preserves_original (test_lane_validation.TestSafeConfigurationSaving.test_simulated_serialization_and_write_failure_preserves_original) ... [ERROR] Failed to save config to C:\Users\Lenovo\AppData\Local\Temp\tmp2_fw7ypo\serialization_failure.json: Disk full during write
+[ERROR] Failed to save config to C:\Users\Lenovo\AppData\Local\Temp\tmp2_fw7ypo\replacement_failure.json: Rename permission denied
+ok
+test_valid_save_preserves_unrelated_fields_and_original_backup (test_lane_validation.TestSafeConfigurationSaving.test_valid_save_preserves_unrelated_fields_and_original_backup) ... ok
+test_cli_checks_multiple_files_and_returns_exit_status (test_lane_validation.TestValidationCLIAndPreflightStartup.test_cli_checks_multiple_files_and_returns_exit_status) ... ok
+test_regression_cli_null_lane_metrics_and_mixed_inputs (test_lane_validation.TestValidationCLIAndPreflightStartup.test_regression_cli_null_lane_metrics_and_mixed_inputs) ... ok
+[CALIBRATION] Saved revision 20261004T151252054180Z by tester. Restart the runner to apply it (the running process does not reload calibration).
+[CALIBRATION] Saved revision 20261004T151252078608Z by tester. Restart the runner to apply it (the running process does not reload calibration).
+[OK] restored C:\Users\Lenovo\AppData\Local\Temp\tmpeua_6voo\versioned.json to revision 20261004T151252054180Z. Restart the runner to apply it.
+[CALIBRATION] Saved revision 20261004T151252117619Z by Lenovo. Restart the runner to apply it (the running process does not reload calibration).
+=================================================================
+Lane Calibration Geometry Validation
+=================================================================
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmpvkvhcni4\valid.json
+  [OK] All configured lanes are valid. No overlaps detected.
+
+=================================================================
+Summary: 1 file(s) checked | 0 error(s) | 0 warning(s)
+Status: PASSED - All lane configurations are valid.
+=================================================================
+Lane Calibration Geometry Validation
+=================================================================
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmpvkvhcni4\valid.json
+  [OK] All configured lanes are valid. No overlaps detected.
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmpvkvhcni4\invalid.json
+  [ERROR] Lane 'E1': Polygon area must be positive, got 0.0
+  [ERROR] Lane 'E1': Invalid polygon geometry: Self-intersection[5 5]
+
+=================================================================
+Summary: 2 file(s) checked | 2 error(s) | 0 warning(s)
+Status: FAILED - Invalid lane geometry detected.
+=================================================================
+Lane Calibration Geometry Validation
+=================================================================
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmpvkvhcni4\missing.json
+  [ERROR] Config: File not found: C:\Users\Lenovo\AppData\Local\Temp\tmpvkvhcni4\missing.json
+
+=================================================================
+Summary: 1 file(s) checked | 1 error(s) | 0 warning(s)
+Status: FAILED - Invalid lane geometry detected.
+=================================================================
+Lane Calibration Geometry Validation
+=================================================================
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmp528r4yls\good1.json
+  [OK] All configured lanes are valid. No overlaps detected.
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmp528r4yls\bad_null.json
+  [ERROR] Config: 'lane_metrics' must be an object, got NoneType
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmp528r4yls\bad_json.json
+  [ERROR] Config: Invalid JSON: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+
+Configuration: C:\Users\Lenovo\AppData\Local\Temp\tmp528r4yls\good2.json
+  [OK] All configured lanes are valid. No overlaps detected.
+
+=================================================================
+Summary: 4 file(s) checked | 2 error(s) | 0 warning(s)
+Status: FAILED - Invalid lane geometry detected.
+test_regression_startup_malformed_json_checks_all_configs (test_lane_validation.TestValidationCLIAndPreflightStartup.test_regression_startup_malformed_json_checks_all_configs) ... 2026-10-04 22:12:52,989 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [cam_malformed (malformed.json)] Config: Invalid JSON: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+  - [cam_invalid_geom (invalid_geom.json)] Lane 'E1': Polygon area must be positive, got 0.0
+  - [cam_invalid_geom (invalid_geom.json)] Lane 'E1': Invalid polygon geometry: Self-intersection[5 5]
+ok
+test_regression_startup_null_lane_entry (test_lane_validation.TestValidationCLIAndPreflightStartup.test_regression_startup_null_lane_entry) ... 2026-10-04 22:12:52,993 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [cam_null_lane (null_lane_entry.json)] Lane 'BAD': Lane entry must be an object, got NoneType
+ok
+test_startup_preflight_prevents_pipeline_resource_allocation_with_spies (test_lane_validation.TestValidationCLIAndPreflightStartup.test_startup_preflight_prevents_pipeline_resource_allocation_with_spies) ... 2026-10-04 22:12:52,996 | ERROR | ProductionMultiCameraRunner | Fatal calibration validation error(s) detected during startup:
+  - [cam_test (invalid_preflight.json)] Lane 'BAD_LANE': Polygon area must be positive, got 0.0
+  - [cam_test (invalid_preflight.json)] Lane 'BAD_LANE': Invalid polygon geometry: Self-intersection[5 5]
+ok
+test_detection_jitter_does_not_release_queue (test_motion.TestMotionStateClassifier.test_detection_jitter_does_not_release_queue) ... ok
+test_duplicate_timestamps_ignored (test_motion.TestMotionStateClassifier.test_duplicate_timestamps_ignored) ... ok
+test_homography_mode_uses_metres (test_motion.TestMotionStateClassifier.test_homography_mode_uses_metres) ... ok
+test_hysteresis_creeping_queue_stays_queued (test_motion.TestMotionStateClassifier.test_hysteresis_creeping_queue_stays_queued) ... ok
+test_invalid_settings_rejected (test_motion.TestMotionStateClassifier.test_invalid_settings_rejected) ... ok
+test_memory_bounded_under_sustained_new_ids (test_motion.TestMotionStateClassifier.test_memory_bounded_under_sustained_new_ids) ... ok
+test_new_track_is_unknown (test_motion.TestMotionStateClassifier.test_new_track_is_unknown) ... ok
+test_perspective_normalisation (test_motion.TestMotionStateClassifier.test_perspective_normalisation) ... ok
+test_requires_sustained_low_speed (test_motion.TestMotionStateClassifier.test_requires_sustained_low_speed) ... ok
+test_same_physical_speed_same_state_at_any_fps (test_motion.TestMotionStateClassifier.test_same_physical_speed_same_state_at_any_fps) ... ok
+test_fixture_satisfies_contract (test_payload.TestContractFixture.test_fixture_satisfies_contract) ... ok
+test_all_configured_lanes_present_and_satisfy_invariants (test_payload.TestLaneMetricsManager.test_all_configured_lanes_present_and_satisfy_invariants) ... ok
+test_category_and_state_change_together (test_payload.TestLaneMetricsManager.test_category_and_state_change_together) ... ok
+test_category_change_both_directions_counts_once (test_payload.TestLaneMetricsManager.test_category_change_both_directions_counts_once) ... ok
+test_initial_snapshot (test_payload.TestLaneMetricsManager.test_initial_snapshot) ... ok
+test_lane_transfer_latest_only (test_payload.TestLaneMetricsManager.test_lane_transfer_latest_only) ... ok
+test_register_vehicles (test_payload.TestLaneMetricsManager.test_register_vehicles) ... ok
+test_repeated_registration_idempotent (test_payload.TestLaneMetricsManager.test_repeated_registration_idempotent) ... ok
+test_repeated_snapshots_do_not_mutate (test_payload.TestLaneMetricsManager.test_repeated_snapshots_do_not_mutate) ... ok
+test_reset (test_payload.TestLaneMetricsManager.test_reset) ... ok
+test_separate_cameras_independent_track_ids (test_payload.TestLaneMetricsManager.test_separate_cameras_independent_track_ids) ... ok
+test_state_transition (test_payload.TestLaneMetricsManager.test_state_transition) ... ok
+test_unknown_lane_leaves_valid_state_unchanged (test_payload.TestLaneMetricsManager.test_unknown_lane_leaves_valid_state_unchanged) ... ok
+test_payload_schema_controller_compatibility (test_payload.TestPayloadBuilder.test_payload_schema_controller_compatibility) ... ok
+test_class_ids (test_payload.TestVehicleClassification.test_class_ids) ... ok
+test_class_names (test_payload.TestVehicleClassification.test_class_names) ... ok
+test_custom_class_mapping (test_payload.TestVehicleClassification.test_custom_class_mapping) ... ok
+test_ack_counter (test_publisher.TestMQTTPublisher.test_ack_counter) ... ok
+test_context_manager (test_publisher.TestMQTTPublisher.test_context_manager) ... ok
+test_default_initialization (test_publisher.TestMQTTPublisher.test_default_initialization) ... ok
+test_disconnected_publish_is_dropped_and_counted (test_publisher.TestMQTTPublisher.test_disconnected_publish_is_dropped_and_counted) ... MQTT broker localhost:1883 not connected; dropping messages until reconnected.
+ok
+test_env_var_override (test_publisher.TestMQTTPublisher.test_env_var_override) ... ok
+test_explicit_arguments_override_environment (test_publisher.TestMQTTPublisher.test_explicit_arguments_override_environment) ... ok
+test_last_will_on_health_topic (test_publisher.TestMQTTPublisher.test_last_will_on_health_topic) ... ok
+test_mqtts_enables_tls_on_default_port (test_publisher.TestMQTTPublisher.test_mqtts_enables_tls_on_default_port) ... ok
+test_publish_dict_payload (test_publisher.TestMQTTPublisher.test_publish_dict_payload) ... ok
+test_publish_error_handling (test_publisher.TestMQTTPublisher.test_publish_error_handling) ... MQTT broker localhost:1883 not connected; dropping messages until reconnected.
+ok
+test_url_parsing (test_publisher.TestMQTTPublisher.test_url_parsing) ... ok
+test_config_geometry_save_and_load (test_segmentor.TestSegmentor.test_config_geometry_save_and_load) ... ok
+test_gate_normal_computation (test_segmentor.TestSegmentor.test_gate_normal_computation) ... ok
+test_point_to_line_distance (test_segmentor.TestSegmentor.test_point_to_line_distance) ... ok
+test_presets_completeness (test_segmentor.TestSegmentor.test_presets_completeness) ... ok
+test_media_time_and_loop_epoch (test_stream.TestFileReplaySource.test_media_time_and_loop_epoch) ... ok
+test_unreadable_file_reports_offline (test_stream.TestFileReplaySource.test_unreadable_file_reports_offline) ... 2026-10-04 22:12:53,128 | ERROR | StreamBufferWorker | [cam] cannot open recording 'missing.avi'
+ok
+test_credentials_hidden (test_stream.TestRedaction.test_credentials_hidden) ... ok
+test_latest_frame_only_and_drop_count (test_stream.TestStreamBufferWorker.test_latest_frame_only_and_drop_count) ... 2026-10-04 22:12:53,129 | INFO | StreamBufferWorker | [cam] connected (epoch 1)
+2026-10-04 22:12:53,129 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:53,140 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=10, dropped=9, reconnects=0)
+ok
+test_open_failure_backs_off_and_does_not_block_start (test_stream.TestStreamBufferWorker.test_open_failure_backs_off_and_does_not_block_start) ... 2026-10-04 22:12:53,141 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.1s
+2026-10-04 22:12:53,141 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:53,191 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.1s
+2026-10-04 22:12:53,300 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.2s
+2026-10-04 22:12:53,503 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.2s
+2026-10-04 22:12:53,708 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.2s
+2026-10-04 22:12:53,743 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=0, dropped=0, reconnects=0)
+ok
+test_reconnects_after_read_failures_and_starts_new_epoch (test_stream.TestStreamBufferWorker.test_reconnects_after_read_failures_and_starts_new_epoch) ... 2026-10-04 22:12:53,744 | INFO | StreamBufferWorker | [cam] connected (epoch 1)
+2026-10-04 22:12:53,744 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:53,770 | WARNING | StreamBufferWorker | [cam] capture read failed; retrying in 0.0s
+2026-10-04 22:12:53,787 | INFO | StreamBufferWorker | [cam] connected (epoch 2)
+2026-10-04 22:12:53,815 | WARNING | StreamBufferWorker | [cam] capture read failed; retrying in 0.0s
+2026-10-04 22:12:53,834 | INFO | StreamBufferWorker | [cam] connected (epoch 3)
+2026-10-04 22:12:53,840 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=6, dropped=5, reconnects=2)
+ok
+test_bundle_contains_window_and_manifest (test_tools.TestDiagnosticExport.test_bundle_contains_window_and_manifest) ... ok
+test_failed_publish_intervals_are_not_counted_twice (test_tools.TestEvalCounts.test_failed_publish_intervals_are_not_counted_twice) ... ok
+test_false_crossings_on_empty_labelled_gate_have_zero_f1 (test_tools.TestEvalCounts.test_false_crossings_on_empty_labelled_gate_have_zero_f1) ... ok
+test_lane_alignment_uses_its_own_observation_time (test_tools.TestEvalCounts.test_lane_alignment_uses_its_own_observation_time) ... ok
+test_lane_errors_false_zero_unknown_and_gates (test_tools.TestEvalCounts.test_lane_errors_false_zero_unknown_and_gates) ... ok
+test_unmatched_observations_are_part_of_unknown_share (test_tools.TestEvalCounts.test_unmatched_observations_are_part_of_unknown_share) ... ok
+test_codes (test_tools.TestHealthcheck.test_codes) ... ok
+test_backend_read_and_metadata_exceptions_reconnect (test_vision_release.TestCaptureExceptions.test_backend_read_and_metadata_exceptions_reconnect) ... 2026-10-04 22:12:54,170 | INFO | StreamBufferWorker | [cam] connected (epoch 1)
+2026-10-04 22:12:54,170 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:54,170 | WARNING | StreamBufferWorker | [cam] capture read failed; retrying in 0.0s
+2026-10-04 22:12:54,193 | INFO | StreamBufferWorker | [cam] connected (epoch 2)
+2026-10-04 22:12:54,215 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=1, dropped=0, reconnects=1)
+2026-10-04 22:12:54,215 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.0s
+2026-10-04 22:12:54,216 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:54,239 | INFO | StreamBufferWorker | [cam] connected (epoch 1)
+2026-10-04 22:12:54,261 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=1, dropped=0, reconnects=0)
+2026-10-04 22:12:54,262 | WARNING | StreamBufferWorker | [cam] open failed; retrying in 0.0s
+2026-10-04 22:12:54,262 | INFO | StreamBufferWorker | [cam] ingestion started: source='rtsp://x'
+2026-10-04 22:12:54,286 | INFO | StreamBufferWorker | [cam] connected (epoch 1)
+2026-10-04 22:12:54,307 | INFO | StreamBufferWorker | [cam] ingestion stopped (ingested=1, dropped=0, reconnects=0)
+ok
+test_replay_backend_failure_is_offline_and_releases_capture (test_vision_release.TestCaptureExceptions.test_replay_backend_failure_is_offline_and_releases_capture) ... ok
+test_coverage_does_not_cross_publication_boundary (test_vision_release.TestFlowValidity.test_coverage_does_not_cross_publication_boundary) ... ok
+test_current_camera_invalidity_overrides_previous_coverage (test_vision_release.TestFlowValidity.test_current_camera_invalidity_overrides_previous_coverage) ... ok
+test_discontinuity_invalidates_the_whole_interval (test_vision_release.TestFlowValidity.test_discontinuity_invalidates_the_whole_interval) ... ok
+test_long_gap_does_not_credit_blind_time (test_vision_release.TestFlowValidity.test_long_gap_does_not_credit_blind_time) ... ok
+test_no_coverage_is_unknown_at_individual_gate (test_vision_release.TestFlowValidity.test_no_coverage_is_unknown_at_individual_gate) ... ok
+test_confirmed_shift_survives_reconnect_until_view_is_restored (test_vision_release.TestHealthRecovery.test_confirmed_shift_survives_reconnect_until_view_is_restored) ... ok
+test_health_settings_reject_nonfinite_values_and_unknown_keys (test_vision_release.TestHealthRecovery.test_health_settings_reject_nonfinite_values_and_unknown_keys) ... ok
+test_noisy_bright_obstruction_is_invalid_until_sustained_recovery (test_vision_release.TestHealthRecovery.test_noisy_bright_obstruction_is_invalid_until_sustained_recovery) ... ok
+test_shift_confirmations_restart_after_inconclusive_check (test_vision_release.TestHealthRecovery.test_shift_confirmations_restart_after_inconclusive_check) ... ok
+test_long_unobserved_gap_restarts_motion_evidence (test_vision_release.TestMotionDiscontinuity.test_long_unobserved_gap_restarts_motion_evidence) ... ok
+test_broker_wrapper_still_observes_failed_payload (test_vision_release.TestSoakChecks.test_broker_wrapper_still_observes_failed_payload) ... ok
+test_latency_history_is_bounded (test_vision_release.TestSoakChecks.test_latency_history_is_bounded) ... ok
+test_outage_checks_all_lanes_and_recovery (test_vision_release.TestSoakChecks.test_outage_checks_all_lanes_and_recovery) ... ok
+test_source_selection_reaches_real_run_plan (test_vision_release.TestSoakChecks.test_source_selection_reaches_real_run_plan) ... ok
+test_actual_tool_rejects_wrong_classes_and_extra_engine_detections (test_vision_release.TestTensorRTAcceptance.test_actual_tool_rejects_wrong_classes_and_extra_engine_detections) ... ok
+test_agreement_covers_extra_engine_boxes_and_wrong_classes (test_vision_release.TestTensorRTAcceptance.test_agreement_covers_extra_engine_boxes_and_wrong_classes) ... ok
+test_health_write_failure_is_visible_and_preserves_original (test_vision_release.TestVisionRelease.test_health_write_failure_is_visible_and_preserves_original) ... ok
+test_invalid_maintenance_file_disables_measurements (test_vision_release.TestVisionRelease.test_invalid_maintenance_file_disables_measurements) ... 2026-10-04 22:12:54,461 | ERROR | ProductionMultiCameraRunner | Invalid maintenance file C:\Users\Lenovo\AppData\Local\Temp\stv_test_t1hhdz6h\maintenance.json; measurements disabled: maintenance entries require a known camera name/ID and a nonempty reason
+2026-10-04 22:12:54,462 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 0): temporal state reset
+ok
+test_live_topics_require_explicit_controller_mode (test_vision_release.TestVisionRelease.test_live_topics_require_explicit_controller_mode) ... ok
+test_obstructed_camera_never_reports_valid_zero (test_vision_release.TestVisionRelease.test_obstructed_camera_never_reports_valid_zero) ... 2026-10-04 22:12:54,468 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 1): temporal state reset
+ok
+test_packet_age_uses_monotonic_clock_when_wall_clock_moves (test_vision_release.TestVisionRelease.test_packet_age_uses_monotonic_clock_when_wall_clock_moves) ... ok
+test_reconnect_forces_inference_on_first_fresh_frame (test_vision_release.TestVisionRelease.test_reconnect_forces_inference_on_first_fresh_frame) ... 2026-10-04 22:12:54,474 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 2): temporal state reset
+ok
+test_shadow_default_ignores_legacy_topic_environment (test_vision_release.TestVisionRelease.test_shadow_default_ignores_legacy_topic_environment) ... ok
+test_stale_reconnect_packet_cannot_reuse_old_observation (test_vision_release.TestVisionRelease.test_stale_reconnect_packet_cannot_reuse_old_observation) ... 2026-10-04 22:12:54,484 | INFO | ProductionMultiCameraRunner | [north] observation discontinuity (epoch 2): temporal state reset
+ok
+test_tracker_warmup_is_unknown_before_confirmation (test_vision_release.TestVisionRelease.test_tracker_warmup_is_unknown_before_confirmation) ... ok
+test_wall_clock_backstep_does_not_keep_silent_camera_fresh (test_vision_release.TestVisionRelease.test_wall_clock_backstep_does_not_keep_silent_camera_fresh) ... ok
+test_disabled_bypass (test_voter.TestTrackClassVotingFilter.test_disabled_bypass) ... ok
+test_get_class_fallback (test_voter.TestTrackClassVotingFilter.test_get_class_fallback) ... ok
+test_legitimate_transition_allowed (test_voter.TestTrackClassVotingFilter.test_legitimate_transition_allowed)
+If a vehicle genuinely and consistently receives new class detections ... ok
+test_memory_pruning (test_voter.TestTrackClassVotingFilter.test_memory_pruning) ... ok
+test_pickup_truck_ambiguity_favors_car (test_voter.TestTrackClassVotingFilter.test_pickup_truck_ambiguity_favors_car)
+Alternating detections between 0 (car) and 3 (truck) with similar confidence ... ok
+test_single_frame_flicker_rejected (test_voter.TestTrackClassVotingFilter.test_single_frame_flicker_rejected)
+An established car track should not flip to truck on a single rogue detection. ... ok
+test_single_observation (test_voter.TestTrackClassVotingFilter.test_single_observation) ... ok
+test_stream_isolation (test_voter.TestTrackClassVotingFilter.test_stream_isolation)
+Track IDs across different camera streams must not interfere. ... ok
+
+----------------------------------------------------------------------
+Ran 189 tests in 5.508s
+
+OK
+[CALIBRATION] Saved revision 20261004T151253112177Z by Lenovo. Restart the runner to apply it (the running process does not reload calibration).
+wrote C:\Users\Lenovo\AppData\Local\Temp\stv_test_30l3c3ec\bundle.zip: 2 payloads, 5 configs

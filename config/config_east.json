@@ -1,7 +1,7 @@
 {
   "_comment": "=== East Soi Approach (CAM_03) Configuration ===",
   "camera_info": {
-    "camera_id": "CAM-03",
+    "camera_id": "INT-001-CAM-E",
     "location": "East Soi Entrance",
     "intersection_id": "INT-001",
     "description": "Incoming soi traffic approaching intersection from East"
@@ -123,10 +123,6 @@
           [
             4,
             910
-          ],
-          [
-            3,
-            908
           ]
         ]
       }
@@ -149,5 +145,14 @@
     "use_opencl": false,
     "video_queue_size": 2
   },
-  "gates": []
+  "gates": [],
+  "calibration": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "revision": "2026-10-04-batch2b",
+    "reference_image": "reference/east.jpg",
+    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning."
+  }
 }

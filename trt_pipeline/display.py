@@ -105,6 +105,10 @@ class NVENCVideoWriter:
             self.process = None
 
 
+STATE_TAGS = {"queued": "Q", "moving": "M", "unknown": "U"}
+STATE_COLORS = {"queued": (0, 0, 255), "moving": (0, 255, 0), "unknown": (200, 200, 200)}
+
+
 def stitch_camera_grid(frames: List[np.ndarray], tile_size: Tuple[int, int] = (480, 270)) -> np.ndarray:
     """
     Dynamically tiles N camera preview frames into an adaptive multi-view grid.
@@ -207,15 +211,21 @@ class AsyncDisplayWorker:
         lane_configs: Optional[List[Dict[str, Any]]] = None,
         header_stats: Optional[str] = None,
         gates: Optional[List[List[Dict[str, Any]]]] = None,
+        annotations: Optional[List[Dict[int, Any]]] = None,
+        cam_status: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """
         Non-blocking snapshot submit. If rendering is busy, drop preview frame
         so inference is NEVER stalled.
+
+        annotations[i] maps track_id -> (lane_id, state) for vehicles that are
+        counted; vehicles absent from it are drawn as not counted.
+        cam_status[i] is the camera status dict published in the payload.
         """
         if not self.running:
             return
 
-        payload = (frames, tracked_list, cam_names, lane_configs, header_stats, gates)
+        payload = (frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status)
         if self.queue.full():
             try:
                 _ = self.queue.get_nowait()
@@ -239,6 +249,25 @@ class AsyncDisplayWorker:
                 pass
         logger.info("AsyncDisplayWorker stopped.")
 
+    def _placeholder_tile(self, cam_names, idx: int, status: Optional[Dict[str, Any]]) -> np.ndarray:
+        tile = np.zeros((self.tile_size[1], self.tile_size[0], 3), dtype=np.uint8)
+        name = cam_names[idx] if idx < len(cam_names) else f"CAM_{idx+1:02d}"
+        cv.putText(tile, name.upper(), (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2, cv.LINE_AA)
+        cv.putText(tile, "NO FRAME", (10, self.tile_size[1] // 2), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv.LINE_AA)
+        if status:
+            self._draw_status(tile, status)
+        return tile
+
+    def _draw_status(self, vis: np.ndarray, status: Dict[str, Any]) -> None:
+        st = status.get("status", "?")
+        age = status.get("ageMs")
+        txt = f"{st.upper()}" + (f" {age/1000:.1f}s" if age is not None else "") + (f" ({status['reason']})" if status.get("reason") else "")
+        col = (0, 200, 0) if st == "ok" else ((0, 200, 255) if st == "degraded" else (0, 0, 255))
+        (tw, th), _ = cv.getTextSize(txt, cv.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        y = self.tile_size[1] - 8
+        cv.rectangle(vis, (6, y - th - 6), (12 + tw, y + 4), (0, 0, 0), -1)
+        cv.putText(vis, txt, (9, y), cv.FONT_HERSHEY_SIMPLEX, 0.45, col, 1, cv.LINE_AA)
+
     def _render_loop(self) -> None:
         while self.running:
             try:
@@ -247,18 +276,17 @@ class AsyncDisplayWorker:
                 time.sleep(0.01)
                 continue
 
-            if len(raw_payload) == 6:
-                frames, tracked_list, cam_names, lane_configs, header_stats, gates = raw_payload
-            else:
-                frames, tracked_list, cam_names, lane_configs, header_stats = raw_payload
-                gates = None
+            padded = tuple(raw_payload) + (None,) * (8 - len(raw_payload))
+            frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status = padded[:8]
 
             num_streams = len(frames)
             vis_frames = []
 
             for idx in range(num_streams):
                 f = frames[idx]
+                status = cam_status[idx] if cam_status and idx < len(cam_status) else None
                 if f is None or f.size == 0:
+                    vis_frames.append(self._placeholder_tile(cam_names, idx, status))
                     continue
 
                 vis = cv.resize(f, self.tile_size)
@@ -344,13 +372,25 @@ class AsyncDisplayWorker:
                         else:
                             color = (0, 220, 100)  # Vibrant Green for cars
 
+                        ann = annotations[idx].get(int(track_id)) if annotations and idx < len(annotations) else None
+                        if annotations is not None and ann is None:
+                            # Tracked but not counted in any lane: thin grey box
+                            cv.rectangle(vis, (bx1, by1), (bx2, by2), (130, 130, 130), 1)
+                            continue
                         cv.rectangle(vis, (bx1, by1), (bx2, by2), color, 2)
                         label = f"#{int(track_id)} {cls_name}"
+                        if ann is not None:
+                            lane_id, state = ann
+                            label += f" {lane_id}:{STATE_TAGS.get(state, '?')}"
+                            cx, cy = (bx1 + bx2) // 2, by2
+                            cv.circle(vis, (cx, cy), 3, STATE_COLORS.get(state, (255, 255, 255)), -1)
                         cv.putText(vis, label, (bx1, max(12, by1 - 3)), cv.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv.LINE_AA)
 
-                # 3. Overlay Camera Identifier
+                # 3. Overlay Camera Identifier and status
                 c_name = cam_names[idx] if idx < len(cam_names) else f"CAM_{idx+1:02d}"
                 cv.putText(vis, c_name.upper(), (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2, cv.LINE_AA)
+                if status:
+                    self._draw_status(vis, status)
                 vis_frames.append(vis)
 
             if not vis_frames:

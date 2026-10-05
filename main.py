@@ -14,136 +14,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        import run_multi_camera
+        sys.exit(run_multi_camera.main(sys.argv[2:]))
+
     parser = argparse.ArgumentParser(
         description="Smart Traffic Vision",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
-    # 1. Multi-Camera Streaming Runner
-    run_parser = subparsers.add_parser(
+    # 1. Multi-Camera Streaming Runner. Its options live in run_multi_camera.build_pipeline_args();
+    # "main.py run ..." is forwarded there unchanged (see the top of main()).
+    subparsers.add_parser(
         "run",
-        help="Run multi-camera real-time traffic tracking & MQTT streaming pipeline",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    run_parser.add_argument(
-        "--num-cams",
-        type=int,
-        default=4,
-        help="Number of camera feeds to run (1 to 8+)",
-    )
-    run_parser.add_argument(
-        "--cameras",
-        nargs="+",
-        default=None,
-        help="Named camera feeds to run: north south east west all",
-    )
-    run_parser.add_argument(
-        "--configs",
-        nargs="+",
-        default=None,
-        help="Custom JSON configuration file paths per camera feed",
-    )
-    run_parser.add_argument(
-        "--videos",
-        nargs="+",
-        default=None,
-        help="Custom video file paths or RTSP stream URLs",
-    )
-    run_parser.add_argument(
-        "--display",
-        action="store_true",
-        help="Display live multi-camera HUD window",
-    )
-    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
-    run_parser.add_argument(
-        "--model",
-        default=default_model,
-        help="YOLO model weights or engine path",
-    )
-    run_parser.add_argument(
-        "--device",
-        default=None,
-        help="Inference device: 'cuda', 'cuda:0', 'cpu' (default: auto)",
-    )
-    run_parser.add_argument(
-        "--conf",
-        type=float,
-        default=0.20,
-        help="YOLO detection confidence threshold",
-    )
-    run_parser.add_argument(
-        "--fps",
-        type=float,
-        default=25.0,
-        help="Target processing frame rate per stream",
-    )
-    run_parser.add_argument(
-        "--pub-interval",
-        type=float,
-        default=2.0,
-        help="MQTT broadcast interval in seconds",
-    )
-    run_parser.add_argument(
-        "--mqtt-broker",
-        default="mqtt://localhost:1883",
-        help="MQTT broker URL",
-    )
-    run_parser.add_argument(
-        "--mqtt-topic",
-        default="traffic/counts",
-        help="MQTT destination topic",
-    )
-    run_parser.add_argument(
-        "--skip-frames",
-        type=int,
-        default=1,
-        help="Frame skipping ratio (0 = none, 1 = 1-in-2, 2 = 1-in-3)",
-    )
-    run_parser.add_argument(
-        "--buffer-size",
-        type=int,
-        default=2,
-        help="Jitter-absorbing ring buffer size per stream (default: 2)",
-    )
-    run_parser.add_argument(
-        "--nvenc",
-        default=None,
-        help="Save live multi-camera grid to hardware-encoded H.264 video (e.g. out.mp4)",
-    )
-    run_parser.add_argument(
-        "--intersection-id",
-        default="INT-001",
-        help="Intersection identifier string",
-    )
-    run_parser.add_argument(
-        "--voting-window",
-        type=int,
-        default=15,
-        help="Temporal voting window size in frames for class smoothing (default: 15)",
-    )
-    run_parser.add_argument(
-        "--pickup-bias",
-        type=float,
-        default=1.15,
-        help="Prior weight multiplier favoring car over truck for pickup trucks (default: 1.15)",
-    )
-    run_parser.add_argument(
-        "--no-voting",
-        action="store_true",
-        help="Disable temporal class smoothing filter",
-    )
-    run_parser.add_argument(
-        "--tracker",
-        choices=["byetrack", "sort"],
-        default="byetrack",
-        help="Object tracking algorithm: 'byetrack' (default) or 'sort'",
-    )
-    run_parser.add_argument(
-        "--imgsz",
-        type=int,
-        default=640,
-        help="Inference image resolution (e.g. 640, 960, 1280)",
+        help="Run the multi-camera measurement pipeline (python main.py run --help for options)",
+        add_help=False,
     )
 
     # 2. Hardware Benchmarking & Sizing Suite
@@ -277,13 +163,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "run":
-        import run_multi_camera
-        # Delegate directly
-        sys.argv = [sys.argv[0]] + sys.argv[2:]
-        run_multi_camera.main()
-
-    elif args.command == "benchmark":
+    if args.command == "benchmark":
         import benchmark_hardware
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         benchmark_hardware.main()

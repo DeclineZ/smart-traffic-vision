@@ -1,0 +1,17 @@
+{
+  "engine": "yolo26s_thai_traffic.engine",
+  "engineSha256": "dd7185bab40c8e7ccd2b48eaaa676621693049ec35183d8de19e4a77dc3bc167",
+  "sourceModel": "yolo26s_thai_traffic.pt",
+  "sourceSha256": "cc579a0387668e204ba79372e9f2380ad6531659fff5fd1d78d7cf282b6b1c2c",
+  "settings": {
+    "imgsz": 640,
+    "half": false,
+    "dynamic": true,
+    "batch": 8
+  },
+  "builtAt": "2026-10-04T19:43:11+0700",
+  "host": "LAPTOP-E6PICN3M",
+  "tensorrt": "11.2.1.2",
+  "torch": "2.12.0.dev20260408+cu128",
+  "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU"
+}

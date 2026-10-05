@@ -6,6 +6,133 @@ Reviewed 29 September 2026. Scope: `smart-traffic-vision`, with the backend/cont
 
 The architecture has useful foundations: bounded application frame queues, one model shared across cameras, separate trackers, temporal class voting, directed gates, asynchronous MQTT, calibration tooling, and controller fallback to fixed-cycle operation when data is stale. Keep those foundations. Fix the measurement contract and failure handling before optimizing with TensorRT.
 
+## Vision-only release status (4 October 2026)
+
+**Vision now supports the controller's unchanged committed main through an
+adapter.** Only vision changes are authorized. Controller mode projects complete,
+fresh stop-line occupancy into main's existing `CAM-01` message format and
+withholds the entire count snapshot on a required-camera failure. Upstream
+regions are excluded. No controller code changes or new migration are required.
+CLI defaults remain shadow; the service example explicitly selects controller
+mode. [Compatibility, startup and pilot limits](CONTROLLER_MAIN_COMPATIBILITY.md).
+
+Additional review reproduced and fixed vision reconnect false zeros, bright
+obstruction handling, dead ingestion threads after backend exceptions, stale
+motion evidence, wall-clock freshness errors, maintenance transitions, gate
+validity/coverage errors and commissioning-tool gaps. **189 vision tests pass**
+including the main-adapter checks (171 before that adapter). The
+real PyTorch model passed a new two-minute, five-recording smoke test with two
+withheld-frame outages and recovery, zero errors and 113 payloads
+([report](soak/vision-only-2min-pytorch.json)). No MQTT messages were sent.
+A final one-minute run after the freshness correction also passed both outages
+and recovery ([report](soak/vision-only-final-pytorch.json)). The stricter
+TensorRT acceptance tool passed a small real-frame sample for batches 1–5
+([report](trt-parity/vision-only-fp32-smoke.json)).
+
+The optional controller candidate still has early skips below minimum green, incomplete
+expected-lane coverage, retired-session acceptance, discharge intervals spanning
+red time and health changes that do not reach open dashboards. These are open
+controller-owner tasks. The earlier cross-repository status below records
+candidate work, not delivered controller features or production acceptance.
+The unchanged main also lacks minimum-green enforcement on allocation and early
+skip. The adapter does not certify physical signal safety. Its pinned-main tests
+exercise real intake, aggregation, database-write preparation, all four algorithms
+and scheduled stale fallback without broker/database/hardware I/O. The new
+[real-model smoke](soak/controller-main-1min-pytorch.json) checks required-camera
+suppression and upstream-camera independence; all software checks are recorded in
+[the full suite output](soak/controller-main-tests.txt).
+
+## Earlier remediation status (4 October 2026; superseded where noted above)
+
+The earlier remediation included candidate changes in both repositories. The
+original audit text further down is unchanged. **Suitable for monitored shadow
+evaluation; not ready to drive signals unattended.** Receiver fixes, database,
+dashboard and shared-broker changes are outside the vision release scope and
+cannot be assumed available. Remaining work includes:
+
+- field accuracy on withheld, labelled clips;
+- on-site calibration and coverage review;
+- a defined, tested safety boundary with the physical signal controller;
+- tests on the deployment hardware, network and broker.
+
+### Verification performed
+
+| Check | Result |
+|---|---|
+| Vision unit/runner tests (`python -m unittest discover -s tests`) | Earlier remediation: **139 passed** (36 at the start of the audit). Additional regression coverage is recorded in the vision-only handoff. |
+| Controller tests (`npm test` in `smart-traffic-sys/backend`, new) | **27 candidate tests passed**; additional safety/coverage defects were reproduced during review. These tests and changes are not an authorized vision deliverable. |
+| Mutation checks: each original defect re-injected | All caught: assign-then-filter tracking, frame-based speed, invalid lanes published as numbers, gate interval reset on failed publish, unbounded gap bridging, queue from `count` instead of `queuedCount`, missing min-green clamp |
+| Real model, all five recordings, CUDA, PyTorch | Pipeline runs end to end; count invariant held on every lane of every payload; a real payload is the shared contract fixture |
+| TensorRT export (FP32, dynamic batch 1–8, RTX 5060 Laptop, TRT 11.2) | Built. Parity on 30 frames per camera at batch sizes 1–5: ≥ 99.89 % boxes matched, mean IoU 0.9996, class agreement 100 %, lane-occupancy MAE ≤ 0.006 (never off by more than 1). Latency p50 / p99 for 5 cameras: 22.2 / 25.9 ms vs 46.8 / 66.8 ms PyTorch. [Report](trt-parity/fp32_rtx5060_report.json) |
+| Soak, TensorRT engine, real recordings, two injected camera outages | First run (15 min, [report](soak/soak-15min-trt-fp32.json)): 0 errors, bounded state, but healthy cameras were wrongly flagged `camera_shifted` (see the next row). After the fix, second run (12 min, [report](soak/soak-12min-trt-fp32.json)) **passed**: 0 errors, 8,782 inference batches, step p50/p99 55/90 ms, RSS flat (2,168 → 2,063 MB), ≤ 48 motion tracks per camera. During each outage only that camera's lanes were unknown, never zero, and every other camera stayed valid. This is not a substitute for the 24–72 h field soak. |
+| Camera-shift detector on recordings | The first soak found that whole-image phase correlation flagged fixed cameras as shifted (hundreds of px, caused by traffic). Replaced with ORB + RANSAC and 3 consecutive confirmations. Over 60 checks spanning 40 min per camera, max measured shift is 4.2 px; a synthetic 47 px shift measures 47–48 px on every camera. Night frames against a day reference are inconclusive (never flagged). |
+| Calibration validator | 0 errors, 6 overlap warnings (5 known + NE1/NE2 33.8 px² exposed by the Batch 2B repair) |
+| Frontend | Changed files parse (esbuild). **Not rendered**: the dashboard's dependencies are only installed inside its Docker volume and Docker was not running. |
+| Database / broker / backend process | **Not run** (Docker unavailable). Migration 012 and the persistence changes are untested against PostgreSQL. |
+
+### Release blockers
+
+| # | Finding | Status | What changed |
+|---|---|---|---|
+| 1 | One failed camera stops every camera | **Fixed in code** | Each camera is processed independently and reconnects on its own. Live readers open with timeouts and reconnect with backoff; `start()` never blocks. Startup is inside the cleanup boundary. A silent camera's lanes are published `valid:false` with `null` counts. Per-camera status goes in every payload, and a retained health topic carries a last will. Verified with fakes and the soak outages; **not yet with real RTSP cameras/NVRs**. |
+| 2 | Freshness describes publish time | **Vision corrected; source latency unverified** | Frames carry local decode time; the runner takes the newest frame and drops locally stale frames. Per-lane observation time and validity are explicit. Black, frozen, severe low-detail and shifted views (ORB/RANSAC) are detected. Camera/NVR backlog and health thresholds need field verification. |
+| 3 | Lane interval union | **Fixed** (Batch 1) | Lanes now also carry queued/moving/unknown state per vehicle and per-class counts. |
+| 4 | Controller uses `count` for queues | **Producer ready; receiver open** | Vision provides `queuedCount` and honest unknowns. Queue aggregation, expected-lane completeness, freshness, skip safety, persistence and discharge learning require controller-owner remediation and acceptance. Contract in [CONTROLLER_CONTRACT.md](CONTROLLER_CONTRACT.md). |
+| 5 | Invalid / overlapping calibration | **Partly fixed** | E1/NE1 repaired (Batch 2B, awaiting your visual review). Lanes use the road-contact point, consistent with gates; boundary points count. Resolution, revision, operator and reference image are recorded, with history and rollback. **Open:** 6 overlap warnings and the E1/NE1 coverage questions need on-site review; reference frames come from the recordings and must be retaken live. |
+| 6 | `MULTI-CAM` not registered | **Controller-owner task** | Vision emits `VISION-INT-001` and `INT-001-CAM-*`. Candidate migration 012 is unapproved, outside vision and not verified against the database. Register and test these identities before live delivery. |
+
+### Accuracy and algorithms
+
+| Finding | Status |
+|---|---|
+| Field accuracy unproven | **Open.** [`tools/eval_counts.py`](../tools/eval_counts.py) computes per-lane occupancy/queue MAE, bias, p95, false zeros, empty-lane false positives, unknown share and gate precision/recall from recorded payloads plus a labelled clip. No withheld labelled clips exist yet; northeast has no night footage. |
+| Queue classification FPS/perspective dependent, memory growth | **Fixed in code.** Time-based speed on each camera's observation clock, normalised by box height (or metres with a road-plane `homography`), with enter/exit hysteresis and an explicit `unknown` state. Held boxes on skipped frames no longer touch motion or occupancy. Histories are pruned by time (bounded in tests and soak). **Thresholds are defaults, not validated on labelled clips.** |
+| Tracking | **Fixed in code.** Threshold-aware assignment (reference ByteTrack `cost_limit` objective). Note: under that objective the audit's 2×2 example correctly yields one match; the real defect is the assign-then-filter case `[[0.88,0.81,0.67],[0.96,0.93,0.75]]`, which returned zero matches and is now a regression test. The detector runs at conf 0.10 so the low-confidence stage receives input. Class/score come from the matched detection; SORT uses one-to-one IoU matching. **Thresholds still need tuning on labelled clips.** |
+| Cross-camera coverage (north vs northeast) | **Default chosen, needs site confirmation.** Lanes have a `role`; NE1–NE3 are `upstream`, excluded from queue totals and coverage, and shown with ↑ on the dashboard. |
+| Gate outputs | **Fixed in code.** Interval counts with window, observed seconds and coverage validity; `null` = not instrumented; explicit `target_dir`; unique IDs enforced; bounded 1 s continuity; 2 px minimum motion; time-bounded de-duplication; per-camera reset on discontinuity; session-cumulative counts kept for the HUD only. **Open:** only north has an ingress gate; no per-lane gates or turning movements. |
+
+### Runtime, delivery and deployment
+
+| Finding | Status |
+|---|---|
+| Unbounded `track_histories` | Fixed (see queue classification). |
+| 2 s publish = 2 s freshness | Fixed: publish every 1 s; freshness judged on observation time; budget documented in the contract. |
+| Receiver validation, duplicates, ordering | Controller-owner task. Candidate validation still lacks complete expected-lane coverage and rejection of retired sessions. |
+| TLS / auth / last will | Vision supports TLS/auth and isolated retained shadow health/last will. Broker ACLs/listeners, backend credential guards and dev compose bindings are outside vision; candidate shared-service changes are not an approved release dependency. |
+| Publish failure ignored | Fixed: delivery counters and acknowledgement age go into the health message; gate intervals continue across failed publishes; nothing stale is queued. |
+| Ignored config, silent fallbacks | Fixed: effective settings are logged and sent in payload meta; ignored JSON keys are logged; strict camera/config/source counts; missing model is fatal; `--model-sha256`; no silent CPU fallback; CLI beats environment for MQTT settings; `--check-config`; `--sources-file` keeps credentials off the command line; URLs are redacted in logs. |
+| Replay vs live | Fixed: replay uses media time from `--replay-fps` (warns when metadata reports > 60 FPS), and a file loop starts a new epoch that resets temporal state. |
+| Service, restart, lock, soak | Added: `deploy/` (systemd unit with restart and hardening, liveness timer, env/sources templates, commissioning checklist), `--log-file` and `--record-payloads` (rotating), `--health-file` with `tools/healthcheck.py`, error containment that exits for supervisor restart after 50 consecutive errors, `requirements-lock.txt`, `tools/soak.py`. **Open:** the 24–72 h soak on field hardware with real cameras, broker restarts and clock jumps. Note that `torch` in the verified venv has a broken install record (no metadata). |
+| TensorRT | Export CLI fixed; engine metadata records source hash and builder versions; FP32 engine verified (see above). **FP16 with TensorRT 11 needs `nvidia-modelopt`** (not installed). The engine must be rebuilt and parity-checked on the deployment GPU. |
+
+### Operator tools (เจ้าหน้าที่)
+
+| Tool | Status |
+|---|---|
+| Camera/measurement health panel (Thai) | Candidate dashboard work is outside vision, not rendered and not released. Live health changes need a broadcast fix and acceptance testing by its owner. Vision supplies health metadata and a local overlay. |
+| Explainable overlay | Added to the runner display: counted vehicles show lane and Q/M/U state with a contact-point dot; uncounted tracks are grey; tiles show camera status and age; missing cameras get a placeholder tile. |
+| Calibration validation / versioning / rollback | Added (see blocker 5). |
+| Incident review | Partly done: rotating payload record, `tools/diagnostic_export.py` (payloads in a window, calibration, hashes, health, log tail, environment) and `tools/eval_counts.py`. **Open:** a replay UI with overlays and a manual correction workflow. |
+| Maintenance mode | Added: `--maintenance-file` (`{"camera": "reason"}`, re-read when changed) publishes the camera as `maintenance` with unknown lanes, so the controller falls back. |
+| Alerting | Candidate backend webhook is outside vision and not a delivered vision feature. |
+
+### Controller safety additions
+
+- Candidate allocation clamping fixes the max-pressure 3 s result against a 5 s minimum, but **automatic early skips still bypass minimum green**. Controller-owner acceptance remains open.
+- A non-numeric `FRESHNESS_MAX_AGE_MS` is treated as stale instead of always fresh.
+- `stopDecisionLoop()` runs on shutdown.
+
+### Still open — needs people, hardware or decisions
+
+1. **Signal safety boundary** (addendum A): the device that drives the lamps is outside both repos. Before any field control, document and test that the local controller enforces min green, intergreen and conflicts, reverts to its own plan or flash on lost communication, and reports actual lamp state.
+2. **Pedestrian phases and preemption**: not modelled.
+3. **Labelled withheld evaluation**: continuous clips (day/night/rain/queues) labelled per lane and per gate event, then run `tools/eval_counts.py`; agree acceptance thresholds with the controller team.
+4. **On-site calibration**: overlaps, E1/NE1 coverage, lane range, NE upstream ownership, live reference frames, and an optional road-plane homography.
+5. **Field hardware**: rebuild and parity-check the TensorRT engine (install `nvidia-modelopt` for FP16), 24–72 h soak with real cameras, broker and backend, NTP on all hosts, a real database insert, rendering the dashboard.
+6. **PDPA / privacy, roadside hardware** (addendum F).
+
+---
+
 ## What was verified
 
 - All **36 existing unit tests passed** using the repository's Python environment.

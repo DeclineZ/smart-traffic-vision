@@ -1,0 +1,537 @@
+{
+  "minutes": 15.0,
+  "model": "models/yolo26s_thai_traffic.engine",
+  "publishes": 866,
+  "inferenceBatches": 9875,
+  "errors": 0,
+  "stepMs": {
+    "50": 54.03,
+    "95": 86.25,
+    "99": 101.06
+  },
+  "rssMB": {
+    "start": 2035.654656,
+    "end": 751.464448,
+    "maxFirstHalf": 2163.965952,
+    "maxSecondHalf": 853.008384
+  },
+  "maxMotionTracksPerCamera": 45,
+  "maxGatePrevPoints": 97,
+  "outages": [
+    {
+      "camera": "east",
+      "start": 300.0,
+      "duration": 60.0,
+      "invalidSeen": true,
+      "zeroDuringOutage": false,
+      "othersValidDuringOutage": true
+    },
+    {
+      "camera": "northeast",
+      "start": 600.0,
+      "duration": 90.0,
+      "invalidSeen": true,
+      "zeroDuringOutage": false,
+      "othersValidDuringOutage": false
+    }
+  ],
+  "samples": [
+    {
+      "t": 2.5,
+      "rssMB": 2035.654656,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 14,
+        "south": 26,
+        "east": 9,
+        "west": 1,
+        "northeast": 17
+      },
+      "gatePrevPoints": 58,
+      "crossedIds": 0,
+      "maxObservationAgeMs": 2403,
+      "inferences": 1
+    },
+    {
+      "t": 30.0,
+      "rssMB": 2163.6096,
+      "gpuMB": 157.348352,
+      "motionTracks": {
+        "north": 38,
+        "south": 33,
+        "east": 9,
+        "west": 1,
+        "northeast": 33
+      },
+      "gatePrevPoints": 79,
+      "crossedIds": 39,
+      "maxObservationAgeMs": 72,
+      "inferences": 242
+    },
+    {
+      "t": 60.0,
+      "rssMB": 2163.965952,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 27,
+        "south": 36,
+        "east": 17,
+        "west": 2,
+        "northeast": 33
+      },
+      "gatePrevPoints": 70,
+      "crossedIds": 71,
+      "maxObservationAgeMs": 77,
+      "inferences": 497
+    },
+    {
+      "t": 90.1,
+      "rssMB": 1793.82272,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 34,
+        "south": 42,
+        "east": 15,
+        "west": 7,
+        "northeast": 21
+      },
+      "gatePrevPoints": 75,
+      "crossedIds": 112,
+      "maxObservationAgeMs": 59,
+      "inferences": 742
+    },
+    {
+      "t": 120.0,
+      "rssMB": 1795.883008,
+      "gpuMB": 157.348352,
+      "motionTracks": {
+        "north": 33,
+        "south": 37,
+        "east": 12,
+        "west": 7,
+        "northeast": 27
+      },
+      "gatePrevPoints": 77,
+      "crossedIds": 153,
+      "maxObservationAgeMs": 68,
+      "inferences": 999
+    },
+    {
+      "t": 150.0,
+      "rssMB": 1796.644864,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 31,
+        "south": 36,
+        "east": 14,
+        "west": 9,
+        "northeast": 24
+      },
+      "gatePrevPoints": 81,
+      "crossedIds": 195,
+      "maxObservationAgeMs": 97,
+      "inferences": 1271
+    },
+    {
+      "t": 180.0,
+      "rssMB": 1797.021696,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 32,
+        "south": 27,
+        "east": 11,
+        "west": 8,
+        "northeast": 32
+      },
+      "gatePrevPoints": 74,
+      "crossedIds": 213,
+      "maxObservationAgeMs": 75,
+      "inferences": 1537
+    },
+    {
+      "t": 210.1,
+      "rssMB": 1692.250112,
+      "gpuMB": 157.348352,
+      "motionTracks": {
+        "north": 33,
+        "south": 29,
+        "east": 12,
+        "west": 13,
+        "northeast": 44
+      },
+      "gatePrevPoints": 87,
+      "crossedIds": 175,
+      "maxObservationAgeMs": 83,
+      "inferences": 1785
+    },
+    {
+      "t": 240.1,
+      "rssMB": 1275.297792,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 37,
+        "south": 26,
+        "east": 25,
+        "west": 10,
+        "northeast": 29
+      },
+      "gatePrevPoints": 86,
+      "crossedIds": 149,
+      "maxObservationAgeMs": 62,
+      "inferences": 2030
+    },
+    {
+      "t": 270.0,
+      "rssMB": 897.536,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 22,
+        "south": 40,
+        "east": 17,
+        "west": 14,
+        "northeast": 26
+      },
+      "gatePrevPoints": 80,
+      "crossedIds": 113,
+      "maxObservationAgeMs": 81,
+      "inferences": 2275
+    },
+    {
+      "t": 300.0,
+      "rssMB": 899.74784,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 20,
+        "south": 25,
+        "east": 14,
+        "west": 2,
+        "northeast": 38
+      },
+      "gatePrevPoints": 67,
+      "crossedIds": 95,
+      "maxObservationAgeMs": 67,
+      "inferences": 2538
+    },
+    {
+      "t": 330.0,
+      "rssMB": 819.093504,
+      "gpuMB": 157.346816,
+      "motionTracks": {
+        "north": 26,
+        "south": 40,
+        "east": 14,
+        "west": 13,
+        "northeast": 32
+      },
+      "gatePrevPoints": 79,
+      "crossedIds": 88,
+      "maxObservationAgeMs": 29070,
+      "inferences": 2820
+    },
+    {
+      "t": 360.1,
+      "rssMB": 820.527104,
+      "gpuMB": 157.346816,
+      "motionTracks": {
+        "north": 37,
+        "south": 42,
+        "east": 14,
+        "west": 5,
+        "northeast": 29
+      },
+      "gatePrevPoints": 80,
+      "crossedIds": 121,
+      "maxObservationAgeMs": 59281,
+      "inferences": 3100
+    },
+    {
+      "t": 390.0,
+      "rssMB": 852.021248,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 23,
+        "south": 33,
+        "east": 11,
+        "west": 7,
+        "northeast": 35
+      },
+      "gatePrevPoints": 76,
+      "crossedIds": 148,
+      "maxObservationAgeMs": 68,
+      "inferences": 3352
+    },
+    {
+      "t": 420.1,
+      "rssMB": 821.22752,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 36,
+        "south": 36,
+        "east": 18,
+        "west": 6,
+        "northeast": 34
+      },
+      "gatePrevPoints": 77,
+      "crossedIds": 180,
+      "maxObservationAgeMs": 78,
+      "inferences": 3605
+    },
+    {
+      "t": 450.0,
+      "rssMB": 853.008384,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 34,
+        "south": 35,
+        "east": 16,
+        "west": 6,
+        "northeast": 21
+      },
+      "gatePrevPoints": 77,
+      "crossedIds": 207,
+      "maxObservationAgeMs": 88,
+      "inferences": 3860
+    },
+    {
+      "t": 480.0,
+      "rssMB": 822.390784,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 44,
+        "south": 45,
+        "east": 22,
+        "west": 9,
+        "northeast": 33
+      },
+      "gatePrevPoints": 92,
+      "crossedIds": 232,
+      "maxObservationAgeMs": 66,
+      "inferences": 4114
+    },
+    {
+      "t": 510.1,
+      "rssMB": 822.775808,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 33,
+        "south": 25,
+        "east": 14,
+        "west": 12,
+        "northeast": 20
+      },
+      "gatePrevPoints": 75,
+      "crossedIds": 218,
+      "maxObservationAgeMs": 64,
+      "inferences": 4372
+    },
+    {
+      "t": 540.0,
+      "rssMB": 791.277568,
+      "gpuMB": 157.348352,
+      "motionTracks": {
+        "north": 31,
+        "south": 39,
+        "east": 22,
+        "west": 13,
+        "northeast": 39
+      },
+      "gatePrevPoints": 97,
+      "crossedIds": 182,
+      "maxObservationAgeMs": 83,
+      "inferences": 4615
+    },
+    {
+      "t": 570.1,
+      "rssMB": 761.311232,
+      "gpuMB": 157.34784,
+      "motionTracks": {
+        "north": 30,
+        "south": 23,
+        "east": 19,
+        "west": 11,
+        "northeast": 29
+      },
+      "gatePrevPoints": 80,
+      "crossedIds": 155,
+      "maxObservationAgeMs": 67,
+      "inferences": 4867
+    },
+    {
+      "t": 600.1,
+      "rssMB": 761.58976,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 23,
+        "south": 36,
+        "east": 22,
+        "west": 11,
+        "northeast": 37
+      },
+      "gatePrevPoints": 85,
+      "crossedIds": 126,
+      "maxObservationAgeMs": 74,
+      "inferences": 5117
+    },
+    {
+      "t": 630.0,
+      "rssMB": 771.854336,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 21,
+        "south": 30,
+        "east": 11,
+        "west": 0,
+        "northeast": 37
+      },
+      "gatePrevPoints": 74,
+      "crossedIds": 105,
+      "maxObservationAgeMs": 29542,
+      "inferences": 5397
+    },
+    {
+      "t": 660.0,
+      "rssMB": 772.583424,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 37,
+        "south": 38,
+        "east": 13,
+        "west": 10,
+        "northeast": 37
+      },
+      "gatePrevPoints": 87,
+      "crossedIds": 93,
+      "maxObservationAgeMs": 59310,
+      "inferences": 5682
+    },
+    {
+      "t": 690.0,
+      "rssMB": 748.744704,
+      "gpuMB": 157.346816,
+      "motionTracks": {
+        "north": 33,
+        "south": 40,
+        "east": 20,
+        "west": 9,
+        "northeast": 37
+      },
+      "gatePrevPoints": 90,
+      "crossedIds": 106,
+      "maxObservationAgeMs": 89397,
+      "inferences": 5959
+    },
+    {
+      "t": 720.0,
+      "rssMB": 749.686784,
+      "gpuMB": 157.34528,
+      "motionTracks": {
+        "north": 22,
+        "south": 35,
+        "east": 26,
+        "west": 7,
+        "northeast": 27
+      },
+      "gatePrevPoints": 72,
+      "crossedIds": 98,
+      "maxObservationAgeMs": 88,
+      "inferences": 6524
+    },
+    {
+      "t": 750.0,
+      "rssMB": 749.924352,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 29,
+        "south": 45,
+        "east": 15,
+        "west": 5,
+        "northeast": 20
+      },
+      "gatePrevPoints": 78,
+      "crossedIds": 116,
+      "maxObservationAgeMs": 91,
+      "inferences": 7085
+    },
+    {
+      "t": 780.0,
+      "rssMB": 750.14144,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 30,
+        "south": 37,
+        "east": 17,
+        "west": 10,
+        "northeast": 31
+      },
+      "gatePrevPoints": 84,
+      "crossedIds": 151,
+      "maxObservationAgeMs": 111,
+      "inferences": 7637
+    },
+    {
+      "t": 810.0,
+      "rssMB": 750.309376,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 34,
+        "south": 40,
+        "east": 22,
+        "west": 12,
+        "northeast": 21
+      },
+      "gatePrevPoints": 82,
+      "crossedIds": 186,
+      "maxObservationAgeMs": 86,
+      "inferences": 8191
+    },
+    {
+      "t": 840.0,
+      "rssMB": 750.784512,
+      "gpuMB": 157.344768,
+      "motionTracks": {
+        "north": 19,
+        "south": 14,
+        "east": 17,
+        "west": 13,
+        "northeast": 33
+      },
+      "gatePrevPoints": 62,
+      "crossedIds": 171,
+      "maxObservationAgeMs": 88,
+      "inferences": 8752
+    },
+    {
+      "t": 870.0,
+      "rssMB": 751.235072,
+      "gpuMB": 157.344768,
+      "motionTracks": {
+        "north": 29,
+        "south": 20,
+        "east": 8,
+        "west": 14,
+        "northeast": 29
+      },
+      "gatePrevPoints": 77,
+      "crossedIds": 139,
+      "maxObservationAgeMs": 83,
+      "inferences": 9318
+    },
+    {
+      "t": 900.0,
+      "rssMB": 751.464448,
+      "gpuMB": 157.347328,
+      "motionTracks": {
+        "north": 31,
+        "south": 34,
+        "east": 25,
+        "west": 14,
+        "northeast": 20
+      },
+      "gatePrevPoints": 81,
+      "crossedIds": 123,
+      "maxObservationAgeMs": 88,
+      "inferences": 9875
+    }
+  ],
+  "passed": false
+}

@@ -96,7 +96,8 @@ class TestSegmentor(unittest.TestCase):
                 "p2": [1600, 500],
                 "type": "stopline",
                 "direction": [0.0, 1.0],
-                "label": "STOP_S"
+                "label": "STOP_S",
+                "target_dir": "S"
             },
             {
                 "gate_id": "GATE_S_EXIT",
@@ -104,7 +105,8 @@ class TestSegmentor(unittest.TestCase):
                 "p2": [750, 380],
                 "type": "egress",
                 "direction": [0.0, -1.0],
-                "label": "EXIT_S"
+                "label": "EXIT_S",
+                "target_dir": "S"
             },
             {
                 "gate_id": "GATE_E_EXIT",
@@ -112,7 +114,8 @@ class TestSegmentor(unittest.TestCase):
                 "p2": [1850, 600],
                 "type": "egress",
                 "direction": [1.0, 0.0],
-                "label": "EXIT_E"
+                "label": "EXIT_E",
+                "target_dir": "E"
             }
         ]
 

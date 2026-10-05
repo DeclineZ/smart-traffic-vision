@@ -1,51 +1,70 @@
 """
-High-Throughput Batched Multi-Camera Traffic Tracking & MQTT Streaming Pipeline.
-Production architecture engineered for high-FPS edge & workstation deployment:
-- Centralized Dynamic Batching (N, 3, H, W) into TensorRT FP16 / PyTorch
-- Intermittent Inference (Frame Skipping 1-in-2 / 1-in-3) with Kalman Tracker Continuity
-- Decoupled Asynchronous Display Worker (AsyncDisplayWorker) + optional NVENC
-- Jitter-Absorbing Double-Buffered Ring Buffers (queue_size = 2)
-- Vectorized Spatial Lane Analytics using shapely.contains_xy
+Multi-camera traffic measurement runner.
+
+Pipeline per camera: capture -> (batched) YOLO -> ByteTrack -> class voting ->
+lane occupancy with queued/moving/unknown state -> virtual gates.
+Every publish interval one payload (schema 2.0, docs/CONTROLLER_CONTRACT.md)
+describes all cameras, with per-camera status and per-lane validity.
+
+Design rules:
+* Cameras are independent. A missing or slow camera never blocks the others;
+  its lanes are published as invalid (unknown), never as zero.
+* Each frame carries its capture time. Frames older than ``max_frame_age_s``
+  are not processed, and lanes whose last observation is older than
+  ``max_observation_age_s`` are invalid.
+* Motion, gate continuity and coverage use per-camera observation clocks, not
+  processing FPS.
+* A camera discontinuity (reconnect, file loop) resets that camera's tracker,
+  motion, voting and gate history.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
-import signal
-import sys
-import time
-from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
-
+import hashlib
 import json
 import logging
+import logging.handlers
+import os
+import signal
+import sys
+import tempfile
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
+
 import numpy as np
 import shapely
-from shapely.geometry import Point, Polygon
-
-from trt_pipeline.lane_validation import validate_camera_lanes, validate_config_file
 
 # Add root directory to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Configure standard logger
+from trt_pipeline.camera_health import HealthSettings, ImageHealthMonitor
+from trt_pipeline.controller_main import MainControllerAdapter
+from trt_pipeline.gates import GateFlowManager, VirtualGate
+from trt_pipeline.lane_validation import validate_config_file
+from trt_pipeline.motion import MotionStateClassifier, QueueSettings
+from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder, invalidate_lane, iso_utc
+from trt_pipeline.stream import FileReplaySource, FramePacket, StreamBufferWorker, is_live_source, redact_source
+from trt_pipeline.voter import TrackClassVotingFilter
+
 logger = logging.getLogger("ProductionMultiCameraRunner")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    handler.setFormatter(formatter)
+    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
 
 def initial_config(config_path: str) -> dict:
     """Loads JSON configuration file."""
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIGS = {
     "north": "config/config_north.json",
     "south": "config/config_south.json",
@@ -53,6 +72,11 @@ DEFAULT_CONFIGS = {
     "west": "config/config_west.json",
     "northeast": "config/config_northeast.json",
 }
+DEFAULT_MODEL = "models/yolo26s_thai_traffic.pt"
+
+# Per-camera JSON sections this runner does not read. Settings come from the CLI.
+IGNORED_CONFIG_SECTIONS = ("model", "tracker", "mqtt", "processing", "tracking", "density", "output", "classes")
+IGNORED_LANE_METRIC_KEYS = ("publish_interval_frames", "queue_speed_threshold", "enabled")
 
 COCO_CLASSES = {
     1: "bicycle",
@@ -62,112 +86,180 @@ COCO_CLASSES = {
     7: "truck",
 }
 
+VALID_STATUSES = ("ok", "degraded")
+# queue:    lane is part of the approach's stop-line queue (used for signal timing)
+# upstream: lane further back on the approach (arrivals / spill-back context only);
+#           kept out of queue totals so two cameras on one approach never add up
+LANE_ROLES = ("queue", "upstream")
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@dataclass
+class CameraRuntime:
+    """Mutable state for one camera."""
+
+    idx: int
+    name: str
+    camera_id: str
+    config_path: str
+    source: Any
+    lanes: Dict[str, Dict[str, Any]]
+    metrics: LaneMetricsManager
+    motion: MotionStateClassifier
+    tracker: Any
+    health: ImageHealthMonitor
+    anchor: str = "bottom_center"
+    expected_resolution: Optional[Tuple[int, int]] = None
+    calibration_revision: Optional[str] = None
+    epoch: int = 0
+    frames_seen: int = 0
+    inferences: int = 0
+    epoch_inferences: int = 0
+    stale_frames_dropped: int = 0
+    last_frame: Optional[np.ndarray] = None
+    last_tracked: np.ndarray = field(default_factory=lambda: np.empty((0, 6)))
+    last_obs_wall: Optional[float] = None
+    last_obs_mono: Optional[float] = None
+    last_obs_t: Optional[float] = None
+    frame_invalid_reason: Optional[str] = None
+    health_invalid: bool = False
+    maintenance_active: bool = False
+    fps_window: List[float] = field(default_factory=list)
+
 
 class BatchedCameraPipeline:
-    """
-    Centralized multi-camera orchestration engine:
-    - Coordinates N asynchronous double-buffered camera ingestion workers
-    - Assembles dynamic batch tensors for single-pass TensorRT / PyTorch inference
-    - Manages intermittent frame skipping with Kalman filter continuity
-    - Executes vectorized spatial lane containment
-    - Dispatches non-blocking snapshots to AsyncDisplayWorker and MQTT publisher
-    """
+    """Orchestrates independent camera sources, one shared model and per-camera analytics."""
 
     def __init__(
         self,
         camera_names: List[str],
         config_paths: List[str],
-        video_sources: List[str],
+        video_sources: List[Any],
         model_path: str,
         device: str = "cuda:0",
-        conf: float = 0.20,
+        conf: float = 0.10,
         target_fps: float = 25.0,
         skip_frames: int = 1,
-        buffer_size: int = 2,
+        buffer_size: int = 1,
         display: bool = False,
         nvenc_out: Optional[str] = None,
-        pub_interval: float = 2.0,
-        mqtt_broker: str = "mqtt://localhost:1883",
-        mqtt_topic: str = "traffic/counts",
+        pub_interval: float = 1.0,
+        mqtt_broker: Optional[str] = None,
+        mqtt_topic: Optional[str] = None,
         intersection_id: str = "INT-001",
         voting_window: int = 15,
         pickup_bias: float = 1.15,
         enable_voting: bool = True,
         tracker_type: str = "byetrack",
         imgsz: int = 640,
+        source_id: Optional[str] = None,
+        track_thresh: float = 0.40,
+        low_thresh: float = 0.10,
+        match_thresh: float = 0.70,
+        track_max_age: int = 30,
+        max_frame_age_s: float = 1.0,
+        max_observation_age_s: float = 1.5,
+        replay_fps: Optional[float] = None,
+        health_topic: Optional[str] = None,
+        mqtt_tls: Optional[Dict[str, Any]] = None,
+        model_sha256: Optional[str] = None,
+        record_path: Optional[str] = None,
+        health_file: Optional[str] = None,
+        max_consecutive_errors: int = 50,
+        maintenance_file: Optional[str] = None,
+        model: Any = None,
+        publisher: Any = None,
+        sources: Optional[List[Any]] = None,
+        output_mode: str = "shadow",
+        controller_config: Optional[str] = None,
+        allow_replay_controller: bool = False,
     ):
-        global cv, np, shapely, Point, Polygon, YOLO, Sort
-        global AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
-        global LaneMetricsManager, PayloadBuilder, MQTTPublisher, StreamBufferWorker, TrackClassVotingFilter
-        global VirtualGate, GateFlowManager
-
-        import cv2 as cv
-        import numpy as np
-        import shapely
-        from shapely.geometry import Point, Polygon
-        from ultralytics import YOLO
-
-        from algorithm.sort import Sort
-        from algorithm.byetrack import ByteTrack
-        from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
-        from trt_pipeline.gates import VirtualGate, GateFlowManager
-        from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder
-        from trt_pipeline.publisher import MQTTPublisher
-        from trt_pipeline.stream import StreamBufferWorker
-        from trt_pipeline.voter import TrackClassVotingFilter
+        if not (len(camera_names) == len(config_paths) == len(video_sources)):
+            raise ValueError("camera_names, config_paths and video_sources must have the same length")
         self.num_streams = len(camera_names)
-        self.camera_names = camera_names
-        self.config_paths = config_paths
-        self.video_sources = video_sources
+        self.camera_names = list(camera_names)
+        self.config_paths = list(config_paths)
+        self.video_sources = list(video_sources)
         self.model_path = model_path
         self.device = device
-        self.conf = conf
-        self.target_fps = target_fps
-        self.skip_frames = max(0, skip_frames)
-        self.buffer_size = buffer_size
+        self.conf = float(conf)
+        self.target_fps = float(target_fps)
+        self.skip_frames = max(0, int(skip_frames))
         self.display = display
         self.nvenc_out = nvenc_out
-        self.pub_interval = pub_interval
+        self.pub_interval = float(pub_interval)
         self.intersection_id = intersection_id
+        self.source_id = source_id or f"VISION-{intersection_id}"
+        if output_mode not in ("shadow", "controller"):
+            raise ValueError("output_mode must be 'shadow' or 'controller'")
+        self.output_mode = output_mode
+        if output_mode == "shadow":
+            self.mqtt_topic = mqtt_topic or os.getenv("VISION_SHADOW_TOPIC") or "traffic/counts/shadow"
+            self.health_topic = health_topic or f"traffic/health/shadow/{self.source_id}"
+            live_topic = os.getenv("TRAFFIC_COUNTS_TOPIC") or os.getenv("MQTT_TOPIC") or "traffic/counts"
+            live_health = self.health_topic.startswith("traffic/health/") and len(self.health_topic.split("/")) == 3
+            if self.mqtt_topic in ("traffic/counts", live_topic) or live_health:
+                raise ValueError("Live controller topics require --output-mode controller")
+        else:
+            self.mqtt_topic = mqtt_topic or os.getenv("TRAFFIC_COUNTS_TOPIC") or os.getenv("MQTT_TOPIC") or "traffic/counts"
+            self.health_topic = health_topic or f"traffic/health/{self.source_id}"
         self.tracker_type = tracker_type.lower()
         self.imgsz = int(imgsz)
+        self.track_thresh = float(track_thresh)
+        self.low_thresh = float(low_thresh)
+        self.match_thresh = float(match_thresh)
+        self.max_frame_age_s = float(max_frame_age_s)
+        self.max_observation_age_s = float(max_observation_age_s)
+        self.max_consecutive_errors = int(max_consecutive_errors)
+        self.batch_wait_s = 1.0 / self.target_fps if self.target_fps > 0 else 0.04
 
-        # 1. Preflight Calibration Validation & Loading
-        all_errors = []
-        all_warnings = []
-        parsed_camera_configs = []
-        parsed_lane_dicts = []
+        if self.conf > self.low_thresh:
+            logger.warning(
+                f"Detector confidence {self.conf} is above the tracker's low threshold {self.low_thresh}: "
+                f"ByteTrack's second association stage will receive no detections."
+            )
 
-        for idx in range(self.num_streams):
-            cfg_path = config_paths[idx]
-            cam_name = camera_names[idx] if idx < len(camera_names) else f"cam_{idx}"
-            context_str = f"{cam_name} ({os.path.basename(cfg_path)})"
-
+        # 1. Calibration preflight (before any model, capture or network resources)
+        all_errors, all_warnings, raw_configs, lane_dicts = [], [], [], []
+        for idx, cfg_path in enumerate(self.config_paths):
+            context_str = f"{self.camera_names[idx]} ({os.path.basename(cfg_path)})"
             report = validate_config_file(cfg_path, context=context_str)
-            if report.errors:
-                all_errors.extend(report.errors)
-            if report.warnings:
-                all_warnings.extend(report.warnings)
-
-            # Do not construct lane dictionaries from invalid entries
+            all_errors.extend(report.errors)
+            all_warnings.extend(report.warnings)
             if report.is_valid and report.raw_config is not None:
-                parsed_camera_configs.append(report.raw_config)
-                lane_dict = {}
+                raw_configs.append(report.raw_config)
                 raw_lanes = report.raw_config.get("lane_metrics", {}).get("lanes", {})
+                lane_dict = {}
                 for lane_id, poly in report.valid_polygons.items():
                     l_info = raw_lanes.get(lane_id, {}) if isinstance(raw_lanes, dict) else {}
-                    direction = l_info.get("direction", lane_id[0] if lane_id else "N") if isinstance(l_info, dict) else (lane_id[0] if lane_id else "N")
-                    lane_dict[lane_id] = {
-                        "direction": direction,
-                        "polygon": poly,
-                    }
-                parsed_lane_dicts.append(lane_dict)
+                    lane_dict[lane_id] = {"direction": l_info.get("direction"), "polygon": poly,
+                                          "role": l_info.get("role", "queue")}
+                    if lane_dict[lane_id]["direction"] not in ("N", "S", "E", "W"):
+                        all_errors.append(_ConfigError(context_str, lane_id,
+                                                       "lane 'direction' must be one of N, S, E, W"))
+                    if lane_dict[lane_id]["role"] not in LANE_ROLES:
+                        all_errors.append(_ConfigError(context_str, lane_id,
+                                                       f"lane 'role' must be one of {LANE_ROLES}"))
+                lane_dicts.append(lane_dict)
 
-        # Log overlap warnings once at startup with context
         for warn in all_warnings:
             logger.warning(f"Calibration warning [{warn.context}]: {warn.message}")
 
-        # If any invalid configuration was found, fail immediately before allocating model, capture or MQTT resources
+        seen_lanes: Dict[str, str] = {}
+        for idx, ld in enumerate(lane_dicts):
+            for lane_id in ld:
+                if lane_id in seen_lanes:
+                    all_errors.append(_ConfigError(self.camera_names[idx], lane_id,
+                                                   f"duplicate lane ID (also defined for {seen_lanes[lane_id]})"))
+                seen_lanes[lane_id] = self.camera_names[idx]
+
         if all_errors:
             error_details = "\n".join(
                 f"  - [{e.context}] Lane '{e.lane_id}': {e.reason}" if e.lane_id else f"  - [{e.context}] Config: {e.reason}"
@@ -177,21 +269,28 @@ class BatchedCameraPipeline:
             logger.error(msg)
             raise ValueError(msg)
 
-        self.camera_configs = parsed_camera_configs
-        self.lane_configs = parsed_lane_dicts
-        self.metrics_managers = [LaneMetricsManager(ld) for ld in parsed_lane_dicts]
-        self.queue_speed_thresholds = [
-            float(cfg.get("lane_metrics", {}).get("queue_speed_threshold", 2.0))
-            if isinstance(cfg.get("lane_metrics"), dict) else 2.0
-            for cfg in parsed_camera_configs
-        ]
+        self.camera_configs = raw_configs
+        self.lane_configs = lane_dicts
+        self._log_ignored_settings()
+        self.controller_adapter = None
+        self.controller_delivery = None
+        if self.output_mode == "controller":
+            self.controller_adapter = MainControllerAdapter(
+                controller_config or os.path.join(REPO_ROOT, "config", "controller_main.json"),
+                self.intersection_id, self.lane_configs, self.pub_interval)
+            self.controller_delivery = {
+                "profile": "smart-traffic-sys/main", "state": "starting", "blockers": ["no_snapshot"],
+                "cameraId": self.controller_adapter.camera_id, "accepted": 0, "suppressed": 0,
+                "lastAcceptedAt": None,
+            }
+        self.last_payload = None
 
-        # 1.1 Virtual Counting Gates Manager
-        self.gate_manager = GateFlowManager(camera_names=self.camera_names)
-        for idx in range(self.num_streams):
-            cfg = self.camera_configs[idx]
-            if "gates" in cfg and isinstance(cfg["gates"], list):
-                for g_cfg in cfg["gates"]:
+        # 2. Gates (validated: unique IDs, explicit direction and type)
+        camera_ids = [self._camera_id_for(i) for i in range(self.num_streams)]
+        self.gate_manager = GateFlowManager(camera_names=self.camera_names, camera_ids=camera_ids)
+        for idx, cfg in enumerate(self.camera_configs):
+            for g_cfg in cfg.get("gates", []) or []:
+                try:
                     self.gate_manager.add_gate(VirtualGate(
                         gate_id=g_cfg["gate_id"],
                         cam_idx=idx,
@@ -202,73 +301,95 @@ class BatchedCameraPipeline:
                         label=g_cfg.get("label", g_cfg["gate_id"]),
                         target_dir=g_cfg.get("target_dir"),
                     ))
+                except (KeyError, ValueError) as exc:
+                    raise ValueError(f"Invalid gate in {self.config_paths[idx]}: {exc}") from exc
 
-        # 2. Trackers & Motion Memory per Camera
-        min_hits = 1 if self.skip_frames > 0 else 2
-        if self.tracker_type == "byetrack":
-            self.trackers = [
-                ByteTrack(track_thresh=0.40, low_thresh=0.10, match_thresh=0.70, max_age=30, min_hits=min_hits)
-                for _ in range(self.num_streams)
-            ]
-            logger.info(f"Initialized ByteTrack trackers across {self.num_streams} streams (track_thresh=0.40, low_thresh=0.10).")
+        # 3. Per-camera runtime
+        self.cams: List[CameraRuntime] = []
+        for idx in range(self.num_streams):
+            cfg = self.camera_configs[idx]
+            lm = cfg.get("lane_metrics", {}) if isinstance(cfg.get("lane_metrics"), dict) else {}
+            anchor = lm.get("anchor", "bottom_center")
+            if anchor not in ("bottom_center", "center"):
+                raise ValueError(f"{self.config_paths[idx]}: lane_metrics.anchor must be 'bottom_center' or 'center'")
+            calib = cfg.get("calibration", {}) if isinstance(cfg.get("calibration"), dict) else {}
+            res = calib.get("resolution")
+            reference = None
+            if calib.get("reference_image"):
+                ref_path = os.path.join(os.path.dirname(os.path.abspath(self.config_paths[idx])), calib["reference_image"])
+                if os.path.exists(ref_path):
+                    import cv2 as cv
+                    reference = cv.imread(ref_path)
+                else:
+                    logger.warning(f"[{self.camera_names[idx]}] calibration reference image missing: {ref_path}")
+            self.cams.append(CameraRuntime(
+                idx=idx,
+                name=self.camera_names[idx],
+                camera_id=camera_ids[idx],
+                config_path=self.config_paths[idx],
+                source=None,
+                lanes=self.lane_configs[idx],
+                metrics=LaneMetricsManager(self.lane_configs[idx], camera_id=camera_ids[idx]),
+                motion=MotionStateClassifier(QueueSettings.from_config(lm.get("queue"))),
+                tracker=self._make_tracker(track_max_age),
+                health=ImageHealthMonitor(reference=reference, settings=HealthSettings.from_config(cfg.get("camera_health"))),
+                anchor=anchor,
+                expected_resolution=(int(res[0]), int(res[1])) if isinstance(res, (list, tuple)) and len(res) == 2 else None,
+                calibration_revision=calib.get("revision"),
+            ))
+        # Compatibility views used by display/tests
+        self.metrics_managers = [c.metrics for c in self.cams]
+        self.trackers = [c.tracker for c in self.cams]
+
+        # 4. Sources
+        if sources is not None:
+            if len(sources) != self.num_streams:
+                raise ValueError("sources must match camera count")
+            self.replay_mode = all(isinstance(s, FileReplaySource) for s in sources)
+            for cam, src in zip(self.cams, sources):
+                cam.source = src
         else:
-            self.trackers = [
-                Sort(max_age=30, min_hits=min_hits, iou_threshold=0.3)
-                for _ in range(self.num_streams)
-            ]
-            logger.info(f"Initialized SORT trackers across {self.num_streams} streams.")
-        self.last_tracked: List[np.ndarray] = [np.empty((0, 6)) for _ in range(self.num_streams)]
-        self.track_histories: List[Dict[int, deque]] = [{} for _ in range(self.num_streams)]
+            live = [is_live_source(s) for s in self.video_sources]
+            if any(live) and not all(live):
+                raise ValueError("Mixing recorded files and live streams in one run is not supported")
+            self.replay_mode = not any(live)
+            for cam, src in zip(self.cams, self.video_sources):
+                cam.source = (FileReplaySource(cam.name, src, replay_fps=replay_fps) if self.replay_mode
+                              else StreamBufferWorker(name=cam.name, source=src, target_fps=self.target_fps))
+        self.is_file_mode = self.replay_mode
+        if (self.controller_adapter and not allow_replay_controller
+                and (self.replay_mode or any(isinstance(c.source, FileReplaySource) for c in self.cams))):
+            raise ValueError("Recorded footage requires shadow output; --allow-replay-controller is only for isolated tests")
 
-        # 3. Stream Ingestion (Synchronized Lockstep for Files, Threaded Ring Buffer for RTSP)
-        self.is_file_mode = all(
-            isinstance(src, str) and os.path.exists(src)
-            for src in self.video_sources
-        )
-        if self.is_file_mode:
-            self.file_caps = [cv.VideoCapture(src) for src in self.video_sources]
-            self.stream_workers = []
-            logger.info("Local video files detected: Using Synchronized Lockstep Mode (0% drift, exact frame-by-frame sync).")
+        # 5. Model
+        self.model_sha256 = None
+        if model is not None:
+            self.model = model
+            raw_names = getattr(model, "names", None) or {0: "car", 1: "motorcycle", 2: "bus", 3: "truck", 4: "three_wheeler"}
         else:
-            self.file_caps = []
-            self.stream_workers = [
-                StreamBufferWorker(
-                    name=self.camera_names[i],
-                    source=self.video_sources[i],
-                    target_fps=self.target_fps,
-                    buffer_size=self.buffer_size,
-                    is_paced=True,
-                    loop_video=True,
-                )
-                for i in range(self.num_streams)
-            ]
+            if not os.path.exists(self.model_path):
+                raise FileNotFoundError(f"Model weights not found: {self.model_path}")
+            self.model_sha256 = sha256_file(self.model_path)
+            if model_sha256 and self.model_sha256.lower() != model_sha256.lower():
+                raise ValueError(f"Model SHA-256 mismatch: expected {model_sha256}, got {self.model_sha256}")
+            logger.info(f"Loading model '{self.model_path}' (sha256={self.model_sha256}) onto '{self.device}'")
+            from ultralytics import YOLO
+            self.model = YOLO(self.model_path, task="detect")
+            raw_names = getattr(self.model, "names", None)
 
-        # 4. Load Inference Model (Auto-detects TensorRT FP16 .engine vs PyTorch .pt)
-        logger.info(f"Loading vision model: '{self.model_path}' onto device '{self.device}'...")
-        self.model = YOLO(self.model_path)
-
-        # Auto-configure class mappings from model metadata
-        raw_names = getattr(self.model, "names", None)
-        if raw_names and isinstance(raw_names, dict):
+        if isinstance(raw_names, dict):
             model_names = {int(k): str(v) for k, v in raw_names.items()}
-        elif raw_names and isinstance(raw_names, list):
+        elif isinstance(raw_names, list):
             model_names = {i: str(v) for i, v in enumerate(raw_names)}
         else:
             model_names = COCO_CLASSES
-
-        # Check if model has domain-specific traffic classes (e.g. Thai Traffic 5-class model)
         traffic_keywords = {"car", "motorcycle", "bus", "truck", "three_wheeler", "tuktuk", "bicycle"}
-        is_traffic_model = len(model_names) <= 15 and any(v.lower() in traffic_keywords for v in model_names.values())
-
-        if is_traffic_model:
+        if len(model_names) <= 15 and any(v.lower() in traffic_keywords for v in model_names.values()):
             self.class_names = model_names
-            self.target_classes = None  # Infer across all domain classes
-            logger.info(f"Loaded domain-specific traffic model with {len(self.class_names)} classes: {self.class_names}")
+            self.target_classes = None
         else:
             self.class_names = COCO_CLASSES
             self.target_classes = list(COCO_CLASSES.keys())
-            logger.info(f"Loaded general model with {len(model_names)} classes. Filtering to COCO traffic classes: {self.target_classes}")
-
         self.default_car_cls = next((k for k, v in self.class_names.items() if v.lower() == "car"), 0)
         truck_cls_id = next((k for k, v in self.class_names.items() if v.lower() == "truck"), 3)
         self.class_voter = TrackClassVotingFilter(
@@ -280,484 +401,905 @@ class BatchedCameraPipeline:
             enabled=enable_voting,
         )
 
-        # 5. Decoupled Display & Video Encoding Worker
-        nvenc_writer = None
-        if self.nvenc_out:
-            if is_nvenc_available():
-                # Default 4-cam grid resolution (960x540)
-                cols = min(4, self.num_streams)
-                rows = (self.num_streams + cols - 1) // cols
-                grid_w, grid_h = cols * 480, rows * 270
-                nvenc_writer = NVENCVideoWriter(self.nvenc_out, width=grid_w, height=grid_h, fps=self.target_fps)
-            else:
-                logger.warning("Hardware NVENC is not available on this host. Falling back to OpenCV display.")
+        # 6. Display (optional)
+        self.display_worker = None
+        if self.display or self.nvenc_out:
+            from trt_pipeline.display import AsyncDisplayWorker, NVENCVideoWriter, is_nvenc_available
+            nvenc_writer = None
+            if self.nvenc_out:
+                if is_nvenc_available():
+                    cols = min(4, self.num_streams)
+                    rows = (self.num_streams + cols - 1) // cols
+                    nvenc_writer = NVENCVideoWriter(self.nvenc_out, width=cols * 480, height=rows * 270, fps=self.target_fps)
+                else:
+                    logger.warning("Hardware NVENC is not available on this host.")
+            if self.display or nvenc_writer:
+                self.display_worker = AsyncDisplayWorker(
+                    display=self.display,
+                    nvenc_writer=nvenc_writer,
+                    window_name=f"Smart Traffic Vision ({self.num_streams} cameras)",
+                    class_names=self.class_names,
+                )
 
-        self.display_worker = (
-            AsyncDisplayWorker(
-                display=self.display,
-                nvenc_writer=nvenc_writer,
-                window_name=f"Smart Traffic Vision - Multi-Camera Production Grid ({self.num_streams} Cams)",
-                class_names=self.class_names,
+        # 7. Delivery
+        if publisher is not None:
+            self.publisher = publisher
+        else:
+            from trt_pipeline.publisher import MQTTPublisher
+            tls = mqtt_tls or {}
+            self.publisher = MQTTPublisher(
+                broker_url=mqtt_broker, topic=self.mqtt_topic, qos=0 if self.controller_adapter else 1,
+                client_id=f"vision_{self.output_mode}_{self.source_id}",
+                health_topic=self.health_topic,
+                tls_ca=tls.get("ca"), tls_cert=tls.get("cert"), tls_key=tls.get("key"),
+                tls_insecure=bool(tls.get("insecure")),
             )
-            if (self.display or nvenc_writer)
-            else None
-        )
+        self.payload_builder = PayloadBuilder(intersection_id=self.intersection_id, camera_id=self.source_id)
 
-        # 6. MQTT Integration
-        self.publisher = MQTTPublisher(broker_url=mqtt_broker, topic=mqtt_topic, qos=1)
-        self.payload_builder = PayloadBuilder(intersection_id=self.intersection_id, camera_id="MULTI-CAM")
+        self.recorder = _make_recorder(record_path) if record_path else None
+        self.health_file = health_file
+        self.maintenance_file = maintenance_file
+        self._maintenance: Dict[str, str] = {}
+        self._maintenance_mtime: Optional[float] = None
 
         self.running = False
+        self.batch_idx = 0
         self.total_processed_batches = 0
         self.total_inferred_batches = 0
-        self.total_skipped_batches = 0
+        self.consecutive_errors = 0
+        self.total_errors = 0
+        self.started_wall = time.time()
+        self._last_pub_mono = time.monotonic()
+        self._current_fps = 0.0
+        self._fps_count = 0
+        self._fps_mono = time.monotonic()
 
-    def _is_queued(self, cam_idx: int, track_id: int, pt: Tuple[float, float], frame_idx: int) -> bool:
-        """Determines if a tracked vehicle is queued (stopped/slow) based on centroid velocity."""
-        hist_map = self.track_histories[cam_idx]
-        if track_id not in hist_map:
-            hist_map[track_id] = deque(maxlen=15)
-            hist_map[track_id].append((frame_idx, pt))
-            return False
+    # ------------------------------------------------------------------ setup helpers
+    def _camera_id_for(self, idx: int) -> str:
+        info = self.camera_configs[idx].get("camera_info", {}) if idx < len(self.camera_configs) else {}
+        cid = info.get("camera_id") if isinstance(info, dict) else None
+        return str(cid) if cid else self.camera_names[idx]
 
-        hist = hist_map[track_id]
-        hist.append((frame_idx, pt))
+    def _make_tracker(self, max_age: int):
+        min_hits = 1 if self.skip_frames > 0 else 2
+        if self.tracker_type == "byetrack":
+            from algorithm.byetrack import ByteTrack
+            return ByteTrack(track_thresh=self.track_thresh, low_thresh=self.low_thresh,
+                             match_thresh=self.match_thresh, max_age=max_age, min_hits=min_hits)
+        from algorithm.sort import Sort
+        return Sort(max_age=max_age, min_hits=min_hits, iou_threshold=0.3)
 
-        if len(hist) < 3:
-            return False
+    def _log_ignored_settings(self) -> None:
+        for idx, cfg in enumerate(self.camera_configs):
+            ignored = [k for k in IGNORED_CONFIG_SECTIONS if k in cfg]
+            lm = cfg.get("lane_metrics", {}) if isinstance(cfg.get("lane_metrics"), dict) else {}
+            ignored += [f"lane_metrics.{k}" for k in IGNORED_LANE_METRIC_KEYS if k in lm]
+            if ignored:
+                logger.info(f"[{self.camera_names[idx]}] config keys not used by this runner "
+                            f"(settings come from the command line): {', '.join(ignored)}")
 
-        first_frame, first_pt = hist[0]
-        dt = max(1, frame_idx - first_frame)
-        dist = float(np.linalg.norm(np.array(pt) - np.array(first_pt)))
-        speed = dist / dt
-        return speed < self.queue_speed_thresholds[cam_idx]
+    def effective_settings(self) -> Dict[str, Any]:
+        """Everything that determines the measurements, logged at startup and sent in payload meta."""
+        return {
+            "sourceId": self.source_id,
+            "outputMode": self.output_mode,
+            "countsTopic": self.mqtt_topic,
+            "healthTopic": self.health_topic,
+            "controllerProfile": None if self.controller_adapter is None else {
+                "config": self.controller_adapter.config_path,
+                "cameraId": self.controller_adapter.camera_id,
+                "expectedLanes": self.controller_adapter.lanes,
+                "countKind": "occupancy",
+                "maxObservationAgeMs": self.controller_adapter.max_age_ms,
+                "freshnessMs": self.controller_adapter.freshness_ms,
+            },
+            "intersectionId": self.intersection_id,
+            "mode": "replay" if self.replay_mode else "live",
+            "model": {"path": self.model_path, "sha256": self.model_sha256, "imgsz": self.imgsz,
+                      "conf": self.conf, "device": self.device},
+            "tracker": {"type": self.tracker_type, "trackThresh": self.track_thresh,
+                        "lowThresh": self.low_thresh, "matchThresh": self.match_thresh},
+            "skipFrames": self.skip_frames,
+            "publishIntervalSec": self.pub_interval,
+            "maxFrameAgeSec": self.max_frame_age_s,
+            "maxObservationAgeSec": self.max_observation_age_s,
+            "cameras": [{
+                "name": c.name, "cameraId": c.camera_id, "config": c.config_path,
+                "source": redact_source(self.video_sources[c.idx]), "anchor": c.anchor,
+                "calibrationRevision": c.calibration_revision,
+                "expectedResolution": c.expected_resolution,
+                "queueUnits": c.motion.settings.units,
+            } for c in self.cams],
+        }
 
-    def _evaluate_vectorized_lanes(self, cam_idx: int, tracked_objs: np.ndarray, frame_idx: int) -> None:
+    # ------------------------------------------------------------------ lifecycle
+    def start(self) -> None:
+        self.running = True
+        self.publisher.start()
+        for cam in self.cams:
+            cam.source.start()
+        if self.display_worker:
+            self.display_worker.start()
+        logger.info("Effective settings: " + json.dumps(self.effective_settings()))
+
+    def stop(self) -> None:
+        if getattr(self, "_stopped", False):
+            return
+        self._stopped = True
+        self.running = False
+        for cam in getattr(self, "cams", []):
+            try:
+                if cam.source is not None:
+                    cam.source.stop()
+            except Exception as exc:
+                logger.warning(f"[{cam.name}] error stopping source: {exc}")
+        if getattr(self, "display_worker", None):
+            self.display_worker.stop()
+        if getattr(self, "publisher", None):
+            try:
+                self.publisher.stop({"status": "offline", "reason": "stopped", "sourceId": self.source_id})
+            except TypeError:
+                self.publisher.stop()
+        logger.info("Pipeline stopped.")
+
+    # ------------------------------------------------------------------ per-camera state
+    def _reset_camera(self, cam: CameraRuntime, reset_health: bool = True) -> None:
+        """Discontinuity: track IDs, motion and crossings from the previous epoch must not carry over."""
+        cam.tracker = self._make_tracker(getattr(cam.tracker, "max_age", 30))
+        self.trackers[cam.idx] = cam.tracker
+        cam.motion.reset()
+        cam.metrics.reset()
+        if reset_health:
+            cam.health.reset()
+        cam.last_tracked = np.empty((0, 6))
+        cam.last_obs_wall = None
+        cam.last_obs_mono = None
+        cam.last_obs_t = None
+        cam.frames_seen = 0
+        cam.epoch_inferences = 0
+        self.class_voter.reset(cam_idx=cam.idx)
+        self.gate_manager.reset_camera(cam.idx)
+        logger.info(f"[{cam.name}] observation discontinuity (epoch {cam.epoch}): temporal state reset")
+
+    def _anchors(self, cam: CameraRuntime, objs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        xs = (objs[:, 0] + objs[:, 2]) * 0.5
+        ys = objs[:, 3] if cam.anchor == "bottom_center" else (objs[:, 1] + objs[:, 3]) * 0.5
+        return xs, ys
+
+    def _evaluate_lanes(self, cam: CameraRuntime, objs: np.ndarray, t: float) -> None:
         """
-        High-performance vectorized spatial lane assignment:
-        Evaluates all tracked bounding box centroids against lane polygons using
-        C-accelerated shapely.contains_xy to eliminate Python loop overhead.
-
-        NOTE: First-lane precedence (configuration insertion order) is a temporary
-        deterministic policy to prevent duplicate vehicle counting when polygons overlap,
-        not a substitute for calibration validation.
+        Rebuilds the camera's current lane occupancy from one observed frame.
+        Each track is assigned to at most one lane: the first configured lane whose
+        polygon covers its anchor point (boundary included).
         """
-        metrics = self.metrics_managers[cam_idx]
+        metrics = cam.metrics
         metrics.reset()
-
-        if tracked_objs is None or len(tracked_objs) == 0:
+        if objs is None or len(objs) == 0:
             return
 
-        cxs = (tracked_objs[:, 0] + tracked_objs[:, 2]) * 0.5
-        cys = (tracked_objs[:, 1] + tracked_objs[:, 3]) * 0.5
-        lane_cfg = self.lane_configs[cam_idx]
+        xs, ys = self._anchors(cam, objs)
+        heights = np.maximum(1.0, objs[:, 3] - objs[:, 1])
+        states = {}
+        for i in range(len(objs)):
+            tid = int(objs[i, 4])
+            states[tid] = cam.motion.update(tid, (float(xs[i]), float(ys[i])), float(heights[i]), t)
 
-        assigned_indices = set()
-        assigned_track_ids = set()
-
-        for lane_id, linfo in lane_cfg.items():
+        assigned = np.zeros(len(objs), dtype=bool)
+        seen: set = set()
+        for lane_id, linfo in cam.lanes.items():
             poly = linfo["polygon"]
             if poly is None or poly.is_empty:
                 continue
-
-            try:
-                # Vectorized evaluation across all centroids simultaneously
-                inside_mask = shapely.contains_xy(poly, cxs, cys)
-            except AttributeError:
-                # Fallback for older Shapely versions (< 2.0)
-                inside_mask = np.array([poly.contains(Point(cx, cy)) for cx, cy in zip(cxs, cys)], dtype=bool)
-
-            inside_indices = np.where(inside_mask)[0]
-            for idx in inside_indices:
-                if idx in assigned_indices:
+            inside = shapely.intersects_xy(poly, xs, ys)
+            for i in np.where(inside & ~assigned)[0]:
+                tid = int(objs[i, 4])
+                if tid in seen:
                     continue
-
-                obj = tracked_objs[idx]
-                track_id = int(obj[4])
-                if track_id in assigned_track_ids:
-                    continue
-
-                assigned_indices.add(idx)
-                assigned_track_ids.add(track_id)
-
-                cx, cy = float(cxs[idx]), float(cys[idx])
-                cls_id = int(obj[5]) if len(obj) >= 6 else self.default_car_cls
-                cls_name = self.class_names.get(cls_id, "car")
-
-                is_q = self._is_queued(cam_idx, track_id, (cx, cy), frame_idx)
-                metrics.register_vehicle(
-                    lane_id=lane_id,
-                    track_id=track_id,
-                    vehicle_class=cls_name,
-                    is_queued=is_q,
-                )
-
-            if len(assigned_indices) == len(tracked_objs):
+                assigned[i] = True
+                seen.add(tid)
+                cls_id = int(objs[i, 5]) if objs.shape[1] >= 6 else self.default_car_cls
+                metrics.register_vehicle(lane_id=lane_id, track_id=tid,
+                                         vehicle_class=self.class_names.get(cls_id, "car"),
+                                         state=states[tid])
+            if assigned.all():
                 break
 
-    def start(self) -> None:
-        """Starts stream workers, background display, and MQTT publisher."""
-        for worker in self.stream_workers:
-            worker.start()
+    def _track(self, cam: CameraRuntime, dets: np.ndarray) -> np.ndarray:
+        """Runs the tracker and returns (M, 6) [x1, y1, x2, y2, track_id, voted_class]."""
+        idx = cam.idx
+        if self.tracker_type == "byetrack":
+            out = cam.tracker.update(dets)
+            if len(out) == 0:
+                return np.empty((0, 6))
+            res = out[:, :6].astype(float).copy()
+            for i, row in enumerate(out):
+                # class/score of the detection the tracker matched this frame
+                res[i, 5] = self.class_voter.update(cam_idx=idx, track_id=int(row[4]),
+                                                    raw_cls_id=int(row[5]), conf=float(row[6]) if len(row) > 6 else 1.0)
+            return res
+
+        hi = dets[dets[:, 4] >= self.track_thresh] if len(dets) else np.empty((0, 6))
+        out = cam.tracker.update(hi[:, :5] if len(hi) else np.empty((0, 5)))
+        if len(out) == 0:
+            return np.empty((0, 6))
+        res = np.zeros((len(out), 6))
+        res[:, :5] = out[:, :5]
+        matched = _match_tracks_to_dets(out[:, :4], hi[:, :4]) if len(hi) else {}
+        for i, row in enumerate(out):
+            tid = int(row[4])
+            if i in matched:
+                d = hi[matched[i]]
+                res[i, 5] = self.class_voter.update(cam_idx=idx, track_id=tid, raw_cls_id=int(d[5]), conf=float(d[4]))
+            else:
+                res[i, 5] = self.class_voter.get_class(cam_idx=idx, track_id=tid, fallback=self.default_car_cls)
+        return res
+
+    @staticmethod
+    def _extract_dets(result: Any) -> np.ndarray:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or len(boxes) == 0:
+            return np.empty((0, 6))
+        try:
+            xyxy = boxes.xyxy.cpu().numpy()
+            conf = boxes.conf.cpu().numpy().reshape(-1, 1)
+            cls = boxes.cls.cpu().numpy().reshape(-1, 1)
+            return np.hstack([xyxy, conf, cls]).astype(float)
+        except AttributeError:
+            rows = []
+            for box in boxes:
+                x1, y1, x2, y2 = np.asarray(box.xyxy[0].cpu().numpy(), dtype=float)
+                rows.append([x1, y1, x2, y2, float(box.conf[0]), int(box.cls[0])])
+            return np.array(rows, dtype=float) if rows else np.empty((0, 6))
+
+    # ------------------------------------------------------------------ main loop
+    def _collect_packets(self) -> Dict[int, FramePacket]:
+        packets: Dict[int, FramePacket] = {}
+        if self.replay_mode:
+            for cam in self.cams:
+                p = cam.source.poll()
+                if p is not None:
+                    packets[cam.idx] = p
+            return packets
+        deadline = time.monotonic() + self.batch_wait_s
+        while self.running:
+            for cam in self.cams:
+                if cam.idx not in packets:
+                    p = cam.source.poll()
+                    if p is not None:
+                        packets[cam.idx] = p
+            if len(packets) == self.num_streams or time.monotonic() >= deadline:
+                break
+            time.sleep(0.002)
+        return packets
+
+    def step(self) -> None:
+        """One iteration: take available frames, infer on due cameras, update analytics, maybe publish."""
+        self._load_maintenance()
+        packets = self._collect_packets()
+        now_wall = time.time()
+        due: List[Tuple[CameraRuntime, FramePacket]] = []
+
+        for idx, p in packets.items():
+            cam = self.cams[idx]
+            if cam.maintenance_active:
+                continue
+            if p.epoch != cam.epoch:
+                first = cam.epoch == 0
+                cam.epoch = p.epoch
+                if not first:
+                    self._reset_camera(cam)
+            frame_age = p.age_s(now_wall)
+            if frame_age > self.max_frame_age_s:
+                cam.stale_frames_dropped += 1
+                continue
+            captured_mono = p.captured_mono if p.captured_mono is not None else time.monotonic() - frame_age
+            if cam.last_obs_mono is not None and captured_mono - cam.last_obs_mono > self.max_observation_age_s:
+                self._reset_camera(cam)
+            h, w = p.frame.shape[:2]
+            if cam.expected_resolution and (w, h) != cam.expected_resolution:
+                if cam.frame_invalid_reason != "resolution_mismatch":
+                    self._reset_camera(cam)
+                    logger.error(f"[{cam.name}] frame {w}x{h} does not match calibration "
+                                 f"{cam.expected_resolution[0]}x{cam.expected_resolution[1]}")
+                cam.frame_invalid_reason = "resolution_mismatch"
+                cam.last_frame = p.frame
+                continue
+            cam.frame_invalid_reason = None
+            cam.health.check(p.frame, time.monotonic())
+            cam.last_frame = p.frame
+            if cam.health.verdict():
+                if not cam.health_invalid:
+                    self._reset_camera(cam, reset_health=False)
+                cam.health_invalid = True
+                continue
+            cam.health_invalid = False
+            cam.frames_seen += 1
+            if (cam.frames_seen - 1) % (self.skip_frames + 1) == 0:
+                due.append((cam, p))
+
+        if due:
+            self.batch_idx += 1
+            infer_kwargs = {"verbose": False, "device": self.device, "conf": self.conf, "imgsz": self.imgsz}
+            if self.target_classes is not None:
+                infer_kwargs["classes"] = self.target_classes
+            results = self.model([p.frame for _, p in due], **infer_kwargs)
+            self.total_inferred_batches += 1
+            self._fps_count += 1
+
+            for (cam, p), result in zip(due, results):
+                dets = self._extract_dets(result)
+                objs = self._track(cam, dets)
+                self.class_voter.prune(cam_idx=cam.idx, active_track_ids={int(o[4]) for o in objs})
+                cam.motion.prune(p.obs_t)
+                self._evaluate_lanes(cam, objs, p.obs_t)
+                self.gate_manager.update_tracks(cam.idx, objs, now=p.obs_t)
+                cam.last_tracked = objs
+                cam.last_obs_wall = p.captured_wall
+                cam.last_obs_mono = p.captured_mono if p.captured_mono is not None else time.monotonic() - p.age_s()
+                cam.last_obs_t = p.obs_t
+                cam.inferences += 1
+                cam.epoch_inferences += 1
+
+        self.total_processed_batches = self.batch_idx
+        mono = time.monotonic()
+        if mono - self._fps_mono >= 1.0:
+            self._current_fps = self._fps_count / (mono - self._fps_mono)
+            self._fps_count = 0
+            self._fps_mono = mono
 
         if self.display_worker:
-            self.display_worker.start()
+            self._submit_display()
 
-        self.publisher.start()
-        self.running = True
+        if mono - self._last_pub_mono >= self.pub_interval:
+            self._last_pub_mono = mono
+            self.publish_once()
 
-    def stop(self) -> None:
-        """Gracefully stops all workers and releases resources."""
-        self.running = False
-        for worker in self.stream_workers:
-            worker.stop()
-        for cap in self.file_caps:
-            cap.release()
+    # ------------------------------------------------------------------ reporting
+    def camera_status(self, cam: CameraRuntime, now_wall: Optional[float] = None) -> Dict[str, Any]:
+        now_wall = now_wall if now_wall is not None else time.time()
+        src = cam.source.status() if cam.source is not None else {"state": "unknown"}
+        age = None
+        if cam.last_obs_mono is not None:
+            age = max(0.0, time.monotonic() - cam.last_obs_mono)
+        elif cam.last_obs_wall is not None:
+            age = max(0.0, now_wall - cam.last_obs_wall)
+        reason = None
+        if cam.name in self._maintenance or cam.camera_id in self._maintenance:
+            status = "maintenance"
+            reason = self._maintenance.get(cam.name) or self._maintenance.get(cam.camera_id) or "maintenance"
+        elif cam.frame_invalid_reason:
+            status, reason = "invalid", cam.frame_invalid_reason
+        elif cam.health.verdict():
+            status, reason = "invalid", cam.health.verdict()
+        elif age is None:
+            status = src.get("state") if src.get("state") in ("offline", "reconnecting") else "starting"
+            reason = status
+        elif age > self.max_observation_age_s:
+            state = src.get("state")
+            status = state if state in ("offline", "reconnecting") else "stale"
+            reason = status
+        elif cam.epoch_inferences < cam.tracker.min_hits:
+            status, reason = "starting", "tracker_warmup"
+        elif cam.health.degraded():
+            status, reason = "degraded", cam.health.degraded()
+        else:
+            status = "ok"
+        return {
+            "cameraId": cam.camera_id,
+            "name": cam.name,
+            "status": status,
+            "reason": reason,
+            "observedAt": iso_utc(cam.last_obs_wall) if cam.last_obs_wall else None,
+            "ageMs": None if age is None else int(age * 1000),
+            "calibrationRevision": cam.calibration_revision,
+            "inferences": cam.inferences,
+            "staleFramesDropped": cam.stale_frames_dropped,
+            "framesDropped": src.get("framesDropped"),
+            "reconnects": src.get("reconnects"),
+            "epoch": cam.epoch,
+            "trackedVehicles": int(len(cam.last_tracked)),
+            "motionTracks": len(cam.motion),
+            "shiftPx": cam.health.flags.get("shiftPx"),
+        }
 
-        if self.display_worker:
-            self.display_worker.stop()
+    def _load_maintenance(self) -> None:
+        """
+        Operator maintenance mode: a JSON file {camera name or ID: reason}. Listed
+        cameras are published as status "maintenance" (lanes unknown) until removed.
+        Re-read whenever the file changes; a missing file means no maintenance.
+        """
+        if not self.maintenance_file:
+            return
+        try:
+            mtime = os.path.getmtime(self.maintenance_file)
+        except FileNotFoundError:
+            if self._maintenance:
+                logger.info("Maintenance file removed: all cameras back in service")
+            self._maintenance, self._maintenance_mtime = {}, None
+            self._apply_maintenance()
+            return
+        except OSError as exc:
+            self._maintenance = {c.name: "maintenance_config_error" for c in self.cams}
+            self._maintenance_mtime = None
+            self._apply_maintenance()
+            logger.error(f"Cannot inspect maintenance file {self.maintenance_file}; measurements disabled: {exc}")
+            return
+        if mtime == self._maintenance_mtime:
+            return
+        try:
+            with open(self.maintenance_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("expected a JSON object")
+            known = {c.name for c in self.cams} | {c.camera_id for c in self.cams}
+            if set(data) - known or any(not isinstance(v, str) or not v.strip() for v in data.values()):
+                raise ValueError("maintenance entries require a known camera name/ID and a nonempty reason")
+            self._maintenance = data
+            self._maintenance_mtime = mtime
+            logger.warning(f"Maintenance mode: {self._maintenance or 'none'}")
+        except (OSError, ValueError) as exc:
+            self._maintenance = {c.name: "maintenance_config_error" for c in self.cams}
+            self._maintenance_mtime = mtime
+            logger.error(f"Invalid maintenance file {self.maintenance_file}; measurements disabled: {exc}")
+        self._apply_maintenance()
 
-        self.publisher.stop()
-        logger.info("BatchedCameraPipeline stopped cleanly.")
+    def _apply_maintenance(self) -> None:
+        for cam in self.cams:
+            active = cam.name in self._maintenance or cam.camera_id in self._maintenance
+            if active != cam.maintenance_active:
+                self._reset_camera(cam)
+                cam.maintenance_active = active
+
+    def build_payload(self, now_wall: Optional[float] = None) -> Dict[str, Any]:
+        now_wall = now_wall if now_wall is not None else time.time()
+        self._load_maintenance()
+        cam_statuses = [self.camera_status(c, now_wall) for c in self.cams]
+        lanes: List[Dict[str, Any]] = []
+        valid_obs = []
+        for cam, st in zip(self.cams, cam_statuses):
+            valid = st["status"] in VALID_STATUSES
+            if valid:
+                valid_obs.append(cam.last_obs_wall)
+            for lane in cam.metrics.snapshot():
+                lane["observedAt"] = st["observedAt"]
+                if valid:
+                    lane["valid"] = True
+                    lane["invalidReason"] = None
+                    lanes.append(lane)
+                else:
+                    lanes.append(invalidate_lane(lane, st["reason"] or st["status"]))
+
+        meta = {
+            "fps": round(self._current_fps, 1),
+            "outputMode": self.output_mode,
+            "mode": "replay" if self.replay_mode else "live",
+            "skip_frames": self.skip_frames,
+            "active_cameras": self.camera_names,
+            "model": {"path": os.path.basename(self.model_path), "sha256": self.model_sha256},
+            "anchor": {c.camera_id: c.anchor for c in self.cams},
+            "queueUnits": {c.camera_id: c.motion.settings.units for c in self.cams},
+            "uptimeSec": int(now_wall - self.started_wall),
+        }
+        return self.payload_builder.build(
+            frame_idx=self.batch_idx,
+            lanes_snapshot=lanes,
+            meta=meta,
+            traffic_flow=self.gate_manager.get_mqtt_telemetry(
+                now_wall, camera_validity={c.idx: st["status"] in VALID_STATUSES for c, st in zip(self.cams, cam_statuses)}),
+            cameras=cam_statuses,
+            observed_at=min(valid_obs) if valid_obs else now_wall,
+            published_at=now_wall,
+        )
+
+    def publish_once(self) -> Dict[str, Any]:
+        payload = self.build_payload()
+        self.last_payload = payload
+        wire_payload = payload
+        if self.controller_adapter:
+            wire_payload = self.controller_adapter.build(payload, time.time())
+            previous = (self.controller_delivery["state"], self.controller_delivery["blockers"])
+            if wire_payload is None:
+                self.controller_delivery["state"] = "suppressed"
+                self.controller_delivery["blockers"] = list(self.controller_adapter.blockers)
+                self.controller_delivery["suppressed"] += 1
+                delivered = False
+            else:
+                delivered = bool(self.publisher.publish(wire_payload))
+                self.controller_delivery["state"] = "publishing" if delivered else "disconnected"
+                self.controller_delivery["blockers"] = [] if delivered else ["broker_delivery_failed"]
+                if delivered:
+                    self.controller_delivery["accepted"] += 1
+                    self.controller_delivery["lastAcceptedAt"] = payload["publishedAt"]
+            if previous != (self.controller_delivery["state"], self.controller_delivery["blockers"]):
+                logger.warning(f"Controller-main delivery: {self.controller_delivery['state']}; "
+                               f"{', '.join(self.controller_delivery['blockers']) or 'complete stop-line occupancy'}")
+        else:
+            delivered = bool(self.publisher.publish(payload))
+        if delivered:
+            # Gate intervals continue across a failed publish so no events are lost.
+            self.gate_manager.reset_interval()
+        if self.recorder:
+            record = {"delivered": delivered, "payload": payload}
+            if self.controller_adapter:
+                record["controllerPayload"] = wire_payload
+                record["controllerDelivery"] = self.controller_delivery
+            self.recorder.info(json.dumps(record))
+        health = self.health_summary(payload)
+        if hasattr(self.publisher, "publish_health"):
+            try:
+                self.publisher.publish_health(health)
+            except Exception as exc:
+                logger.debug(f"health publish failed: {exc}")
+        if self.health_file:
+            _write_json_atomic(self.health_file, health)
+        return payload
+
+    def health_summary(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        cams = payload.get("cameras", [])
+        valid = sum(1 for c in cams if c["status"] in VALID_STATUSES)
+        stats = self.publisher.get_stats() if hasattr(self.publisher, "get_stats") else {}
+        return {
+            "status": "online" if valid == len(cams) else ("degraded" if valid else "no_valid_cameras"),
+            "sourceId": self.source_id,
+            "intersectionId": self.intersection_id,
+            "sessionId": payload.get("sessionId"),
+            "sequence": payload.get("sequence"),
+            "updatedAt": payload.get("publishedAt"),
+            "validCameras": valid,
+            "totalCameras": len(cams),
+            "cameras": [{k: c[k] for k in ("cameraId", "name", "status", "reason", "ageMs")} for c in cams],
+            "delivery": {k: v for k, v in stats.items() if k != "lastAckWall"} if isinstance(stats, dict) else {},
+            "controllerDelivery": dict(self.controller_delivery) if self.controller_delivery is not None else None,
+            "errors": {"total": self.total_errors, "consecutive": self.consecutive_errors},
+        }
+
+    def _submit_display(self) -> None:
+        now_wall = time.time()
+        statuses = [self.camera_status(c, now_wall) for c in self.cams]
+        annotations = []
+        for cam in self.cams:
+            ann = {}
+            for o in cam.last_tracked:
+                rec = cam.metrics.lane_of(int(o[4]))
+                if rec:
+                    ann[int(o[4])] = rec
+            annotations.append(ann)
+        acc = self.gate_manager.get_corridor_accounting()
+        stats_str = (f"BATCH {self.batch_idx:06d} | INFER FPS {self._current_fps:.1f} | "
+                     f"GATES IN {acc['total_inflow']} STOP {acc['total_stopline_cleared']} | "
+                     f"CAMS OK {sum(s['status'] in VALID_STATUSES for s in statuses)}/{len(statuses)}")
+        if self.controller_delivery:
+            stats_str += f" | CONTROLLER {self.controller_delivery['state'].upper()}"
+        gates_render = []
+        for c_i in range(self.num_streams):
+            gates_render.append([{
+                "p1": g.p1, "p2": g.p2, "normal": g.normal, "count": g.count,
+                "label": g.label, "type": g.gate_type, "flash": (now_wall - g.last_flash_ts < 0.4),
+            } for g in self.gate_manager.gates_by_cam.get(c_i, [])])
+        self.display_worker.submit(
+            frames=[c.last_frame for c in self.cams],
+            tracked_list=[c.last_tracked for c in self.cams],
+            cam_names=self.camera_names,
+            lane_configs=self.lane_configs,
+            header_stats=stats_str,
+            gates=gates_render,
+            annotations=annotations,
+            cam_status=statuses,
+        )
+        if not self.display_worker.poll_window():
+            logger.info("User requested exit from preview window (pressed 'q').")
+            self.running = False
 
     def run(self) -> None:
-        """Main centralized batching and processing loop."""
-        self.start()
-        logger.info(f"Pipeline running: {self.num_streams} camera streams | Frame skipping: 1-in-{self.skip_frames + 1}")
-
-        batch_idx = 0
-        last_pub_time = time.perf_counter()
-        last_fps_time = time.perf_counter()
-        fps_batch_counter = 0
-        current_fps = 0.0
-
+        """Starts all workers and runs until stopped. Startup is inside the cleanup boundary."""
         try:
+            self.start()
+            logger.info(f"Pipeline running: {self.num_streams} cameras | frame skipping 1-in-{self.skip_frames + 1}")
             while self.running:
                 t0 = time.perf_counter()
-
-                # 1. Ingest batch: pull 1 frame from each camera
-                batch_frames = []
-                if self.is_file_mode:
-                    for cap in self.file_caps:
-                        ret, frame = cap.read()
-                        if not ret:
-                            cap.set(cv.CAP_PROP_POS_FRAMES, 0)
-                            ret, frame = cap.read()
-                        if ret and frame is not None:
-                            batch_frames.append(frame)
-                else:
-                    for worker in self.stream_workers:
-                        item = worker.get_frame(timeout=0.1)
-                        if item:
-                            batch_frames.append(item[1])
-
-                if len(batch_frames) < self.num_streams:
-                    # Waiting for all streams to deliver synced frames
-                    continue
-
-                batch_idx += 1
-                fps_batch_counter += 1
-                should_run_yolo = (batch_idx % (self.skip_frames + 1)) == 0
-
-                # 2. Centralized Model Forward Pass
-                results = []
-                if should_run_yolo:
-                    infer_kwargs = {
-                        "verbose": False,
-                        "device": self.device,
-                        "conf": self.conf,
-                        "imgsz": self.imgsz,
-                    }
-                    if self.target_classes is not None:
-                        infer_kwargs["classes"] = self.target_classes
-
-                    results = self.model(batch_frames, **infer_kwargs)
-                    self.total_inferred_batches += 1
-                else:
-                    self.total_skipped_batches += 1
-
-                # 3. Fan-out to Trackers with Kalman Continuity & Vectorized Spatial Analytics
-                tracked_list = []
-                for idx in range(self.num_streams):
-                    if should_run_yolo:
-                        dets = []
-                        if idx < len(results) and len(results[idx].boxes):
-                            for box in results[idx].boxes:
-                                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                                conf = float(box.conf[0])
-                                cls_id = int(box.cls[0])
-                                dets.append([x1, y1, x2, y2, conf, cls_id])
-
-                        dets_arr = np.array(dets) if len(dets) else np.empty((0, 6))
-
-                        if self.tracker_type == "byetrack":
-                            tracked_out = self.trackers[idx].update(dets_arr)
-                            if len(tracked_out) > 0 and len(dets_arr) > 0:
-                                det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
-                                for i, tobj in enumerate(tracked_out):
-                                    t_cx = (tobj[0] + tobj[2]) * 0.5
-                                    t_cy = (tobj[1] + tobj[3]) * 0.5
-                                    dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
-                                    best_idx = int(np.argmin(dists))
-                                    raw_c_id = int(dets_arr[best_idx, 5])
-                                    det_conf = float(dets_arr[best_idx, 4])
-                                    tid = int(tobj[4])
-                                    smoothed_c_id = self.class_voter.update(
-                                        cam_idx=idx,
-                                        track_id=tid,
-                                        raw_cls_id=raw_c_id,
-                                        conf=det_conf,
-                                    )
-                                    tracked_out[i, 5] = smoothed_c_id
-                            tracked_objs = tracked_out
-                        else:
-                            # SORT tracker update with detection boxes [x1, y1, x2, y2, conf]
-                            track_input = dets_arr[:, :5] if len(dets_arr) else np.empty((0, 5))
-                            tracked_out = self.trackers[idx].update(track_input)
-
-                            # Re-associate class IDs from closest detections with temporal voting smoothing
-                            if len(tracked_out) > 0 and len(dets_arr) > 0:
-                                matched_tracked = []
-                                det_centers = (dets_arr[:, :2] + dets_arr[:, 2:4]) * 0.5
-                                for tobj in tracked_out:
-                                    t_cx = (tobj[0] + tobj[2]) * 0.5
-                                    t_cy = (tobj[1] + tobj[3]) * 0.5
-                                    dists = np.linalg.norm(det_centers - np.array([t_cx, t_cy]), axis=1)
-                                    best_idx = int(np.argmin(dists))
-                                    raw_c_id = int(dets_arr[best_idx, 5])
-                                    det_conf = float(dets_arr[best_idx, 4])
-                                    tid = int(tobj[4])
-
-                                    smoothed_c_id = self.class_voter.update(
-                                        cam_idx=idx,
-                                        track_id=tid,
-                                        raw_cls_id=raw_c_id,
-                                        conf=det_conf,
-                                    )
-                                    matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
-                                tracked_objs = np.array(matched_tracked)
-                            elif len(tracked_out) > 0:
-                                matched_tracked = []
-                                for tobj in tracked_out:
-                                    tid = int(tobj[4])
-                                    smoothed_c_id = self.class_voter.get_class(
-                                        cam_idx=idx,
-                                        track_id=tid,
-                                        fallback=self.default_car_cls,
-                                    )
-                                    matched_tracked.append(np.append(tobj[:5], smoothed_c_id))
-                                tracked_objs = np.array(matched_tracked)
-                            else:
-                                tracked_objs = np.empty((0, 6))
-
-                        self.last_tracked[idx] = tracked_objs
-                    else:
-                        # Skip frame: hold the last known tracked state (zero Kalman stretching)
-                        tracked_objs = self.last_tracked[idx]
-
-                    tracked_list.append(tracked_objs)
-
-                    # Prune stale track voting history
-                    if len(tracked_objs) > 0:
-                        active_tids = set(int(o[4]) for o in tracked_objs)
-                        self.class_voter.prune(cam_idx=idx, active_track_ids=active_tids)
-
-                    # Vectorized Lane Analytics
-                    self._evaluate_vectorized_lanes(cam_idx=idx, tracked_objs=tracked_objs, frame_idx=batch_idx)
-
-                # 3.5 Update Virtual Counting Gates across all camera streams
-                for idx in range(self.num_streams):
-                    if len(tracked_list[idx]) > 0:
-                        self.gate_manager.update_tracks(cam_idx=idx, tracked_objs=tracked_list[idx], now=time.time())
-
-                # 4. Decoupled Asynchronous Display Submission (0 ms GPU blocking)
-                if self.display_worker:
-                    gate_stats = self.gate_manager.get_corridor_accounting()
-                    gate_str = f" | GATES [IN: {gate_stats['total_inflow']} | STOP: {gate_stats['total_stopline_cleared']} | QUEUE: {gate_stats['corridor_queue']} | FLOW: {gate_stats['discharge_rate_cars_per_sec']}/s]"
-                    drops_str = f" | DROPS: {sum(w.frames_dropped for w in self.stream_workers)}" if self.stream_workers else " | SYNC: LOCKSTEP"
-                    stats_str = f"BATCH {batch_idx:06d} | FPS: {current_fps:.1f}{gate_str}{drops_str}"
-
-                    # Prepare gate rendering payload
-                    gates_render = []
-                    for c_i in range(self.num_streams):
-                        cam_g_list = []
-                        for g in self.gate_manager.gates_by_cam.get(c_i, []):
-                            cam_g_list.append({
-                                "p1": g.p1,
-                                "p2": g.p2,
-                                "normal": g.normal,
-                                "count": g.count,
-                                "label": g.label,
-                                "type": g.gate_type,
-                                "flash": (time.time() - g.last_flash_ts < 0.4),
-                            })
-                        gates_render.append(cam_g_list)
-
-                    self.display_worker.submit(
-                        frames=batch_frames,
-                        tracked_list=tracked_list,
-                        cam_names=self.camera_names,
-                        lane_configs=self.lane_configs,
-                        header_stats=stats_str,
-                        gates=gates_render,
-                    )
-                    # Poll GUI window from main thread (100% thread-safe on macOS/Linux/Windows)
-                    if not self.display_worker.poll_window():
-                        logger.info("User requested exit from preview window (pressed 'q').")
-                        break
-
-                # 5. Periodic MQTT Broadcast
-                now = time.perf_counter()
-                if now - last_pub_time >= self.pub_interval:
-                    combined_lanes = []
-                    for m_mgr in self.metrics_managers:
-                        combined_lanes.extend(m_mgr.snapshot())
-
-                    if combined_lanes:
-                        telemetry = self.gate_manager.get_mqtt_telemetry()
-                        payload = self.payload_builder.build(
-                            frame_idx=batch_idx,
-                            lanes_snapshot=combined_lanes,
-                            meta={
-                                "active_cameras": self.camera_names,
-                                "fps": round(current_fps, 1),
-                                "mode": "batched_production",
-                                "skip_frames": self.skip_frames,
-                            },
-                            traffic_flow=telemetry,
-                        )
-                        self.publisher.publish(payload)
-                        self.gate_manager.reset_interval()
-
-                    last_pub_time = now
-
-                # FPS Calculation
-                if now - last_fps_time >= 1.0:
-                    current_fps = fps_batch_counter / (now - last_fps_time)
-                    fps_batch_counter = 0
-                    last_fps_time = now
-
-                self.total_processed_batches = batch_idx
-
-                # Pacing in file mode to maintain smooth, steady real-time playback
-                if self.is_file_mode and self.target_fps > 0:
-                    desired_interval = 1.0 / self.target_fps
-                    loop_elapsed = time.perf_counter() - t0
-                    if loop_elapsed < desired_interval:
-                        time.sleep(desired_interval - loop_elapsed)
-
+                try:
+                    self.step()
+                    self.consecutive_errors = 0
+                except Exception:  # unslop-ignore: logged retry boundary with a bounded fatal-error threshold
+                    self.total_errors += 1
+                    self.consecutive_errors += 1
+                    logger.exception(f"Error in processing loop ({self.consecutive_errors} consecutive)")
+                    if self.consecutive_errors >= self.max_consecutive_errors:
+                        raise RuntimeError("Too many consecutive processing errors; exiting for supervisor restart")
+                    time.sleep(min(1.0, 0.05 * self.consecutive_errors))
+                if self.replay_mode and self.target_fps > 0:
+                    remaining = 1.0 / self.target_fps - (time.perf_counter() - t0)
+                    if remaining > 0:
+                        time.sleep(remaining)
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt caught. Shutting down pipeline...")
         finally:
             self.stop()
 
 
+class _ConfigError:
+    def __init__(self, context: str, lane_id: Optional[str], reason: str):
+        self.context, self.lane_id, self.reason = context, lane_id, reason
+
+
+def _match_tracks_to_dets(track_boxes: np.ndarray, det_boxes: np.ndarray, min_iou: float = 0.3) -> Dict[int, int]:
+    """One-to-one IoU matching of output tracks to detections (for trackers that do not report classes)."""
+    from scipy.optimize import linear_sum_assignment
+    from algorithm.utils import iou_batch
+
+    if len(track_boxes) == 0 or len(det_boxes) == 0:
+        return {}
+    ious = iou_batch(track_boxes, det_boxes)
+    rows, cols = linear_sum_assignment(-ious)
+    return {int(r): int(c) for r, c in zip(rows, cols) if ious[r, c] >= min_iou}
+
+
+def _write_json_atomic(path: str, data: Dict[str, Any]) -> None:
+    d = os.path.dirname(os.path.abspath(path))
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".health-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:  # unslop-ignore: clean up the temporary file and propagate the original write failure
+        try:
+            os.remove(tmp)
+        except OSError as exc:
+            logger.warning(f"Could not remove temporary health file {tmp}: {exc}")
+        raise
+
+
+def _make_recorder(path: str) -> logging.Logger:
+    rec = logging.getLogger(f"PayloadRecorder:{path}")
+    rec.propagate = False
+    rec.setLevel(logging.INFO)
+    if not rec.handlers:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        h = logging.handlers.RotatingFileHandler(path, maxBytes=50 * 1024 * 1024, backupCount=10, encoding="utf-8")
+        h.setFormatter(logging.Formatter("%(message)s"))
+        rec.addHandler(h)
+    return rec
+
+
+# ---------------------------------------------------------------------- CLI
 def build_pipeline_args() -> argparse.ArgumentParser:
+    env = os.environ.get
     parser = argparse.ArgumentParser(
-        description="Smart Traffic Vision - High-Throughput Production Multi-Camera Runner",
+        description="Smart Traffic Vision - multi-camera measurement runner",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--num-cams", type=int, default=4, help="Number of camera streams (1 to 8+)")
-    parser.add_argument("--cameras", nargs="+", default=None, help="Named cameras to run (north south east west all)")
-    parser.add_argument("--configs", nargs="+", default=None, help="Custom JSON configuration paths")
-    parser.add_argument("--videos", nargs="+", default=None, help="Custom video paths or RTSP stream URLs")
-    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
-    parser.add_argument("--model", default=default_model, help="YOLO model checkpoint or TensorRT .engine path")
-    parser.add_argument("--device", default=None, help="Inference compute device: 'cuda:0', 'cpu' (default: auto)")
-    parser.add_argument("--conf", type=float, default=0.20, help="YOLO detection confidence threshold")
-    parser.add_argument("--fps", type=float, default=25.0, help="Target ingestion frame rate per camera")
-    parser.add_argument("--skip-frames", type=int, default=1, help="Frame skipping ratio (0=none, 1=1-in-2, 2=1-in-3)")
-    parser.add_argument("--buffer-size", type=int, default=2, help="Ring buffer size for jitter absorption (default: 2)")
-    parser.add_argument("--display", action="store_true", help="Display live asynchronous multi-camera HUD window")
-    parser.add_argument("--nvenc", default=None, help="Save live stream to hardware-encoded H.264 video (e.g. out.mp4)")
-    parser.add_argument("--pub-interval", type=float, default=2.0, help="MQTT broadcast interval in seconds")
-    parser.add_argument("--mqtt-broker", default="mqtt://localhost:1883", help="MQTT broker URL")
-    parser.add_argument("--mqtt-topic", default="traffic/counts", help="MQTT destination topic")
-    parser.add_argument("--intersection-id", default="INT-001", help="Intersection identifier string")
-    parser.add_argument("--voting-window", type=int, default=15, help="Temporal voting window size in frames for class smoothing (default: 15)")
-    parser.add_argument("--pickup-bias", type=float, default=1.15, help="Prior weight multiplier favoring car over truck for pickup trucks (default: 1.15)")
-    parser.add_argument("--no-voting", action="store_true", help="Disable temporal class smoothing filter")
-    parser.add_argument("--tracker", choices=["byetrack", "sort"], default="byetrack", help="Object tracking algorithm: 'byetrack' (default) or 'sort'")
-    parser.add_argument("--imgsz", type=int, default=640, help="Inference image resolution (default: 640, supports 960, 1280)")
+    src = parser.add_argument_group("cameras and sources")
+    src.add_argument("--cameras", nargs="+", default=None,
+                     help=f"Camera names ({' '.join(DEFAULT_CONFIGS)} or 'all'). Default: all, or derived from --configs")
+    src.add_argument("--configs", nargs="+", default=None, help="Calibration JSON per camera (same order as --cameras)")
+    src.add_argument("--videos", nargs="+", default=None,
+                     help="Source per camera (file or rtsp://). Prefer --sources-file for credentials")
+    src.add_argument("--sources-file", default=env("VISION_SOURCES_FILE"),
+                     help="JSON {camera_name: source_url}. Keeps camera credentials out of the process list")
+    src.add_argument("--replay-fps", type=float, default=None,
+                     help="True recording frame rate for file replay (default: file metadata)")
+
+    mdl = parser.add_argument_group("model and tracking")
+    mdl.add_argument("--model", default=DEFAULT_MODEL, help="YOLO .pt or TensorRT .engine path")
+    mdl.add_argument("--model-sha256", default=env("VISION_MODEL_SHA256"), help="Refuse to start unless the model matches")
+    mdl.add_argument("--device", default=None, help="'cuda:0', 'cpu' (default: cuda:0 if available)")
+    mdl.add_argument("--allow-cpu", action="store_true", help="Permit running without a CUDA GPU (development only)")
+    mdl.add_argument("--conf", type=float, default=0.10,
+                     help="Detector confidence; must be <= --low-thresh so ByteTrack's low-confidence stage gets input")
+    mdl.add_argument("--imgsz", type=int, default=640, help="Inference image size")
+    mdl.add_argument("--tracker", choices=["byetrack", "sort"], default="byetrack")
+    mdl.add_argument("--track-thresh", type=float, default=0.40, help="Min detection confidence to start a track")
+    mdl.add_argument("--low-thresh", type=float, default=0.10, help="Min confidence for ByteTrack's second stage")
+    mdl.add_argument("--match-thresh", type=float, default=0.70, help="Max IoU distance for association")
+    mdl.add_argument("--track-max-age", type=int, default=30, help="Inferred frames a lost track is kept")
+    mdl.add_argument("--voting-window", type=int, default=15)
+    mdl.add_argument("--pickup-bias", type=float, default=1.15)
+    mdl.add_argument("--no-voting", action="store_true")
+
+    run = parser.add_argument_group("timing")
+    run.add_argument("--fps", type=float, default=25.0, help="Max processing iterations per second")
+    run.add_argument("--skip-frames", type=int, default=1, help="Infer on 1 of every N+1 frames per camera")
+    run.add_argument("--max-frame-age", type=float, default=1.0, help="Drop frames older than this (s) before inference")
+    run.add_argument("--max-observation-age", type=float, default=1.5, help="Lanes invalid when last observation is older (s)")
+    run.add_argument("--pub-interval", type=float, default=1.0, help="Publish interval (s)")
+
+    out = parser.add_argument_group("delivery and identity")
+    out.add_argument("--intersection-id", default=env("VISION_INTERSECTION_ID", "INT-001"))
+    out.add_argument("--source-id", default=env("VISION_SOURCE_ID"),
+                     help="Diagnostic vision source ID (default VISION-<intersection>)")
+    out.add_argument("--mqtt-broker", default=None, help="Broker URL (default: $MQTT_URL or mqtt://localhost:1883)")
+    out.add_argument("--output-mode", choices=("shadow", "controller"), default=env("VISION_OUTPUT_MODE", "shadow"),
+                     help="Shadow publishes full diagnostics; controller sends compatible stop-line counts to system main")
+    out.add_argument("--controller-config", default=env("VISION_CONTROLLER_CONFIG"),
+                     help="Existing controller-main identity, required lanes and freshness profile (default config/controller_main.json)")
+    out.add_argument("--allow-replay-controller", action="store_true",
+                     help="Allow recordings on the controller output for isolated tests (never use with field signals)")
+    out.add_argument("--mqtt-topic", default=None, help="Counts topic (default traffic/counts/shadow in shadow mode)")
+    out.add_argument("--health-topic", default=None, help="Retained health topic (isolated in shadow mode)")
+    out.add_argument("--mqtt-tls-ca", default=None)
+    out.add_argument("--mqtt-tls-cert", default=None)
+    out.add_argument("--mqtt-tls-key", default=None)
+    out.add_argument("--mqtt-tls-insecure", action="store_true", help="Skip hostname verification (testing only)")
+
+    ops = parser.add_argument_group("operations")
+    ops.add_argument("--display", action="store_true", help="Show the live overlay window")
+    ops.add_argument("--nvenc", default=None, help="Record the overlay grid with NVENC (e.g. out.mp4)")
+    ops.add_argument("--log-file", default=env("VISION_LOG_FILE"), help="Rotating log file")
+    ops.add_argument("--record-payloads", default=env("VISION_RECORD_PAYLOADS"),
+                     help="Rotating JSONL of every payload (for incident review)")
+    ops.add_argument("--health-file", default=env("VISION_HEALTH_FILE"),
+                     help="JSON health file rewritten each publish (for watchdogs)")
+    ops.add_argument("--maintenance-file", default=env("VISION_MAINTENANCE_FILE"),
+                     help='JSON {"camera": "reason"}; listed cameras are reported as under maintenance (lanes unknown)')
+    ops.add_argument("--check-config", action="store_true",
+                     help="Validate configuration, sources and model, print effective settings, and exit")
     return parser
 
 
-def main():
-    parser = build_pipeline_args()
-    args = parser.parse_args()
+def resolve_run_plan(args: argparse.Namespace) -> Tuple[List[str], List[str], List[Any]]:
+    """Strictly resolves camera names, configs and sources. Never falls back silently."""
+    def repo_path(p: str) -> str:
+        return p if os.path.isabs(p) or os.path.exists(p) else os.path.join(REPO_ROOT, p)
 
-    # Determine Device
+    if args.cameras and "all" in args.cameras:
+        if len(args.cameras) != 1:
+            raise ValueError("'all' cannot be combined with other camera names")
+        names = list(DEFAULT_CONFIGS)
+    elif args.cameras:
+        names = list(args.cameras)
+    elif args.configs:
+        names = [os.path.splitext(os.path.basename(p))[0].replace("config_", "") for p in args.configs]
+    else:
+        names = list(DEFAULT_CONFIGS)
+
+    if len(set(names)) != len(names):
+        raise ValueError(f"Duplicate camera names: {names}")
+
+    if args.configs:
+        if len(args.configs) != len(names):
+            raise ValueError(f"{len(args.configs)} configs given for {len(names)} cameras")
+        configs = [repo_path(p) for p in args.configs]
+    else:
+        unknown = [n for n in names if n not in DEFAULT_CONFIGS]
+        if unknown:
+            raise ValueError(f"Unknown camera name(s) {unknown}; known: {list(DEFAULT_CONFIGS)} (or pass --configs)")
+        configs = [repo_path(DEFAULT_CONFIGS[n]) for n in names]
+    missing = [c for c in configs if not os.path.exists(c)]
+    if missing:
+        raise FileNotFoundError(f"Config file(s) not found: {missing}")
+
+    sources_map: Dict[str, Any] = {}
+    if args.sources_file:
+        with open(args.sources_file, "r", encoding="utf-8") as f:
+            sources_map = json.load(f)
+        if not isinstance(sources_map, dict):
+            raise ValueError("--sources-file must contain a JSON object {camera_name: source}")
+    if args.videos and sources_map:
+        raise ValueError("Use either --videos or --sources-file, not both")
+    if args.videos and len(args.videos) != len(names):
+        raise ValueError(f"{len(args.videos)} sources given for {len(names)} cameras")
+
+    sources: List[Any] = []
+    for i, (name, cfg_path) in enumerate(zip(names, configs)):
+        if args.videos:
+            src = args.videos[i]
+        elif sources_map:
+            if name not in sources_map:
+                raise ValueError(f"--sources-file has no entry for camera '{name}'")
+            src = sources_map[name]
+        else:
+            src = initial_config(cfg_path).get("video", {}).get("path")
+            if not src:
+                raise ValueError(f"No source for camera '{name}': give --videos/--sources-file or set video.path")
+            if not is_live_source(src):
+                src = repo_path(src)
+        if isinstance(src, str) and "://" not in src and not os.path.exists(src):
+            raise FileNotFoundError(f"Source for camera '{name}' not found: {src}")
+        sources.append(src)
+    return names, configs, sources
+
+
+def configure_file_logging(path: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    h = logging.handlers.RotatingFileHandler(path, maxBytes=20 * 1024 * 1024, backupCount=10, encoding="utf-8")
+    h.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(h)
+    root.setLevel(logging.INFO)
+    logger.addHandler(h)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = build_pipeline_args()
+    args = parser.parse_args(argv)
+    if args.log_file:
+        configure_file_logging(args.log_file)
+
     import torch
     if args.device:
         device = args.device
     elif torch.cuda.is_available():
         device = "cuda:0"
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        device = "mps"
     else:
         device = "cpu"
+    if device.startswith("cpu") and not args.allow_cpu:
+        logger.error("No CUDA GPU available. Refusing to run on CPU in production (use --allow-cpu for development).")
+        return 2
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        logger.error(f"Requested device {device} but CUDA is not available.")
+        return 2
+    model_path = args.model if os.path.isabs(args.model) or os.path.exists(args.model) else os.path.join(REPO_ROOT, args.model)
 
-    logger.info(f"Initialized compute device: {device}")
+    try:
+        names, configs, sources = resolve_run_plan(args)
+    except (ValueError, FileNotFoundError) as exc:
+        logger.error(f"Configuration error: {exc}")
+        return 2
 
-    # Resolve Cameras and Configs
-    default_keys = list(DEFAULT_CONFIGS.keys())
-    if args.cameras:
-        if "all" in args.cameras:
-            chosen_cams = default_keys
-        else:
-            chosen_cams = args.cameras
-    else:
-        num = max(1, args.num_cams)
-        chosen_cams = [default_keys[i % len(default_keys)] if num <= 4 else f"{default_keys[i % 4]}_{i // 4 + 1}" for i in range(num)]
+    tls = {"ca": args.mqtt_tls_ca, "cert": args.mqtt_tls_cert, "key": args.mqtt_tls_key,
+           "insecure": args.mqtt_tls_insecure}
+    try:
+        pipeline = BatchedCameraPipeline(
+            camera_names=names,
+            config_paths=configs,
+            video_sources=sources,
+            model_path=model_path,
+            device=device,
+            conf=args.conf,
+            target_fps=args.fps,
+            skip_frames=args.skip_frames,
+            display=args.display,
+            nvenc_out=args.nvenc,
+            pub_interval=args.pub_interval,
+            mqtt_broker=args.mqtt_broker,
+            mqtt_topic=args.mqtt_topic,
+            intersection_id=args.intersection_id,
+            voting_window=args.voting_window,
+            pickup_bias=args.pickup_bias,
+            enable_voting=not args.no_voting,
+            tracker_type=args.tracker,
+            imgsz=args.imgsz,
+            source_id=args.source_id,
+            track_thresh=args.track_thresh,
+            low_thresh=args.low_thresh,
+            match_thresh=args.match_thresh,
+            track_max_age=args.track_max_age,
+            max_frame_age_s=args.max_frame_age,
+            max_observation_age_s=args.max_observation_age,
+            replay_fps=args.replay_fps,
+            health_topic=args.health_topic,
+            mqtt_tls=tls,
+            model_sha256=args.model_sha256,
+            record_path=args.record_payloads,
+            health_file=args.health_file,
+            maintenance_file=args.maintenance_file,
+            output_mode=args.output_mode,
+            controller_config=args.controller_config,
+            allow_replay_controller=args.allow_replay_controller,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        logger.error(f"Startup error: {exc}")
+        return 2
 
-    configs = []
-    videos = []
-    for idx, cname in enumerate(chosen_cams):
-        base_key = cname.split("_")[0] if "_" in cname else cname
-        cfg_file = args.configs[idx] if (args.configs and idx < len(args.configs)) else DEFAULT_CONFIGS.get(base_key, DEFAULT_CONFIGS["north"])
-        configs.append(cfg_file)
+    if args.check_config:
+        print(json.dumps(pipeline.effective_settings(), indent=2))
+        return 0
 
-        if args.videos and idx < len(args.videos):
-            v_src = args.videos[idx]
-        else:
-            cfg_data = initial_config(cfg_file)
-            v_src = cfg_data["video"]["path"]
-        videos.append(v_src)
-
-    pipeline = BatchedCameraPipeline(
-        camera_names=chosen_cams,
-        config_paths=configs,
-        video_sources=videos,
-        model_path=args.model,
-        device=device,
-        conf=args.conf,
-        target_fps=args.fps,
-        skip_frames=args.skip_frames,
-        buffer_size=args.buffer_size,
-        display=args.display,
-        nvenc_out=args.nvenc,
-        pub_interval=args.pub_interval,
-        mqtt_broker=args.mqtt_broker,
-        mqtt_topic=args.mqtt_topic,
-        intersection_id=args.intersection_id,
-        voting_window=args.voting_window,
-        pickup_bias=args.pickup_bias,
-        enable_voting=(not args.no_voting),
-        tracker_type=args.tracker,
-        imgsz=args.imgsz,
-    )
-
-    # Handle OS termination signals
     def handle_signal(sig, frame):
         logger.info(f"Signal {sig} received. Stopping pipeline...")
-        pipeline.stop()
-        sys.exit(0)
+        pipeline.running = False
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    pipeline.run()
+    try:
+        pipeline.run()
+    except RuntimeError as exc:
+        logger.error(str(exc))
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

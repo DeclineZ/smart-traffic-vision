@@ -1,0 +1,41 @@
+[Unit]
+Description=Smart Traffic Vision (INT-001 counting cameras)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=traffic
+Group=traffic
+WorkingDirectory=/opt/smart-traffic-vision
+EnvironmentFile=/etc/traffic-vision/vision.env
+ExecStart=/opt/smart-traffic-vision/.venv/bin/python run_multi_camera.py \
+    --cameras all \
+    --output-mode ${VISION_OUTPUT_MODE} \
+    --controller-config ${VISION_CONTROLLER_CONFIG} \
+    --sources-file /etc/traffic-vision/sources.json \
+    --model ${VISION_MODEL} --model-sha256 ${VISION_MODEL_SHA256} \
+    --intersection-id ${VISION_INTERSECTION_ID} --source-id ${VISION_SOURCE_ID} \
+    --mqtt-broker ${MQTT_URL} \
+    --health-file /run/traffic-vision/health.json \
+    --log-file /var/log/traffic-vision/vision.log \
+    --record-payloads /var/log/traffic-vision/payloads.jsonl
+RuntimeDirectory=traffic-vision
+LogsDirectory=traffic-vision
+# The runner exits non-zero after repeated processing errors so a fresh process
+# (new CUDA context, new camera sessions) takes over.
+Restart=always
+RestartSec=5
+TimeoutStopSec=60
+KillSignal=SIGTERM
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/traffic-vision /run/traffic-vision
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

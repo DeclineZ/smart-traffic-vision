@@ -1,0 +1,50 @@
+{
+  "E1": {
+    "config": "config/config_east.json",
+    "video": "videos/cam03_east.avi",
+    "frame_seconds": 60.0,
+    "removed_vertex": {
+      "index": 15,
+      "point": [
+        3,
+        908
+      ]
+    },
+    "before": {
+      "vertices": 16,
+      "area": 301681.0,
+      "validity": "Self-intersection[3.24503882657463 908.490077653149]"
+    },
+    "after": {
+      "vertices": 15,
+      "area": 301682.5,
+      "validity": "Valid Geometry"
+    },
+    "overlaps_after": {}
+  },
+  "NE1": {
+    "config": "config/config_northeast.json",
+    "video": "videos/cam45_northeast.avi",
+    "frame_seconds": 60.0,
+    "removed_vertex": {
+      "index": 4,
+      "point": [
+        654,
+        267
+      ]
+    },
+    "before": {
+      "vertices": 5,
+      "area": 206617.0,
+      "validity": "Self-intersection[652.814719925469 267.507977174799]"
+    },
+    "after": {
+      "vertices": 4,
+      "area": 206623.0,
+      "validity": "Valid Geometry"
+    },
+    "overlaps_after": {
+      "NE2": 33.8
+    }
+  }
+}

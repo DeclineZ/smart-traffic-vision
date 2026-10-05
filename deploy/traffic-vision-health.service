@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart Smart Traffic Vision if its health file stops updating
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/smart-traffic-vision
+# Restart only a hung/dead process (health file not updated). Camera outages
+# are reported on the health topic and dashboard; restarting would not fix them.
+ExecStart=/bin/sh -c '/opt/smart-traffic-vision/.venv/bin/python -m tools.healthcheck --file /run/traffic-vision/health.json --max-age 15 --stale-only || systemctl restart traffic-vision.service'

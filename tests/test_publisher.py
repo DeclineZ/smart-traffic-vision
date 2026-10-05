@@ -92,6 +92,39 @@ class TestMQTTPublisher(unittest.TestCase):
             mock_start.assert_called_once()
             mock_stop.assert_called_once()
 
+    def test_explicit_arguments_override_environment(self):
+        with patch.dict(os.environ, {"MQTT_URL": "mqtt://env-host:1999", "TRAFFIC_COUNTS_TOPIC": "env/topic"}):
+            pub = MQTTPublisher(broker_url="mqtt://cli-host:1883", topic="cli/topic")
+            self.assertEqual(pub.host, "cli-host")
+            self.assertEqual(pub.topic, "cli/topic")
+
+    def test_mqtts_enables_tls_on_default_port(self):
+        with patch.dict(os.environ, {}, clear=False):
+            pub = MQTTPublisher(broker_url="mqtts://broker.example:8883")
+            self.assertTrue(pub.use_tls)
+            self.assertEqual(pub.port, 8883)
+            self.assertIsNotNone(pub._client._ssl_context)
+
+    def test_last_will_on_health_topic(self):
+        pub = MQTTPublisher(health_topic="traffic/health/VISION-INT-001")
+        self.assertEqual(pub._client._will_topic, b"traffic/health/VISION-INT-001")
+        self.assertTrue(pub._client._will_retain)
+
+    def test_disconnected_publish_is_dropped_and_counted(self):
+        pub = MQTTPublisher()
+        pub._client.publish = MagicMock()
+        self.assertFalse(pub.publish({"a": 1}))
+        self.assertFalse(pub.publish({"a": 2}))
+        pub._client.publish.assert_not_called()
+        self.assertEqual(pub.get_stats()["skippedDisconnected"], 2)
+
+    def test_ack_counter(self):
+        pub = MQTTPublisher()
+        pub._client.on_publish(pub._client, None, 1, None, None)
+        stats = pub.get_stats()
+        self.assertEqual(stats["acked"], 1)
+        self.assertIsNotNone(stats["lastAckAgeSec"])
+
 
 if __name__ == "__main__":
     unittest.main()

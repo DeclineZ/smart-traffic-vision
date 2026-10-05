@@ -1,0 +1,28 @@
+{
+    "intersection_id": "INT-001",
+
+    "phases": [
+        {
+            "phase_id": "N_GO",
+            "green_time_sec": 30,
+            "avg_car_passed": 15
+        },
+        {
+            "phase_id": "E_GO",
+            "green_time_sec": 30,
+            "avg_car_passed": 15
+        },
+        {
+            "phase_id": "S_GO",
+            "green_time_sec": 30,
+            "avg_car_passed": 15
+        },
+        {
+            "phase_id": "W_GO",
+            "green_time_sec": 30,
+            "avg_car_passed": 15
+        }
+    ],
+
+    "lanes": ["N1", "N2", "E1", "E2", "S1", "S2", "W1", "W2"]
+}

@@ -99,6 +99,34 @@ class TestByteTrack(unittest.TestCase):
         self.assertEqual(len(t3), 1)
         self.assertEqual(int(t3[0, 4]), tid)
 
+    def test_threshold_aware_assignment_keeps_feasible_match(self):
+        # Assign-then-filter returned no match here: its unconstrained optimum pairs
+        # both rows with infeasible columns. The valid 0.67 pair must survive.
+        cost = np.array([[0.88, 0.81, 0.67], [0.96, 0.93, 0.75]])
+        matches, u_a, u_b = self.tracker._linear_assignment(cost, thresh=0.70)
+        self.assertEqual(matches.tolist(), [[0, 2]])
+        self.assertEqual(u_a, [1])
+        self.assertEqual(u_b, [0, 1])
+
+    def test_assignment_never_returns_over_threshold_pairs(self):
+        rng = np.random.default_rng(1)
+        for _ in range(500):
+            cost = rng.uniform(0, 1, (rng.integers(1, 6), rng.integers(1, 6)))
+            matches, u_a, u_b = self.tracker._linear_assignment(cost, thresh=0.7)
+            for r, c in matches:
+                self.assertLessEqual(cost[r, c], 0.7)
+            self.assertEqual(len(matches) + len(u_a), cost.shape[0])
+            self.assertEqual(len(matches) + len(u_b), cost.shape[1])
+
+    def test_output_carries_matched_class_and_score(self):
+        dets = np.array([[0, 0, 50, 50, 0.9, 1], [200, 200, 260, 260, 0.6, 3]], dtype=np.float32)
+        out = self.tracker.update(dets)
+        self.assertEqual(out.shape[1], 7)
+        by_x = {int(r[0]) // 100: r for r in out}
+        self.assertEqual(int(by_x[0][5]), 1)
+        self.assertAlmostEqual(float(by_x[0][6]), 0.9, places=5)
+        self.assertEqual(int(by_x[2][5]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

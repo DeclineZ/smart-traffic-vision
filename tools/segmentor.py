@@ -154,11 +154,70 @@ def load_config_geometry(config_path: str) -> Tuple[Dict[str, Any], List[Dict[st
     return lanes, gates, data
 
 
-def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Dict[str, Any]]) -> bool:
+GATE_DIRECTIONS = ("N", "S", "E", "W")
+GATE_TYPES = ("stopline", "ingress", "egress")
+
+
+def infer_gate_direction(gate_id: str, camera_direction: str = "") -> Optional[str]:
+    """Approach a gate measures: from its ID (GATE_N_STOPLINE -> N), else the camera's approach."""
+    for part in str(gate_id).upper().split("_"):
+        if part in GATE_DIRECTIONS:
+            return part
+    d = (camera_direction or "").strip().lower()
+    return {"north": "N", "south": "S", "east": "E", "west": "W"}.get(d)
+
+
+def validate_gates(gates: Any) -> List[str]:
+    """Gate checks shared with the runner: unique IDs, known type, explicit direction, distinct endpoints."""
+    errors: List[str] = []
+    if not isinstance(gates, list):
+        return [f"'gates' must be a list, got {type(gates).__name__}"]
+    seen = set()
+    for i, g in enumerate(gates):
+        if not isinstance(g, dict):
+            errors.append(f"gate #{i} is not an object")
+            continue
+        gid = g.get("gate_id")
+        if not gid:
+            errors.append(f"gate #{i} has no gate_id")
+        elif gid in seen:
+            errors.append(f"duplicate gate_id '{gid}'")
+        seen.add(gid)
+        if g.get("type", "stopline") not in GATE_TYPES:
+            errors.append(f"gate '{gid}': type must be one of {GATE_TYPES}")
+        if g.get("target_dir") not in GATE_DIRECTIONS:
+            errors.append(f"gate '{gid}': target_dir must be one of {GATE_DIRECTIONS} (which approach it measures)")
+        try:
+            (x1, y1), (x2, y2) = g["p1"], g["p2"]
+            if abs(float(x1) - float(x2)) + abs(float(y1) - float(y2)) < 1:
+                errors.append(f"gate '{gid}': endpoints are identical")
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"gate '{gid}': p1/p2 must be [x, y] pairs")
+    return errors
+
+
+def calibration_history_dir(config_path: str) -> str:
+    base = os.path.splitext(os.path.basename(config_path))[0]
+    return os.path.join(os.path.dirname(os.path.abspath(config_path)), "history", base)
+
+
+def save_config_geometry(
+    config_path: str,
+    lanes: Dict[str, Any],
+    gates: List[Dict[str, Any]],
+    frame: Optional[np.ndarray] = None,
+    operator: Optional[str] = None,
+) -> bool:
     """
     Saves calibrated lanes and gates back into the JSON config file.
     Validates candidate geometry before modifying the destination or its backup.
     Performs atomic file replacement using a temporary file in the destination directory.
+
+    Each successful save is a new calibration revision: ``calibration.revision``,
+    ``saved_by``, ``saved_at`` and (with ``frame``) the image ``resolution`` and a
+    ``reference_image`` used by the runner for camera-shift detection. A copy of
+    every saved revision is kept in ``<config dir>/history/<config name>/`` for
+    rollback (tools/calibration_history.py).
     """
     dest_name = os.path.basename(config_path)
 
@@ -174,8 +233,10 @@ def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Di
             print(f"[ERROR] Cannot save invalid calibration for {config_path}: {target} - {err.reason}", file=sys.stderr)
         return False
 
-    if not isinstance(gates, list):
-        print(f"[ERROR] Cannot save invalid calibration for {config_path}: 'gates' must be a list, got {type(gates).__name__}", file=sys.stderr)
+    gate_errors = validate_gates(gates)
+    if gate_errors:
+        for msg in gate_errors:
+            print(f"[ERROR] Cannot save invalid calibration for {config_path}: {msg}", file=sys.stderr)
         return False
 
     temp_path: Optional[str] = None
@@ -203,6 +264,27 @@ def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Di
         dest_dir = os.path.dirname(os.path.abspath(config_path))
         os.makedirs(dest_dir, exist_ok=True)
 
+        import getpass
+        from datetime import datetime, timezone
+
+        revision = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        calib = dict(raw_config.get("calibration") or {})
+        calib.update({
+            "revision": revision,
+            "previous_revision": calib.get("revision"),
+            "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "saved_by": operator or os.environ.get("CALIBRATION_OPERATOR") or getpass.getuser(),
+        })
+        if frame is not None:
+            h, w = frame.shape[:2]
+            calib["resolution"] = [int(w), int(h)]
+            ref_dir = os.path.join(dest_dir, "reference")
+            os.makedirs(ref_dir, exist_ok=True)
+            ref_name = f"{os.path.splitext(dest_name)[0]}-{revision}.jpg"
+            if cv.imwrite(os.path.join(ref_dir, ref_name), frame, [cv.IMWRITE_JPEG_QUALITY, 90]):
+                calib["reference_image"] = f"reference/{ref_name}"
+        raw_config["calibration"] = calib
+
         # 2. Serialize to temporary file in the destination directory
         prefix = f".tmp_{dest_name}_"
         with tempfile.NamedTemporaryFile("w", dir=dest_dir, prefix=prefix, suffix=".tmp", delete=False, encoding="utf-8") as tf:
@@ -220,6 +302,16 @@ def save_config_geometry(config_path: str, lanes: Dict[str, Any], gates: List[Di
         os.replace(temp_path, config_path)
         temp_path = None
 
+        # 5. Keep this revision for rollback
+        try:
+            hist = calibration_history_dir(config_path)
+            os.makedirs(hist, exist_ok=True)
+            shutil.copy2(config_path, os.path.join(hist, f"{revision}.json"))
+        except OSError as e:
+            print(f"[WARNING] Saved, but could not archive revision {revision}: {e}", file=sys.stderr)
+
+        print(f"[CALIBRATION] Saved revision {revision} by {calib['saved_by']}. "
+              f"Restart the runner to apply it (the running process does not reload calibration).")
         return True
     except Exception as e:
         print(f"[ERROR] Failed to save config to {config_path}: {e}", file=sys.stderr)
@@ -403,6 +495,7 @@ class InteractiveCalibrator:
             self.set_notification("Gate creation cancelled.", (0, 165, 255))
             return
 
+        target_dir = infer_gate_direction(gate_id, self.direction)
         new_gate = {
             "gate_id": gate_id,
             "p1": [int(p1[0]), int(p1[1])],
@@ -410,7 +503,10 @@ class InteractiveCalibrator:
             "type": g_type,
             "direction": [normal[0], normal[1]],
             "label": label,
+            "target_dir": target_dir,
         }
+        if target_dir is None:
+            self.set_notification(f"Gate {gate_id}: set target_dir (N/S/E/W) in the config before saving.", (0, 0, 255))
         self.gates.append(new_gate)
         self.set_notification(f"Added Gate: {gate_id} ({g_type.upper()})! Remember to press [S] to Save.", COLOR_LANE_EDGE)
 
@@ -819,7 +915,7 @@ class InteractiveCalibrator:
                     self.set_notification(f"Stepped backward -5s (Timestamp: {self.current_time_sec:.1f}s)")
 
                 elif key in (ord("s"), ord("S")):  # Save config
-                    success = save_config_geometry(self.config_path, self.lanes, self.gates)
+                    success = save_config_geometry(self.config_path, self.lanes, self.gates, frame=self.current_frame)
                     if success:
                         self.set_notification(
                             f"[SAVED] Saved to {os.path.basename(self.config_path)} ({len(self.lanes)} lanes, {len(self.gates)} gates)!",

@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     total_errors = 0
     total_warnings = 0
     files_with_errors = 0
+    all_gate_ids: set = set()
 
     print("=" * 65)
     print("Lane Calibration Geometry Validation")
@@ -66,11 +67,24 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  [WARNING] {warn.message}")
                 total_warnings += 1
 
-        if report.errors:
+        gate_errors = []
+        if report.raw_config is not None:
+            from tools.segmentor import validate_gates
+            gate_errors = validate_gates(report.raw_config.get("gates", []))
+            if not gate_errors:
+                gate_ids = [g.get("gate_id") for g in report.raw_config.get("gates", [])]
+                dupes = sorted({g for g in gate_ids if g in all_gate_ids})
+                gate_errors = [f"gate_id '{g}' is also used by another camera" for g in dupes]
+                all_gate_ids.update(gate_ids)
+
+        if report.errors or gate_errors:
             files_with_errors += 1
             for err in report.errors:
                 target = f"Lane '{err.lane_id}'" if err.lane_id else "Config"
                 print(f"  [ERROR] {target}: {err.reason}")
+                total_errors += 1
+            for msg in gate_errors:
+                print(f"  [ERROR] Gate: {msg}")
                 total_errors += 1
         elif not report.warnings:
             print("  [OK] All configured lanes are valid. No overlaps detected.")

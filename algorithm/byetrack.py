@@ -236,8 +236,10 @@ class ByteTrack:
                           [[x1, y1, x2, y2, score, class_id], ...]
 
         Returns:
-            tracked_objs: Array of shape (M, 6)
-                  Format: [[x1, y1, x2, y2, track_id, class_id], ...]
+            tracked_objs: Array of shape (M, 7)
+                  Format: [[x1, y1, x2, y2, track_id, class_id, score], ...]
+                  class_id/score come from the detection matched to the track
+                  in this frame (every returned track was matched this frame).
         """
         self.frame_id += 1
         activated_stracks: List[STrack] = []
@@ -375,7 +377,7 @@ class ByteTrack:
                 merged_lost.append(t)
         self.lost_stracks = merged_lost
 
-        # 8. Build output array in standard [x1, y1, x2, y2, track_id, class_id] format
+        # 8. Build output array [x1, y1, x2, y2, track_id, class_id, score]
         output_tracks = []
         for track in self.tracked_stracks:
             if track.is_activated:
@@ -384,10 +386,11 @@ class ByteTrack:
                     box[0], box[1], box[2], box[3],
                     float(track.track_id),
                     float(track.class_id),
+                    float(track.score),
                 ])
 
         if len(output_tracks) == 0:
-            return np.empty((0, 6), dtype=np.float32)
+            return np.empty((0, 7), dtype=np.float32)
 
         return np.array(output_tracks, dtype=np.float32)
 
@@ -404,31 +407,36 @@ class ByteTrack:
     def _linear_assignment(
         self, cost_matrix: np.ndarray, thresh: float
     ) -> Tuple[np.ndarray, List[int], List[int]]:
-        """Performs Hungarian linear sum assignment and filters cost > thresh."""
-        if cost_matrix.size == 0:
+        """
+        Threshold-aware assignment (same objective as lapjv with cost_limit).
+
+        Pairs above ``thresh`` are infeasible, and leaving a track and a detection
+        both unmatched costs ``thresh``. Solving that augmented problem finds the
+        best feasible matching; assigning first and discarding over-threshold
+        pairs afterwards can lose valid matches.
+        """
+        n, m = cost_matrix.shape if cost_matrix.ndim == 2 else (0, 0)
+        if n == 0 or m == 0:
             return (
                 np.empty((0, 2), dtype=int),
-                list(range(cost_matrix.shape[0])),
-                list(range(cost_matrix.shape[1])),
+                list(range(n)),
+                list(range(m)),
             )
 
-        matches_raw = linear_assignment(cost_matrix)
-        matched_indices = []
-        unmatched_a = list(range(cost_matrix.shape[0]))
-        unmatched_b = list(range(cost_matrix.shape[1]))
+        from scipy.optimize import linear_sum_assignment
 
-        for m in matches_raw:
-            r, c = int(m[0]), int(m[1])
-            if cost_matrix[r, c] <= thresh:
-                matched_indices.append([r, c])
-                if r in unmatched_a:
-                    unmatched_a.remove(r)
-                if c in unmatched_b:
-                    unmatched_b.remove(c)
+        big = 1e6
+        half = thresh / 2.0
+        aug = np.full((n + m, m + n), big, dtype=np.float64)
+        real = cost_matrix.astype(np.float64)
+        aug[:n, :m] = np.where(real <= thresh, real, big)
+        aug[:n, m:][np.diag_indices(n)] = half if n else 0   # track left unmatched
+        aug[n:, :m][np.diag_indices(m)] = half if m else 0   # detection left unmatched
+        aug[n:, m:] = 0.0
+        rows, cols = linear_sum_assignment(aug)
 
-        if len(matched_indices) == 0:
-            matches = np.empty((0, 2), dtype=int)
-        else:
-            matches = np.array(matched_indices, dtype=int)
-
-        return matches, unmatched_a, unmatched_b
+        matched = [[r, c] for r, c in zip(rows, cols) if r < n and c < m and real[r, c] <= thresh]
+        matched_r = {r for r, _ in matched}
+        matched_c = {c for _, c in matched}
+        matches = np.array(matched, dtype=int) if matched else np.empty((0, 2), dtype=int)
+        return matches, [i for i in range(n) if i not in matched_r], [j for j in range(m) if j not in matched_c]

@@ -1,0 +1,65 @@
+{
+  "intersectionId": "INT-001",
+  "cameraId": "CAM-01",
+  "timestamp": "2026-10-04T15:04:59.960Z",
+  "meta": {
+    "frameId": "frame_449",
+    "countKind": "occupancy",
+    "visionSourceId": "VISION-INT-001",
+    "visionSessionId": "d8b0491e-056c-49f7-b1ec-861a6256cec9",
+    "visionSequence": 52,
+    "physicalCameraIds": [
+      "INT-001-CAM-E",
+      "INT-001-CAM-N",
+      "INT-001-CAM-S",
+      "INT-001-CAM-W"
+    ]
+  },
+  "lanes": [
+    {
+      "laneId": "N1",
+      "direction": "N",
+      "count": 2
+    },
+    {
+      "laneId": "N2",
+      "direction": "N",
+      "count": 3
+    },
+    {
+      "laneId": "N3",
+      "direction": "N",
+      "count": 1
+    },
+    {
+      "laneId": "E1",
+      "direction": "E",
+      "count": 1
+    },
+    {
+      "laneId": "S1",
+      "direction": "S",
+      "count": 3
+    },
+    {
+      "laneId": "S2",
+      "direction": "S",
+      "count": 3
+    },
+    {
+      "laneId": "S3",
+      "direction": "S",
+      "count": 3
+    },
+    {
+      "laneId": "W1",
+      "direction": "W",
+      "count": 0
+    },
+    {
+      "laneId": "W2",
+      "direction": "W",
+      "count": 0
+    }
+  ]
+}

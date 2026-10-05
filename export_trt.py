@@ -62,6 +62,21 @@ def export_yolo_to_tensorrt(
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for TensorRT export, but torch.cuda.is_available() returned False.")
 
+    if half:
+        try:
+            import tensorrt as trt
+            trt_major = int(trt.__version__.split(".")[0])
+        except Exception:
+            trt_major = 0
+        if trt_major >= 11:
+            try:
+                import modelopt.onnx  # noqa: F401
+            except ImportError:
+                raise RuntimeError(
+                    "TensorRT 11+ is strongly typed: Ultralytics bakes FP16 into the ONNX graph with NVIDIA "
+                    "ModelOpt. Install it (pip install nvidia-modelopt[onnx]) or export FP32 with --no-half."
+                )
+
     t0 = time.perf_counter()
     model = YOLO(str(model_path))
 
@@ -86,19 +101,60 @@ def export_yolo_to_tensorrt(
     return str(exported_path)
 
 
-def main():
-    default_model = "models/yolo26s_thai_traffic.pt" if os.path.exists("models/yolo26s_thai_traffic.pt") else "yolov8s.pt"
-    parser.add_argument("--model", type=str, default=default_model, help="Path to .pt model weights")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Export a YOLO .pt checkpoint to a TensorRT .engine",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--model", type=str, default="models/yolo26s_thai_traffic.pt", help="Path to .pt model weights")
     parser.add_argument("--batch", type=int, default=8, help="Max batch size for dynamic batching (default: 8)")
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image resolution (default: 640)")
     parser.add_argument("--workspace", type=int, default=2, help="TensorRT build workspace in GB (default: 2)")
     parser.add_argument("--device", type=int, default=0, help="CUDA device index (default: 0)")
     parser.add_argument("--no-half", action="store_true", help="Disable FP16 half-precision (use FP32)")
     parser.add_argument("--fixed-batch", action="store_true", help="Disable dynamic batching")
+    return parser
 
-    args = parser.parse_args()
 
-    export_yolo_to_tensorrt(
+def write_engine_metadata(engine_path: str, source_model: str, **settings) -> str:
+    """Records what the engine was built from, so deployments can verify provenance."""
+    import hashlib
+    import json
+    import platform
+
+    def sha256(p):
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    meta = {
+        "engine": os.path.basename(engine_path),
+        "engineSha256": sha256(engine_path),
+        "sourceModel": os.path.basename(source_model),
+        "sourceSha256": sha256(source_model),
+        "settings": settings,
+        "builtAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "host": platform.node(),
+    }
+    try:
+        import tensorrt, torch
+        meta["tensorrt"] = tensorrt.__version__
+        meta["torch"] = torch.__version__
+        meta["gpu"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+    except Exception:
+        pass
+    out = str(Path(engine_path).with_suffix(".engine.json"))
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    return out
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+
+    engine = export_yolo_to_tensorrt(
         model_path=args.model,
         imgsz=args.imgsz,
         half=not args.no_half,
@@ -107,6 +163,10 @@ def main():
         device=args.device,
         workspace=args.workspace,
     )
+    meta = write_engine_metadata(engine, args.model, imgsz=args.imgsz, half=not args.no_half,
+                                 dynamic=not args.fixed_batch, batch=args.batch)
+    print(f"Engine metadata: {meta}")
+    print("Engines are specific to this GPU model and TensorRT version; rebuild on the deployment hardware.")
 
 
 if __name__ == "__main__":

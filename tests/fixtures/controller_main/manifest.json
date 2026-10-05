@@ -1,0 +1,20 @@
+{
+  "repository": "smart-traffic-sys",
+  "revision": "7a2a1f4683abcc4ca6ec95e8918230b3cbd7a8fe",
+  "files": {
+    "backend/src/services/incomingTraffic.service.js": "e8b956ee226e897f58f35b5c77dd33416fe2e3631699e6bc819dd114c6726e99",
+    "backend/src/services/decision.service.js": "8777d877e04a167617619069a77b6e9844ab2729425d9641cd1e392be3c237f3",
+    "backend/src/services/skipPhase.service.js": "4b8865d959defd654b8ca8c0ba02f46a672b3dcaa4f0b0207c54b2d540c66731",
+    "backend/src/models/trafficMemory.model.js": "c3f1de5a9564fdd407ad7c0a262777b43d8996fa63e03d69f75cef361cd50f0a",
+    "backend/src/utils/reliableQueuedAggregator.js": "529c497f7967cbfeeac791d17ae69dd2d834c6bea7b6069c390c687076cdafed",
+    "backend/src/repositories/trafficReading.repo.js": "4d56a368f014f19ccfcad17ff32e9bd8fbc7b403f9f922fd674b4fd7d466723f",
+    "backend/src/config/intersectionRegistry.js": "6d21bd8bfa727af9cc63e818b39fa7ddccd486c8bf2d64019a67bc65ec6d46bf",
+    "backend/src/mock/intersection.config.json": "c1006e6ce4fdfca70cb9bdb2f0a32a904979777be24f320eaa8bb7c4d21c3050",
+    "backend/src/brain/index.js": "6bb7bc45aa2b27df7071d18223c7173d45d877a3856b3f5d61656ff4827162d8",
+    "backend/src/brain/fixedCycle.controller.js": "c7e7916e75bec19ac4815e7d6919b7ead013ffd9236ed81dc2cae4ae249e28ca",
+    "backend/src/brain/queueBased.controller.js": "b23d2bc0e6baca27b990f8a5763c5ef058f70f5823b1f5da06d8bba29eee4c45",
+    "backend/src/brain/simpleCycleBased.controller.js": "dbd84ab88fe78132ceef148ac4a97c0baff41a0eba2a6cfc4af7fd291aba8a25",
+    "backend/src/brain/maxPressureSwitchingLoss.js": "6d768f34075a0825b3d9795d9a10dffca22f264421958756ade0cba0ae898723",
+    "backend/migrations/007_seed_intersection_001.sql": "ade563e318b6a9a43711038c3eb6ad815a8ee2b5ae1b71e61eb4cc896f113c61"
+  }
+}

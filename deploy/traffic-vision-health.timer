@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Smart Traffic Vision health every 30 s
+
+[Timer]
+OnBootSec=120
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

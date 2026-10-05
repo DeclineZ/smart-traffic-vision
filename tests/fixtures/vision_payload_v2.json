@@ -1,0 +1,664 @@
+{
+  "schemaVersion": "2.0",
+  "intersectionId": "INT-001",
+  "cameraId": "VISION-INT-001",
+  "sourceId": "VISION-INT-001",
+  "sessionId": "86db5e34-f943-4385-8982-8105098b3d82",
+  "sequence": 9,
+  "timestamp": "2026-10-04T13:27:09.145Z",
+  "observedAt": "2026-10-04T13:27:09.145Z",
+  "publishedAt": "2026-10-04T13:27:09.241Z",
+  "meta": {
+    "frameId": "frame_75",
+    "fps": 9.9,
+    "mode": "replay",
+    "skip_frames": 1,
+    "active_cameras": [
+      "north",
+      "south",
+      "east",
+      "west",
+      "northeast"
+    ],
+    "model": {
+      "path": "yolo26s_thai_traffic.pt",
+      "sha256": "cc579a0387668e204ba79372e9f2380ad6531659fff5fd1d78d7cf282b6b1c2c"
+    },
+    "anchor": {
+      "INT-001-CAM-N": "bottom_center",
+      "INT-001-CAM-S": "bottom_center",
+      "INT-001-CAM-E": "bottom_center",
+      "INT-001-CAM-W": "bottom_center",
+      "INT-001-CAM-NE": "bottom_center"
+    },
+    "queueUnits": {
+      "INT-001-CAM-N": "box_heights/s",
+      "INT-001-CAM-S": "box_heights/s",
+      "INT-001-CAM-E": "box_heights/s",
+      "INT-001-CAM-W": "box_heights/s",
+      "INT-001-CAM-NE": "box_heights/s"
+    },
+    "uptimeSec": 11
+  },
+  "lanes": [
+    {
+      "laneId": "N1",
+      "direction": "N",
+      "role": "queue",
+      "count": 5,
+      "queuedCount": 0,
+      "movingCount": 4,
+      "unknownStateCount": 1,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 4,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 1,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 5,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-N",
+      "observedAt": "2026-10-04T13:27:09.145Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "N2",
+      "direction": "N",
+      "role": "queue",
+      "count": 1,
+      "queuedCount": 0,
+      "movingCount": 1,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 1,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 1,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-N",
+      "observedAt": "2026-10-04T13:27:09.145Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "N3",
+      "direction": "N",
+      "role": "queue",
+      "count": 1,
+      "queuedCount": 0,
+      "movingCount": 1,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 1,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 1,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-N",
+      "observedAt": "2026-10-04T13:27:09.145Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "S1",
+      "direction": "S",
+      "role": "queue",
+      "count": 2,
+      "queuedCount": 2,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 2,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 2,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-S",
+      "observedAt": "2026-10-04T13:27:09.150Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "S2",
+      "direction": "S",
+      "role": "queue",
+      "count": 3,
+      "queuedCount": 3,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 3,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 3,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-S",
+      "observedAt": "2026-10-04T13:27:09.150Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "S3",
+      "direction": "S",
+      "role": "queue",
+      "count": 2,
+      "queuedCount": 2,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 2,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 2,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-S",
+      "observedAt": "2026-10-04T13:27:09.150Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "E1",
+      "direction": "E",
+      "role": "queue",
+      "count": 0,
+      "queuedCount": 0,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 0,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-E",
+      "observedAt": "2026-10-04T13:27:09.153Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "W1",
+      "direction": "W",
+      "role": "queue",
+      "count": 0,
+      "queuedCount": 0,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 0,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-W",
+      "observedAt": "2026-10-04T13:27:09.157Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "W2",
+      "direction": "W",
+      "role": "queue",
+      "count": 0,
+      "queuedCount": 0,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 0,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-W",
+      "observedAt": "2026-10-04T13:27:09.157Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "NE1",
+      "direction": "N",
+      "role": "upstream",
+      "count": 0,
+      "queuedCount": 0,
+      "movingCount": 0,
+      "unknownStateCount": 0,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 0,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 0,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 0,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-NE",
+      "observedAt": "2026-10-04T13:27:09.160Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "NE2",
+      "direction": "N",
+      "role": "upstream",
+      "count": 3,
+      "queuedCount": 0,
+      "movingCount": 2,
+      "unknownStateCount": 1,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 2,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 1,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 2,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 1,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-NE",
+      "observedAt": "2026-10-04T13:27:09.160Z",
+      "valid": true,
+      "invalidReason": null
+    },
+    {
+      "laneId": "NE3",
+      "direction": "N",
+      "role": "upstream",
+      "count": 2,
+      "queuedCount": 0,
+      "movingCount": 1,
+      "unknownStateCount": 1,
+      "vehicles": {
+        "queued": {
+          "cars": 0,
+          "motorbike": 0
+        },
+        "moving": {
+          "cars": 1,
+          "motorbike": 0
+        },
+        "unknown": {
+          "cars": 1,
+          "motorbike": 0
+        }
+      },
+      "classes": {
+        "car": 1,
+        "motorcycle": 0,
+        "bus": 0,
+        "truck": 1,
+        "three_wheeler": 0
+      },
+      "cameraId": "INT-001-CAM-NE",
+      "observedAt": "2026-10-04T13:27:09.160Z",
+      "valid": true,
+      "invalidReason": null
+    }
+  ],
+  "cameras": [
+    {
+      "cameraId": "INT-001-CAM-N",
+      "name": "north",
+      "status": "ok",
+      "reason": null,
+      "observedAt": "2026-10-04T13:27:09.145Z",
+      "ageMs": 95,
+      "calibrationRevision": "2026-10-04-batch2b",
+      "inferences": 75,
+      "staleFramesDropped": 0,
+      "framesDropped": 0,
+      "reconnects": 0,
+      "epoch": 1,
+      "trackedVehicles": 12,
+      "motionTracks": 27,
+      "shiftPx": 0.2
+    },
+    {
+      "cameraId": "INT-001-CAM-S",
+      "name": "south",
+      "status": "ok",
+      "reason": null,
+      "observedAt": "2026-10-04T13:27:09.150Z",
+      "ageMs": 91,
+      "calibrationRevision": "2026-10-04-batch2b",
+      "inferences": 75,
+      "staleFramesDropped": 0,
+      "framesDropped": 0,
+      "reconnects": 0,
+      "epoch": 1,
+      "trackedVehicles": 20,
+      "motionTracks": 38,
+      "shiftPx": 0.1
+    },
+    {
+      "cameraId": "INT-001-CAM-E",
+      "name": "east",
+      "status": "ok",
+      "reason": null,
+      "observedAt": "2026-10-04T13:27:09.153Z",
+      "ageMs": 88,
+      "calibrationRevision": "2026-10-04-batch2b",
+      "inferences": 75,
+      "staleFramesDropped": 0,
+      "framesDropped": 0,
+      "reconnects": 0,
+      "epoch": 1,
+      "trackedVehicles": 8,
+      "motionTracks": 9,
+      "shiftPx": 0.6
+    },
+    {
+      "cameraId": "INT-001-CAM-W",
+      "name": "west",
+      "status": "ok",
+      "reason": null,
+      "observedAt": "2026-10-04T13:27:09.157Z",
+      "ageMs": 84,
+      "calibrationRevision": "2026-10-04-batch2b",
+      "inferences": 75,
+      "staleFramesDropped": 0,
+      "framesDropped": 0,
+      "reconnects": 0,
+      "epoch": 1,
+      "trackedVehicles": 2,
+      "motionTracks": 3,
+      "shiftPx": 0.1
+    },
+    {
+      "cameraId": "INT-001-CAM-NE",
+      "name": "northeast",
+      "status": "ok",
+      "reason": null,
+      "observedAt": "2026-10-04T13:27:09.160Z",
+      "ageMs": 81,
+      "calibrationRevision": "2026-10-04-batch2b",
+      "inferences": 75,
+      "staleFramesDropped": 0,
+      "framesDropped": 0,
+      "reconnects": 0,
+      "epoch": 1,
+      "trackedVehicles": 16,
+      "motionTracks": 29,
+      "shiftPx": 0.1
+    }
+  ],
+  "traffic_flow": {
+    "by_direction": {
+      "N": {
+        "inflow": 1,
+        "cleared": 1,
+        "live_discharge_rate": 1.006
+      },
+      "S": {
+        "inflow": null,
+        "cleared": 0,
+        "live_discharge_rate": 0.0
+      },
+      "E": {
+        "inflow": null,
+        "cleared": 0,
+        "live_discharge_rate": 0.0
+      },
+      "W": {
+        "inflow": null,
+        "cleared": 0,
+        "live_discharge_rate": 0.0
+      }
+    },
+    "interval": {
+      "windowStart": "2026-10-04T13:27:08.234Z",
+      "windowEnd": "2026-10-04T13:27:09.241Z",
+      "windowSec": 1.007,
+      "gates": [
+        {
+          "gateId": "GATE_N_STOPLINE",
+          "type": "stopline",
+          "direction": "N",
+          "cameraId": "INT-001-CAM-N",
+          "count": 1,
+          "observedSec": 0.994,
+          "coverage": 0.987,
+          "valid": true
+        },
+        {
+          "gateId": "GATE_S_STOPLINE",
+          "type": "stopline",
+          "direction": "S",
+          "cameraId": "INT-001-CAM-S",
+          "count": 0,
+          "observedSec": 0.995,
+          "coverage": 0.987,
+          "valid": true
+        },
+        {
+          "gateId": "GATE_W_STOPLINE",
+          "type": "stopline",
+          "direction": "W",
+          "cameraId": "INT-001-CAM-W",
+          "count": 0,
+          "observedSec": 0.99,
+          "coverage": 0.982,
+          "valid": true
+        },
+        {
+          "gateId": "GATE_N_IN",
+          "type": "ingress",
+          "direction": "N",
+          "cameraId": "INT-001-CAM-NE",
+          "count": 1,
+          "observedSec": 0.989,
+          "coverage": 0.982,
+          "valid": true
+        },
+        {
+          "gateId": "GATE_E_STOPLINE",
+          "type": "stopline",
+          "direction": "E",
+          "cameraId": "INT-001-CAM-NE",
+          "count": 0,
+          "observedSec": 0.989,
+          "coverage": 0.982,
+          "valid": true
+        }
+      ],
+      "by_direction": {
+        "N": {
+          "arrivals": {
+            "count": 1,
+            "observedSec": 0.989,
+            "ratePerSec": 1.0111,
+            "valid": true
+          },
+          "departures": {
+            "count": 1,
+            "observedSec": 0.994,
+            "ratePerSec": 1.006,
+            "valid": true
+          }
+        },
+        "S": {
+          "arrivals": null,
+          "departures": {
+            "count": 0,
+            "observedSec": 0.995,
+            "ratePerSec": 0.0,
+            "valid": true
+          }
+        },
+        "E": {
+          "arrivals": null,
+          "departures": {
+            "count": 0,
+            "observedSec": 0.989,
+            "ratePerSec": 0.0,
+            "valid": true
+          }
+        },
+        "W": {
+          "arrivals": null,
+          "departures": {
+            "count": 0,
+            "observedSec": 0.99,
+            "ratePerSec": 0.0,
+            "valid": true
+          }
+        }
+      }
+    }
+  }
+}

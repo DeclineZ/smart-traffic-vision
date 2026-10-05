@@ -309,5 +309,29 @@ class TestPayloadBuilder(unittest.TestCase):
         self.assertEqual(lane_n1["vehicles"]["queued"]["motorbike"], 1)
 
 
+class TestContractFixture(unittest.TestCase):
+    """tests/fixtures/vision_payload_v2.json is shared with smart-traffic-sys backend/test."""
+
+    def test_fixture_satisfies_contract(self):
+        import json
+        path = os.path.join(os.path.dirname(__file__), "fixtures", "vision_payload_v2.json")
+        with open(path, encoding="utf-8") as f:
+            p = json.load(f)
+        self.assertEqual(p["schemaVersion"].split(".")[0], "2")
+        for key in ("intersectionId", "sourceId", "sessionId", "sequence", "timestamp", "observedAt", "publishedAt", "cameras"):
+            self.assertIn(key, p)
+        self.assertLessEqual(p["observedAt"], p["publishedAt"])
+        ids = [l["laneId"] for l in p["lanes"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        for lane in p["lanes"]:
+            self.assertIn(lane["direction"], ("N", "S", "E", "W"))
+            self.assertIn(lane["role"], ("queue", "upstream"))
+            if lane["valid"]:
+                self.assertEqual(lane["count"], lane["queuedCount"] + lane["movingCount"] + lane["unknownStateCount"])
+                self.assertEqual(lane["count"], sum(lane["classes"].values()))
+            else:
+                self.assertIsNone(lane["count"])
+
+
 if __name__ == "__main__":
     unittest.main()

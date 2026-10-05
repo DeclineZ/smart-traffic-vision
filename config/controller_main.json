@@ -1,0 +1,13 @@
+{
+  "intersection_id": "INT-001",
+  "camera_id": "CAM-01",
+  "controller_revision": "7a2a1f4683abcc4ca6ec95e8918230b3cbd7a8fe",
+  "max_observation_age_ms": 750,
+  "controller_freshness_ms": 2000,
+  "expected_lanes": {
+    "N1": "N", "N2": "N", "N3": "N",
+    "E1": "E",
+    "S1": "S", "S2": "S", "S3": "S",
+    "W1": "W", "W2": "W"
+  }
+}
