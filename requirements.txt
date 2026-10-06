@@ -1,15 +1,15 @@
 # Core Deep Learning & Computer Vision
 torch>=2.0.0
 torchvision>=0.15.0
-ultralytics>=8.3.0
+# Verified with the primary YOLO26 checkpoint; older releases may lack its layers.
+ultralytics>=8.4.124
 opencv-python>=4.8.0
 numpy>=1.23.0
 shapely>=2.0.0
 filterpy>=1.4.5
 scipy>=1.10.0
 
-# Multi-Object Tracking Extensions (Optional for ByteTrack / BotSort / DeepOCSort)
-boxmot>=16.0.0
+# Assignment acceleration for the bundled trackers
 lapx>=0.9.0
 
 # Inference & Hardware Acceleration Extensions (Optional for ONNX / TensorRT)
@@ -23,5 +23,4 @@ pynvml>=11.5.0
 
 # Calibration, Analysis & Reporting
 matplotlib>=3.7.0
-pandas>=2.0.0
 Pillow>=9.5.0

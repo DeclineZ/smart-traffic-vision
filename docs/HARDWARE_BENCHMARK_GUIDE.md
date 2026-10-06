@@ -1,136 +1,75 @@
-# Multi-Camera Hardware Benchmark and Sizing Guide
+# Validation and hardware checks
 
-Benchmarking suite to profile throughput, hardware resource usage, and per-stage latency across 1 to 8+ parallel camera feeds on edge systems.
+Use the production runner to establish count validity and freshness. The separate hardware benchmark helps diagnose scaling, but uses a synthetic stream/SORT path and does not establish production acceptance.
 
-## Quick Start
+Save generated reports in ignored `output/` or an external evidence bundle.
 
-Activate the virtual environment:
+## Production soak
 
-```powershell
-.\.venv\Scripts\Activate.ps1
+A short replay check exercises the real model, per-camera trackers, analytics, health and main projection with two camera outages:
+
+```bash
+python -m tools.soak --minutes 5 --replay-fps 25 \
+  --output-mode controller --allow-replay-controller \
+  --outage east:60:15 --outage northeast:150:15 --out output/soak.json
 ```
 
-### Quick Sanity Test
+Use `--model models/yolo26s_thai_traffic.engine` to test a verified TensorRT engine. Publishing stays in memory unless `--mqtt-broker` is explicitly supplied. Never route replay counts to a live signal controller.
 
-Tests 1 and 2 streams across both threaded and batched pipelines:
+Require zero processing errors, no unexplained required-camera suppression, bounded memory/history, and recovery after each injected outage. The dead camera must become unknown, never an invented zero; healthy cameras must stay valid. Northeast's upstream outage must not block the main projection.
 
-```powershell
-python benchmark_hardware.py --streams 1 2 --duration 3 --models yolov8n.pt --mode both
+Check p95/p99 observation age and suppression reasons alongside throughput. A fast average can hide a stall. Use the actual capture rate with `--replay-fps`; metadata can be wrong. Do not relax freshness limits to obtain a pass.
+
+On field hardware, run for 24–72 hours with live sources:
+
+```bash
+python -m tools.soak --minutes 1440 --sources-file /path/to/sources.json \
+  --output-mode controller --outage east:3600:60 --out output/field-soak.json
 ```
 
-### Standard Multi-Camera Benchmark
+This still uses an in-memory publisher by default. Injected outages withhold decoded frames; separately disconnect cameras/network links to test transport recovery. Measure camera/NVR buffering, check host clock synchronisation, and include rush hour, rain and day/night transitions. Do not share the inference GPU with other demanding workloads.
 
-Evaluates scaling from 1 to 8 streams with frame skipping, terminal reporting, and PNG summary charts:
+## TensorRT export and parity
 
-```powershell
-python benchmark_hardware.py `
-    --streams 1 2 4 8 `
-    --models yolov8n.pt yolov8s.pt `
-    --mode batched `
-    --frame-skips 0 1 `
-    --target-fps 15.0 `
-    --duration 8 `
-    --save-plots
+Build on the target GPU/runtime. Dynamic batching is the default and is needed as the number of available cameras changes:
+
+```bash
+python export_trt.py --model models/yolo26s_thai_traffic.pt --batch 8 --no-half
+python -m tools.trt_parity --model models/yolo26s_thai_traffic.pt \
+  --engine models/yolo26s_thai_traffic.engine --frames 40 --out output/trt-parity.json
 ```
 
-### Live Visual HUD Benchmark
+The first command builds FP32. FP16 is the export default when `--no-half` is omitted; some TensorRT/Ultralytics combinations need NVIDIA's model-optimisation package. Follow the export diagnostic and validate that environment before enabling it.
 
-Includes real-time OpenCV window rendering to measure UI drawing overhead:
+Keep the export metadata beside the engine and verify the source-model and engine hashes. Rebuild and recheck after changing the GPU/runtime, source weights, precision or input size.
 
-```powershell
-python benchmark_hardware.py `
-    --streams 4 8 `
-    --models yolov8n.pt `
-    --mode batched `
-    --display `
-    --duration 10
+Parity checks detection matching, class agreement, lane occupancy and warmed latency for batches of 1–5 cameras. Passing parity establishes agreement with PyTorch, not ground-truth count accuracy.
+
+## Labelled count accuracy
+
+Use clips held out from training, with labels at agreed observation times:
+
+```bash
+python -m tools.eval_counts --payloads /path/to/payloads.jsonl \
+  --truth /path/to/truth.json --out output/count-accuracy.json
 ```
 
-### Uncapped Maximum Throughput Stress Test
+See the tool's module documentation for label fields and alignment. Evaluate occupancy, queued count and gate flow separately, including empty lanes, motorcycles, occlusion, parked vehicles, shadows, rain and night footage. Review false zeros, false counts in empty lanes, bias, absolute error and unknown coverage. Agree acceptable error with the controller owners before enabling adaptive decisions.
 
-Removes RTSP ingestion pacing to measure peak raw system capacity:
+## Transport and integration
 
-```powershell
-python benchmark_hardware.py `
-    --streams 4 8 `
-    --models yolov8n.pt `
-    --mode batched `
-    --unpaced `
-    --duration 10
+[Deployment instructions](../deploy/README.md) describe the loopback RTSP/MQTT smoke tool. It verifies real OpenCV acquisition, camera reconnect and MQTT reconnect without using field infrastructure.
+
+The full test suite checks the pinned main contract and stale fallback using actual controller source with I/O replaced. A real deployed backend/database/dashboard check remains separate. Follow the [system-owner plan](SYSTEM_OWNER_CHANGE_PLAN.md) for that integration and physical signal acceptance.
+
+## Hardware profiler
+
+Use the approved model explicitly:
+
+```bash
+python main.py benchmark --streams 1 2 4 8 \
+  --models models/yolo26s_thai_traffic.pt --mode both --duration 10 \
+  --out-dir output/hardware --save-plots
 ```
 
-## Pipeline Architectures
-
-### Threaded Mode (`--mode threaded`)
-Each camera stream runs inside a dedicated worker thread with an RTSP stream simulator and SORT tracker. Model forward passes are synchronized via a thread mutex to guarantee CUDA memory safety. This mode reflects independent process architectures but introduces CPU lock contention when scaling past 4 streams on a single GPU.
-
-### Batched Mode (`--mode batched`)
-Frames from all active camera streams are collected and combined into a single batch tensor `[B, 3, H, W]` before running inference in one forward pass. Detections are fanned out to independent SORT trackers and lane polygon evaluators. This maximizes GPU compute saturation and achieves higher throughput.
-
-## CLI Options
-
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--streams` | `1 2 4 8` | Stream counts to test sequentially. |
-| `--models` | `yolov8n.pt yolov8s.pt` | Model checkpoints or engine paths to test. |
-| `--mode` | `threaded` | Pipeline architecture: `threaded`, `batched`, or `both`. |
-| `--frame-skips` | `0` | Skip intervals: `0` (every frame), `1` (every 2nd frame), `2` (every 3rd frame). |
-| `--duration` | `10.0` | Test duration in seconds per configuration. |
-| `--target-cams` | `8` | Target camera count for feasibility sizing. |
-| `--target-fps` | `15.0` | Target frame rate per camera feed. |
-| `--display` | `False` | Opens multi-camera preview window to measure rendering overhead. |
-| `--unpaced` | `False` | Disables stream pacing for uncapped stress testing. |
-| `--imgsz` | `640` | Input image size for inference. |
-| `--videos` | Default 4 clips | Video file paths or RTSP stream URLs. |
-| `--out-dir` | `benchmark/hardware-results` | Directory where benchmark artifacts are saved. |
-| `--keep-latest` | `3` | Number of historical benchmark result sets to retain. |
-| `--save-plots` | `False` | Generates 4-panel analysis charts in PNG format. |
-
-## Output Metrics Reference
-
-### Throughput and Loss
-
-| Metric | Meaning |
-| :--- | :--- |
-| `FPS/Cam` | Average frames processed per second for each camera feed. |
-| `Total FPS` | Combined system throughput across all camera feeds. |
-| `Drops (%)` | Percentage of frames dropped by the stream simulator due to backpressure. Target is under 5%. |
-
-### Stage Latencies
-
-| Stage | Measured Operation |
-| :--- | :--- |
-| `Decode` | Frame ingestion and color decoding. |
-| `Preprocess` | Tensor formatting and normalization. |
-| `Inference` | GPU model forward pass. |
-| `Tracking` | SORT Kalman filter prediction and Hungarian association. |
-| `Analytics` | Point-in-polygon lane boundary containment tests. |
-| `Render` | Bounding box and preview HUD drawing. |
-| `E2E P50` | Median end-to-end frame latency from capture to output. |
-
-### Hardware Profiling
-
-| Metric | Monitored Subsystem |
-| :--- | :--- |
-| `GPU Util %` | Percentage of active GPU compute cores. |
-| `GPU Memory Bus %` | PCIe and memory controller saturation. |
-| `Peak VRAM (MB)` | Maximum dedicated GPU memory allocated during the test. |
-| `CPU System %` | Overall host CPU load. |
-| `Per-Core CPU %` | Individual core load distribution to spot single-thread Python bottlenecks. |
-
-## Feasibility Sizing Evaluation
-
-The benchmark evaluates whether the hardware meets production criteria for target deployments:
-
-1. Target throughput: Checks if the system sustains `target_cameras * target_fps` with under 5% frame drops.
-2. Safe headroom: Confirms GPU and CPU load stay below 85% to absorb traffic surges.
-3. Bottleneck diagnosis: Isolates whether limits stem from GPU compute cores, VRAM capacity, host CPU decoding, or PCIe bus bandwidth.
-
-## Generated Artifacts
-
-Each benchmark run writes timestamped files to `benchmark/hardware-results/`:
-
-- `BENCHMARK_REPORT_<timestamp>.md`: Formatted summary table, latency breakdown, core distribution, and sizing verdict.
-- `benchmark_summary_<timestamp>.csv`: Tabular metric row per tested configuration for spreadsheet export.
-- `benchmark_results_<timestamp>.json`: Raw time-series telemetry and system metadata.
-- `benchmark_analysis_<timestamp>.png`: Generated with `--save-plots`, showing throughput scaling, GPU/CPU loads, memory demand, and stage latencies.
+Use `--display` to measure rendering overhead and `--unpaced` to explore maximum capacity. Reports show throughput, frame drops, stage timing, GPU memory/utilisation and CPU load. These are synthetic sizing measurements; final acceptance comes from the production soak, count accuracy and live transport checks above.

@@ -249,13 +249,7 @@ def save_config_geometry(
                     raw_config = loaded
 
         if not isinstance(raw_config.get("lane_metrics"), dict):
-            raw_config["lane_metrics"] = {
-                "enabled": True,
-                "publish_interval_frames": 50,
-                "queue_speed_threshold": 2.0,
-            }
-        else:
-            raw_config["lane_metrics"]["enabled"] = True
+            raw_config["lane_metrics"] = {}
 
         raw_config["lane_metrics"]["lanes"] = lanes
         raw_config["gates"] = gates

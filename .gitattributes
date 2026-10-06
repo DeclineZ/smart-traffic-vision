@@ -1,0 +1,2 @@
+# Keep the pinned controller sources reproducible across Windows and Linux.
+tests/fixtures/controller_main/** text eol=lf

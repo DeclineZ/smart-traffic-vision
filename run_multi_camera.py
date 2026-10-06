@@ -363,6 +363,8 @@ class BatchedCameraPipeline:
 
         # 5. Model
         self.model_sha256 = None
+        self._model_warmed = model is not None
+        self.model_warmup_sec = 0.0 if model is not None else None
         if model is not None:
             self.model = model
             raw_names = getattr(model, "names", None) or {0: "car", 1: "motorcycle", 2: "bus", 3: "truck", 4: "three_wheeler"}
@@ -496,6 +498,7 @@ class BatchedCameraPipeline:
             "intersectionId": self.intersection_id,
             "mode": "replay" if self.replay_mode else "live",
             "model": {"path": self.model_path, "sha256": self.model_sha256, "imgsz": self.imgsz,
+                      "warmupSec": self.model_warmup_sec,
                       "conf": self.conf, "device": self.device},
             "tracker": {"type": self.tracker_type, "trackThresh": self.track_thresh,
                         "lowThresh": self.low_thresh, "matchThresh": self.match_thresh},
@@ -513,8 +516,35 @@ class BatchedCameraPipeline:
         }
 
     # ------------------------------------------------------------------ lifecycle
+    def warmup(self) -> None:
+        """Initialize inference before camera frames can age during a cold GPU setup."""
+        if self._model_warmed:
+            return
+        if self.health_file:
+            _write_json_atomic(self.health_file, {"status": "starting", "reason": "model_warmup",
+                               "sourceId": self.source_id, "updatedAt": iso_utc(time.time()),
+                               "validCameras": 0, "totalCameras": self.num_streams})
+        logger.info("Warming model before camera intake starts")
+        started = time.monotonic()
+        frames = []
+        for cam in self.cams:
+            width, height = cam.expected_resolution or (self.imgsz, self.imgsz)
+            frames.append(np.zeros((height, width, 3), dtype=np.uint8))
+        kwargs = {"verbose": False, "device": self.device, "conf": self.conf, "imgsz": self.imgsz}
+        if self.target_classes is not None:
+            kwargs["classes"] = self.target_classes
+        results = self.model(frames, **kwargs)
+        if len(results) != self.num_streams:
+            raise RuntimeError("Model warmup returned an incomplete camera batch")
+        self.model_warmup_sec = round(time.monotonic() - started, 3)
+        self._model_warmed = True
+        logger.info(f"Model warmup completed in {self.model_warmup_sec}s")
+
     def start(self) -> None:
         self.running = True
+        self.warmup()
+        if not self.running:
+            return
         self.publisher.start()
         for cam in self.cams:
             cam.source.start()
@@ -915,8 +945,9 @@ class BatchedCameraPipeline:
                                f"{', '.join(self.controller_delivery['blockers']) or 'complete stop-line occupancy'}")
         else:
             delivered = bool(self.publisher.publish(payload))
-        if delivered:
-            # Gate intervals continue across a failed publish so no events are lost.
+        if delivered or self.controller_adapter:
+            # Main carries no gates, so each local snapshot closes its interval.
+            # Shadow retries retain intervals until delivery succeeds.
             self.gate_manager.reset_interval()
         if self.recorder:
             record = {"delivered": delivered, "payload": payload}

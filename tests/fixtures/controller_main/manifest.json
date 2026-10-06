@@ -16,5 +16,6 @@
     "backend/src/brain/simpleCycleBased.controller.js": "dbd84ab88fe78132ceef148ac4a97c0baff41a0eba2a6cfc4af7fd291aba8a25",
     "backend/src/brain/maxPressureSwitchingLoss.js": "6d768f34075a0825b3d9795d9a10dffca22f264421958756ade0cba0ae898723",
     "backend/migrations/007_seed_intersection_001.sql": "ade563e318b6a9a43711038c3eb6ad815a8ee2b5ae1b71e61eb4cc896f113c61"
-  }
+  },
+  "hash_normalization": "CRLF to LF; source text must otherwise match"
 }

@@ -51,7 +51,7 @@ function resolve(from, name) {
 function load(file) {
     if (stubs[file]) return stubs[file];
     if (cache.has(file)) return cache.get(file).exports;
-    const bytes = fs.readFileSync(path.join(root, file));
+    const bytes = Buffer.from(fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n'));
     assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), manifest.files[file], file + ' snapshot changed');
     const module = { exports: {} };
     cache.set(file, module);

@@ -11,54 +11,7 @@
     "skip": 0,
     "max_frames": 0
   },
-  "model": {
-    "engine_path": "models/yolov7-tiny.engine",
-    "input_shape": [
-      1,
-      3,
-      640,
-      640
-    ],
-    "device": "cuda:0"
-  },
-  "tracker": {
-    "type": "ByteTrack",
-    "params": {
-      "min_conf": 0.25,
-      "track_thresh": 0.35,
-      "match_thresh": 0.75,
-      "track_buffer": 30,
-      "frame_rate": 25
-    }
-  },
-  "classes": {
-    "dict_class": {
-      "1": "bicycle",
-      "2": "car",
-      "3": "motorcycle",
-      "5": "bus",
-      "7": "truck"
-    }
-  },
-  "output": {
-    "base_dir": "./output/northeast_approach",
-    "save_crop": false,
-    "data_output_path": "output/northeast_approach/data.json"
-  },
-  "tracking": {
-    "zones": [
-      {
-        "name": "northeast_corridor_zone",
-        "lane": "[(200, 200), (1800, 200), (1900, 1000), (100, 1000)]",
-        "line": "[(200, 500), (1800, 500)]",
-        "desc": "Northeast corridor advance detection"
-      }
-    ]
-  },
   "lane_metrics": {
-    "enabled": true,
-    "publish_interval_frames": 50,
-    "queue_speed_threshold": 2.0,
     "lanes": {
       "NE1": {
         "direction": "N",
@@ -181,23 +134,6 @@
       "target_dir": "E"
     }
   ],
-  "density": {
-    "enabled": false
-  },
-  "mqtt": {
-    "enabled": true,
-    "broker_url": "mqtt://localhost:1883",
-    "topic": "traffic/counts",
-    "username": "",
-    "password": "",
-    "qos": 1,
-    "keepalive": 60
-  },
-  "processing": {
-    "opencv_threads": 0,
-    "use_opencl": false,
-    "video_queue_size": 2
-  },
   "calibration": {
     "resolution": [
       1920,

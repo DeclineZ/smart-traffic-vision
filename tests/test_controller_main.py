@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -161,6 +162,34 @@ class TestMainRunner(unittest.TestCase):
         self.assertEqual(len(publisher.payloads), before + 1)
         self.assertEqual(pipeline.controller_delivery["state"], "publishing")
 
+    def test_failed_controller_attempts_do_not_repeat_local_gate_crossings(self):
+        from trt_pipeline.gates import VirtualGate
+
+        for state in ("suppressed", "disconnected"):
+            with self.subTest(state=state):
+                pipeline, sources = self.pipeline(publisher=FakePublisher(succeed=False))
+                self.observe(pipeline, sources, indices=range(4))
+                gate = VirtualGate("N_STOP", 0, (0, 50), (100, 50),
+                                   target_dir="N", direction_vec=(0, 1))
+                manager = pipeline.gate_manager
+                manager.add_gate(gate)
+                self.assertTrue(gate.check_crossing(1, (25, 40), (25, 60), now=1))
+                manager.interval_start_mono = time.monotonic() - .2
+                manager._cam_observed_s[0] = .2
+                if state == "suppressed":
+                    pipeline.cams[1].last_obs_mono = time.monotonic() - 10
+                    pipeline.cams[1].last_obs_wall = time.time() - 10
+
+                first = pipeline.publish_once()
+                self.assertEqual(pipeline.controller_delivery["state"], state)
+                self.assertEqual(first["traffic_flow"]["interval"]["gates"][0]["count"], 1)
+                second = pipeline.publish_once()
+                self.assertIsNone(second["traffic_flow"]["interval"]["gates"][0]["count"])
+                self.assertEqual(gate.interval_count, 0)
+                self.assertEqual(gate.count, 1)
+                self.assertEqual(len(pipeline.publisher.payloads), 0 if state == "suppressed" else 2)
+                self.assertEqual(pipeline.controller_delivery["accepted"], 0)
+
     def test_upstream_outage_does_not_block_stopline_counts(self):
         pipeline, sources = self.pipeline()
         self.observe(pipeline, sources, indices=range(4))
@@ -232,8 +261,71 @@ class TestMainRunner(unittest.TestCase):
                                   controller_config=self.profile)
         self.assertEqual(publisher.call_args.kwargs["qos"], 0)
 
+    def test_warmup_precedes_intake_and_never_counts_synthetic_frames(self):
+        pipeline, sources = self.pipeline(health_file=os.path.join(self.directory, "health.json"))
+        pipeline._model_warmed = False
+        real_predict = pipeline.model
+        with patch.object(pipeline, "model", wraps=real_predict) as model:
+            def predict(*args, **kwargs):
+                self.assertFalse(any(s.started for s in sources))
+                self.assertEqual(pipeline.publisher.payloads, [])
+                with open(pipeline.health_file, encoding="utf-8") as f:
+                    self.assertEqual(json.load(f)["status"], "starting")
+                return real_predict(*args, **kwargs)
+            model.side_effect = predict
+            pipeline.start()
+            pipeline.warmup()
+            self.assertEqual(model.call_count, 1)
+        self.assertTrue(all(s.started for s in sources))
+        self.assertEqual(pipeline.total_inferred_batches, 0)
+        self.assertEqual(pipeline.publisher.payloads, [])
+        self.assertTrue(all(c.last_obs_wall is None for c in pipeline.cams))
+        pipeline.stop()
+
+    def test_failed_warmup_does_not_start_sources_or_mqtt(self):
+        pipeline, sources = self.pipeline()
+        pipeline._model_warmed = False
+        with patch.object(pipeline, "model", return_value=[]), patch.object(pipeline.publisher, "start") as start:
+            with self.assertRaisesRegex(RuntimeError, "incomplete camera batch"):
+                pipeline.start()
+            start.assert_not_called()
+        self.assertFalse(any(s.started for s in sources))
+        self.assertEqual(pipeline.publisher.payloads, [])
+        pipeline.stop()
+
+    def test_watchdog_startup_grace_is_bounded_and_not_applied_online(self):
+        from tools.healthcheck import check
+        path = os.path.join(self.directory, "starting.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"status": "starting", "reason": "model_warmup"}, f)
+        os.utime(path, (100, 100))
+        self.assertEqual(check(path, 15, now=130, stale_only=True)[0], 0)
+        self.assertEqual(check(path, 15, now=130)[0], 1)
+        self.assertEqual(check(path, 15, now=161, stale_only=True)[0], 2)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"status": "online"}, f)
+        os.utime(path, (100, 100))
+        self.assertEqual(check(path, 15, now=130, stale_only=True)[0], 2)
+
 
 class TestCommittedMain(unittest.TestCase):
+    def test_harness_allows_crlf_but_rejects_source_edits(self):
+        root = Path(__file__).parent
+        payload = json.loads((root / "fixtures/vision_payload_main.json").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory(prefix="main_fixture_test_") as directory:
+            copy_root = Path(directory)
+            shutil.copyfile(root / "controller_main_harness.cjs", copy_root / "controller_main_harness.cjs")
+            shutil.copytree(root / "fixtures/controller_main", copy_root / "fixtures/controller_main")
+            source = copy_root / "fixtures/controller_main/backend/src/config/intersectionRegistry.js"
+            source.write_bytes(source.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+            command = ["node", str(copy_root / "controller_main_harness.cjs")]
+            good = subprocess.run(command, input=json.dumps({"payload": payload}), text=True, capture_output=True, timeout=15)
+            self.assertEqual(good.returncode, 0, good.stderr)
+            source.write_bytes(source.read_bytes() + b"\r\n// unexpected fixture edit\r\n")
+            bad = subprocess.run(command, input=json.dumps({"payload": payload}), text=True, capture_output=True, timeout=15)
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn("snapshot changed", bad.stderr)
+
     def test_soak_rejects_wrong_controller_behavior_during_both_outage_roles(self):
         from tools.soak import observe_outages
         for role, state, failed in (("queue", "publishing", True), ("queue", "suppressed", False),
@@ -256,6 +348,35 @@ class TestCommittedMain(unittest.TestCase):
         adapter = MainControllerAdapter(root / "config/controller_main.json", "INT-001", lanes, 1)
         self.assertEqual(len(adapter.lanes), 9)
         self.assertNotIn("NE1", adapter.lanes)
+
+    def test_soak_rejects_stale_wire_counts_even_when_canonical_camera_is_valid(self):
+        from tools.soak import unexpected_controller_blockers
+        payload = {"cameras": [{"name": "east", "cameraId": "CAM-E", "status": "ok"},
+                               {"name": "northeast", "cameraId": "CAM-NE", "status": "stale"}],
+                   "lanes": [{"laneId": "E1", "cameraId": "CAM-E", "role": "queue"},
+                             {"laneId": "NE1", "cameraId": "CAM-NE", "role": "upstream"}]}
+        delivery = {"state": "suppressed", "blockers": ["E1:observation_clock_or_age"]}
+        self.assertEqual(unexpected_controller_blockers(payload, delivery, {"northeast"}), delivery["blockers"])
+        self.assertEqual(unexpected_controller_blockers(payload, delivery, {"east"}), [])
+        self.assertEqual(unexpected_controller_blockers(payload, {"state": "publishing"}, set()), [])
+        self.assertEqual(unexpected_controller_blockers(payload, {"state": "disconnected", "blockers": ["broker_delivery_failed"]},
+                                                       {"east"}), ["broker_delivery_failed"])
+
+    def test_soak_does_not_blame_upstream_outage_for_another_lanes_age_failure(self):
+        from tools.soak import observe_outages, unexpected_controller_blockers
+        outage = {"camera": "northeast", "start": 0, "duration": 10, "invalidSeen": False,
+                  "knownDuringOutage": False, "zeroDuringOutage": False, "recoveredSeen": False,
+                  "othersValidDuringOutage": True, "otherCameraProblems": []}
+        payload = {"cameras": [{"name": "northeast", "cameraId": "CAM-NE", "status": "stale"},
+                               {"name": "east", "cameraId": "CAM-E", "status": "ok"}],
+                   "lanes": [{"laneId": "NE1", "cameraId": "CAM-NE", "role": "upstream", "valid": False,
+                              "count": None, "queuedCount": None},
+                             {"laneId": "E1", "cameraId": "CAM-E", "role": "queue", "valid": True,
+                              "count": 1, "queuedCount": 0}]}
+        delivery = {"state": "suppressed", "blockers": ["E1:observation_clock_or_age"]}
+        observe_outages(payload, 3, [outage], 2, delivery)
+        self.assertFalse(outage["controllerProjectionFailed"])
+        self.assertEqual(unexpected_controller_blockers(payload, delivery, {"northeast"}), delivery["blockers"])
 
     def test_real_model_wire_fixture_is_accepted_by_main(self):
         root = Path(__file__).parent
@@ -303,10 +424,10 @@ class TestCommittedMain(unittest.TestCase):
         system = Path(__file__).resolve().parents[2] / "smart-traffic-sys"
         git = shutil.which("git")
         for name, expected in manifest["files"].items():
-            data = (root / name).read_bytes()
+            data = (root / name).read_bytes().replace(b"\r\n", b"\n")
             self.assertEqual(hashlib.sha256(data).hexdigest(), expected, name)
             if git and (system / ".git").exists():
                 result = subprocess.run([git, "-c", "safe.directory=" + system.as_posix(), "-C", str(system),
                                          "show", manifest["revision"] + ":" + name], capture_output=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr.decode())
-                self.assertEqual(result.stdout, data, name)
+                self.assertEqual(result.stdout.replace(b"\r\n", b"\n"), data, name)

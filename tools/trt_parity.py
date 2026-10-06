@@ -9,7 +9,7 @@ Checks, per batch size (1..N cameras, as happens when cameras drop out):
 
 Usage:
     .venv\\Scripts\\python.exe -m tools.trt_parity --engine models/yolo26s_thai_traffic.engine \\
-        --model models/yolo26s_thai_traffic.pt --frames 40 --out docs/trt-parity/report.json
+        --model models/yolo26s_thai_traffic.pt --frames 40 --out output/trt-parity.json
 
 Exit code 1 if any acceptance threshold fails (thresholds are CLI options).
 """

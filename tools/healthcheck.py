@@ -18,7 +18,8 @@ import sys
 import time
 
 
-def check(path: str, max_age: float, now: float | None = None, stale_only: bool = False) -> tuple[int, str]:
+def check(path: str, max_age: float, now: float | None = None, stale_only: bool = False,
+          startup_grace: float = 60.0) -> tuple[int, str]:
     now = now if now is not None else time.time()
     try:
         age = now - os.path.getmtime(path)
@@ -26,6 +27,8 @@ def check(path: str, max_age: float, now: float | None = None, stale_only: bool 
             h = json.load(f)
     except (OSError, ValueError) as e:
         return 2, f"health file unreadable: {e}"
+    if h.get("status") == "starting" and age <= startup_grace:
+        return (0 if stale_only else 1), f"starting: {h.get('reason', 'initializing')} ({age:.0f}s)"
     if age > max_age:
         return 2, f"health file is {age:.0f}s old (process hung or stopped)"
     if stale_only:
@@ -46,10 +49,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", required=True)
     ap.add_argument("--max-age", type=float, default=10.0)
+    ap.add_argument("--startup-grace", type=float, default=60.0,
+                    help="bounded allowance for initial model warmup; does not extend normal observation freshness")
     ap.add_argument("--stale-only", action="store_true",
                     help="only report a missing/stale file (process liveness), ignore camera state")
     args = ap.parse_args(argv)
-    code, msg = check(args.file, args.max_age, stale_only=args.stale_only)
+    code, msg = check(args.file, args.max_age, stale_only=args.stale_only, startup_grace=args.startup_grace)
     print(msg)
     return code
 

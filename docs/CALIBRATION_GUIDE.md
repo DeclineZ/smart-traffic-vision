@@ -33,6 +33,7 @@ python tools/segmentor.py --video videos/cam03_east.avi --sec 0 --n 1
 1. A calibration window will display the video frame.
 2. **Left-Click** around the road lane boundary in perimeter order (clockwise or counter-clockwise).
 3. The tool renders red vertex markers and green perimeter lines as points are added.
+
 | Key | Action |
 | :--- | :--- |
 | `r` | Reset all points to start over. |
@@ -90,7 +91,8 @@ python -m tools.validate_calibration --configs config/config_north.json config/c
 - **Overlaps**: a vehicle counts in the first lane (configuration order) whose polygon contains its point. The validator warns about every positive-area overlap; remove them unless deliberate.
 - **Range**: end lanes where vehicles are still large enough to detect reliably. A lane reaching the vanishing point reports a lower bound there.
 - **Gates** need an explicit approach, `"target_dir": "N" | "S" | "E" | "W"` (the approach whose traffic the gate measures), and an ID unique across all cameras. The segmentor fills `target_dir` from the gate ID (`GATE_N_STOPLINE` → `N`) or the camera's approach, and refuses to save gates without one.
-- **Camera IDs** (`camera_info.camera_id`) must be registered in the controller's `cameras` table (INT-001 uses `INT-001-CAM-N/S/E/W/NE`, see smart-traffic-sys migration 012). Lane IDs must be listed in the intersection's `topology.lanes`.
+- **Camera IDs** (`camera_info.camera_id`, INT-001 uses `INT-001-CAM-N/S/E/W/NE`) identify physical cameras in vision's own records and health. Controller output does not send them as the message source: it uses the counting camera registered in main (`CAM-01`, from `config/controller_main.json`).
+- **Stop-line lane IDs and directions** (`role: "queue"`) must match `expected_lanes` in `config/controller_main.json` exactly. The runner refuses to start in controller mode otherwise. Upstream lanes (`role: "upstream"`) are never sent to main.
 
 ## Revisions, reference frames and rollback
 
@@ -103,9 +105,9 @@ Each save from the segmentor:
 The runner reads these at startup:
 
 - frames whose resolution differs from `calibration.resolution` are not used, and the camera is reported `resolution_mismatch`;
-- every 30 s the live view is matched to the reference image (ORB features with a RANSAC fit, so passing vehicles are ignored). A shift of more than 12 px in three consecutive checks marks the camera `camera_shifted`, and its lanes become invalid until the view is restored or the camera is recalibrated. On the recordings the measured shift of the fixed cameras stayed within 4.2 px. A night view rarely matches a daytime reference, so the check is inconclusive (never flagged) at night; add a night reference if night shift detection is needed.
+- every 30 s the live view is matched to the reference image using ORB features and a RANSAC fit. A shift of more than 12 px in three consecutive checks marks the camera `camera_shifted`, and its lanes become invalid until the view is restored or the camera is recalibrated. Poor feature matches, including night views against a daytime reference, make the check inconclusive. It cannot guarantee shift detection in those conditions; operators must inspect the view. Each config currently supports one reference image.
 
-Calibrate from a live frame at commissioning so the reference matches the installed camera. The current reference images were taken from the recordings.
+Calibrate from a live frame at commissioning so the reference matches the installed camera. The current reference images were taken from the recordings. Review all six overlap warnings, confirm E1 and NE1 cover the intended road surface rather than parking/shoulder areas, and confirm northeast's upstream ownership. The E1/NE1 polygon repairs establish valid geometry, not approved physical coverage.
 
 ```bash
 .venv\Scripts\python.exe -m tools.calibration_history list config/config_north.json

@@ -13,7 +13,7 @@ stops a camera's frames for a while, and checks that its lanes become invalid
 (never zero) and that other cameras keep publishing valid data.
 
     .venv\\Scripts\\python.exe -m tools.soak --minutes 15 --model models/yolo26s_thai_traffic.engine \\
-        --outage east:300:60 --out docs/soak/soak-15min.json
+        --outage east:300:60 --out output/soak-15min.json
 
 Publishing goes to an in-memory sink unless --mqtt-broker is given.
 Broker runs use the shadow topic by default. Use --sources-file for field RTSP
@@ -81,6 +81,16 @@ class LatencySample:
                 self.values[slot] = value
 
 
+def unexpected_controller_blockers(payload, delivery, unavailable):
+    if delivery is None or delivery["state"] == "publishing":
+        return []
+    cameras = {c["cameraId"] for c in payload["cameras"] if c["name"] in unavailable}
+    expected = {l["laneId"] for l in payload["lanes"]
+                if l.get("cameraId") in cameras and l.get("role", "queue") == "queue"}
+    return [b for b in delivery.get("blockers", []) if b.partition(":")[0] not in expected] or (
+        [delivery["state"]] if not delivery.get("blockers") else [])
+
+
 def observe_outages(payload, elapsed, outages, grace_s, controller_delivery=None):
     statuses = {c["name"]: c for c in payload["cameras"]}
     unavailable = {o["camera"] for o in outages
@@ -97,7 +107,11 @@ def observe_outages(payload, elapsed, outages, grace_s, controller_delivery=None
                 required = any(l.get("role", "queue") == "queue" for l in lanes)
                 suppressed = controller_delivery["state"] == "suppressed"
                 outage["controllerCheckSeen"] = True
-                outage["controllerProjectionFailed"] = outage.get("controllerProjectionFailed", False) or (required != suppressed)
+                lane_ids = {l.get("laneId") for l in lanes}
+                caused_by_outage = any(b.partition(":")[0] in lane_ids for b in controller_delivery.get("blockers", []))
+                failed = (required and not suppressed) or (not required and suppressed and (
+                    caused_by_outage or not controller_delivery.get("blockers")))
+                outage["controllerProjectionFailed"] = outage.get("controllerProjectionFailed", False) or failed
             for name, camera in statuses.items():
                 if name not in unavailable and camera["status"] not in rmc.VALID_STATUSES:
                     outage["othersValidDuringOutage"] = False
@@ -200,6 +214,8 @@ def main(argv=None):
                                   allow_replay_controller=args.allow_replay_controller)
     if pub is None:
         p.publisher = SinkPublisher(p.publisher)
+    # Startup is measured separately; fault times and soak duration start with a ready model.
+    p.warmup()
     t0 = time.monotonic()
     for outage in outages:
         idx = names.index(outage["camera"])
@@ -207,6 +223,8 @@ def main(argv=None):
 
     step_ms, samples, publishes = LatencySample(), [], 0
     unexpected_problems = set()
+    unexpected_controller = set()
+    unexpected_suppression_count = 0
     fatal_error = None
     next_sample = 0.0
     last_seq = 0
@@ -228,6 +246,10 @@ def main(argv=None):
                     for camera in last["cameras"]:
                         if camera["name"] not in expected and camera["status"] not in rmc.VALID_STATUSES:
                             unexpected_problems.add(f"{camera['name']}:{camera['status']}:{camera.get('reason')}")
+                    blockers = unexpected_controller_blockers(last, p.controller_delivery, expected)
+                    if blockers:
+                        unexpected_suppression_count += 1
+                        unexpected_controller.update(blockers)
             if el >= next_sample:
                 next_sample += args.sample_sec
                 cam_ages = [c["ageMs"] for c in (last or {}).get("cameras", []) if c["ageMs"] is not None]
@@ -265,6 +287,8 @@ def main(argv=None):
         "fatalError": fatal_error,
         "settings": p.effective_settings(),
         "unexpectedCameraProblems": sorted(unexpected_problems),
+        "unexpectedControllerBlockers": sorted(unexpected_controller),
+        "unexpectedControllerSuppressions": unexpected_suppression_count,
         "stepCount": step_ms.count,
         "latencySampleCount": len(step_ms.values),
         "stepMs": {q: round(float(np.percentile(step_ms.values, q)), 2) for q in (50, 95, 99)} if step_ms.values else None,
@@ -275,7 +299,7 @@ def main(argv=None):
         "outages": outages,
         "samples": samples,
     }
-    ok = (report["errors"] == 0 and publishes > 0 and not unexpected_problems
+    ok = (report["errors"] == 0 and publishes > 0 and not unexpected_problems and not unexpected_controller
           and all(o["invalidSeen"] and not o["knownDuringOutage"] and o["othersValidDuringOutage"]
                   and o["recoveredSeen"] for o in outages)
           and (p.controller_adapter is None or (p.controller_delivery["accepted"] > 0

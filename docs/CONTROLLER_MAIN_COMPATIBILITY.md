@@ -1,9 +1,9 @@
 # Vision output for the existing controller main
 
 Target: `smart-traffic-sys/main`, commit
-`7a2a1f4683abcc4ca6ec95e8918230b3cbd7a8fe`, verified against remote main on
-4 October 2026. Only vision is changed. The candidate controller working-tree
-changes and migration 012 are not dependencies.
+`7a2a1f4683abcc4ca6ec95e8918230b3cbd7a8fe`. Recheck the pinned fixtures when
+main's receiver, aggregation or decision behavior changes. No controller code
+or new migration is required for this adapter.
 
 ## Start vision against main
 
@@ -110,10 +110,12 @@ when that checkout is present. Only database, broker, clock and timer I/O are
 replaced; no controller code is patched. Node is needed for these compatibility
 tests, not for running vision.
 
-This establishes software-contract compatibility. A real database insert,
-dashboard rendering, physical RTSP disconnect, broker reconnect and field
-hardware run remain unverified. The short real-model report is in
-[controller-main-1min-pytorch.json](soak/controller-main-1min-pytorch.json).
+This establishes software-contract compatibility. The isolated transport tool
+checks actual RTSP and MQTT recovery against loopback services; it cannot verify
+field camera/NVR latency. A real database insert, dashboard rendering and field
+hardware run remain separate acceptance checks. Validate the selected model's
+tail latency and observation freshness on dedicated field hardware using the
+[production soak and accuracy checks](HARDWARE_BENCHMARK_GUIDE.md).
 
 The baseline controller can allocate 3 s against a phase minimum of 5 s and
 its automatic empty-phase skip can also end green before that minimum. Vision
@@ -124,8 +126,8 @@ counting/shadow pilot can evaluate vision first. Labelled withheld footage,
 on-site E1/NE1 calibration and overlap review, upstream ownership, NVR latency
 and a 24–72 h field soak remain necessary.
 
-Current verification: **189 passing vision tests**. The one-minute PyTorch smoke
-produced 55 canonical snapshots, 47 wire snapshots and 8 suppressed attempts,
-694 inference batches and zero errors; both outage projection checks passed.
-All test traffic stayed in memory. The system repo's tracked-diff and untracked
-content fingerprints are unchanged from the pre-review baseline.
+Pinned source hashes normalize CRLF to LF; actual source changes still fail
+verification. Model warmup precedes camera/MQTT startup; the watchdog allows
+60 seconds for startup only. Canonical and wire observation freshness limits
+remain unchanged. Proposed receiver improvements are recorded in the
+[system-owner change plan](SYSTEM_OWNER_CHANGE_PLAN.md).

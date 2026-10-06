@@ -81,34 +81,29 @@ below apply to an optional future rich-schema consumer.
   - A low-detail, low-contrast view is unusable (`low_detail`), with 2 s of clear frames required for recovery. Mild low detail remains a usable warning. Per-camera `camera_health` settings configure thresholds such as `obstruction_std` and `recovery_duration_s`; validate them on site.
   - RTSP observation wall time is local decode time. Backlog inside a camera/NVR is not measurable from this timestamp; verify end-to-end age on site.
   - Maintenance pauses analytics for the affected camera. Leaving maintenance requires fresh observations and tracker confirmation. An invalid maintenance file disables measurements with `maintenance_config_error` until corrected or removed.
-- **Gates** count a track once per gate, when its contact point crosses the line in the gate's forward direction by at least 2 px.
+- **Gates** suppress repeated crossings of the same track within a gate's bounded history, and count a forward crossing with at least 2 px of motion.
   - Gate continuity is bounded: a track missing for up to 1 s can still be counted, but longer gaps are not bridged.
   - Counts are **per publish interval**; `observedSec` is how much of that interval the gate's camera was actually processed.
   - A gate whose coverage is below 0.8, whose camera is unusable, or whose interval contains a temporal reset is `valid: false` with `count: null`.
-  - Blind gaps earn no coverage; coverage is clipped to the current publication interval. Successful delivery starts a new interval, including its validity flags.
+  - Blind gaps earn no coverage; coverage is clipped to the current publication interval.
   - A direction with no gate of a type has `arrivals`/`departures` = `null`, meaning **not instrumented**, not zero.
-  - After a failed publish, the interval keeps accumulating, so no crossings are lost.
+  - Shadow output closes the interval on successful local publisher acceptance. After a failed publish it keeps accumulating for the next attempt. Acceptance does not confirm subscriber receipt.
+  - Controller mode carries no gates on the legacy wire. Each local snapshot closes its gate interval even when count delivery is suppressed or disconnected, so local records do not repeat crossings across attempts.
   - The legacy `traffic_flow.by_direction` block only lists instrumented directions, and it now holds interval counts, not cumulative ones.
 - **Discontinuities.** A reconnect or file loop starts a new camera epoch, which resets that camera's tracker, motion, class votes and gate history. A runner restart produces a new `sessionId`.
 
-## Consumer acceptance requirements (controller owner)
+## Future rich consumer
 
-1. **Reject the message** in any of these cases:
-   - the intersection is unknown;
-   - `sourceId` is not registered to that intersection;
-   - a lane is not in the intersection's `topology.lanes`, or appears twice;
-   - a count is non-integer or negative, or the invariant is broken;
-   - an invalid lane carries numbers;
-   - the timestamp is more than `MAX_FUTURE_SKEW_MS` in the future;
-   - `(sessionId, sequence)` is a duplicate or out of order.
+The current main adapter does not require a rich-schema consumer. A future
+consumer must validate identity, ordering, count invariants, complete expected
+coverage and per-lane observation age, preserving unknown separately from zero.
+Queue strategies should use `queuedCount`; empty-approach checks need occupancy.
+Upstream lanes must not be added to stop-line totals. Measured discharge requires
+coverage throughout the served green before it can affect timing.
 
-   Any legacy mode must be explicit. Log and count rejection reasons. Once a source changes session, reject messages from retired sessions too.
-2. **Ignore `role: "upstream"` lanes** for queue, occupancy and coverage. **Use the right field.** Queue strategies use `queuedCount`: per-direction totals, and per-lane maxima for max-pressure. The "empty approach → skip phase" logic uses occupancy (`count`), because during green the traffic is moving.
-3. **Unknown is not zero.** Invalid lanes are left out of every total. Require the complete expected lane set from the intersection registry; an omitted lane is missing coverage too. Validate freshness per lane. If any approach served by a phase is not fully valid, use the established fixed-time fallback with a reason.
-4. **Freshness** is `now − timestamp` (the observation time) against `FRESHNESS_MAX_AGE_MS` (2000 ms). The age budget is observation age at publish (≈0.1–0.3 s) + publish interval (1 s) + delivery, which leaves about 0.5 s of margin. Both hosts must run NTP.
-5. **Measured discharge** requires a valid gate and a queue at the interval's start. The entire observation interval must lie within the served green; checking the phase only when the message arrives is insufficient. Keep timing use disabled until this is verified.
-6. **Every automatic green**, including early empty-approach skips, respects the phase's configured `min_green_sec` / `max_green_sec`.
-7. **Persistence.** `traffic_readings.measurements` keeps per-lane q/m/u, validity, camera status and interval flow for every reading. `lane_counts` / `direction_totals` hold occupancy of valid lanes only.
+Receiver validation, timing protections, persistence and acceptance checks are
+proposed in the [system-owner change plan](SYSTEM_OWNER_CHANGE_PLAN.md). They are
+not implemented by this vision repository.
 
 ## Versioning
 
