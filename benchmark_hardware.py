@@ -15,14 +15,18 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2 as cv
 import numpy as np
 import psutil
+import shapely
 import torch
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from ultralytics import YOLO
 
 # Add root directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from algorithm.byetrack import ByteTrack
 from algorithm.sort import Sort
+from trt_pipeline.nvdec import make_capture
+from trt_pipeline.tools import engine_imgsz
 
 # Optional NVML for zero-overhead C-level GPU metrics
 try:
@@ -63,6 +67,38 @@ def get_model_target_classes(model) -> Optional[List[int]]:
     if len(model_names) <= 15 and any(v.lower() in traffic_keywords for v in model_names.values()):
         return None
     return list(COCO_CLASSES.keys())
+
+
+def make_tracker(tracker_type: str, skip_frames: int):
+    """Same tracker and thresholds as run_multi_camera.py so the benchmark measures the production path."""
+    min_hits = 1 if skip_frames > 0 else 2
+    if tracker_type == "byetrack":
+        return ByteTrack(track_thresh=0.40, low_thresh=0.10, match_thresh=0.70, max_age=30, min_hits=min_hits)
+    return Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
+
+
+def extract_dets(result: Any) -> np.ndarray:
+    """(N, 6) [x1, y1, x2, y2, conf, cls] with one device-to-host copy per tensor, not per box."""
+    boxes = getattr(result, "boxes", None)
+    if boxes is None or len(boxes) == 0:
+        return np.empty((0, 6))
+    return torch.cat([boxes.xyxy, boxes.conf.unsqueeze(1), boxes.cls.unsqueeze(1)], dim=1).cpu().numpy()
+
+
+def update_tracker(tracker: Any, dets: np.ndarray) -> np.ndarray:
+    if isinstance(tracker, ByteTrack):
+        out = tracker.update(dets)
+    else:
+        out = tracker.update(dets[:, :5] if len(dets) else np.empty((0, 5)))
+    return out if len(out) else np.empty((0, 5))
+
+
+def count_in_polygon(poly: Polygon, objs: np.ndarray) -> int:
+    if len(objs) == 0:
+        return 0
+    cx = (objs[:, 0] + objs[:, 2]) * 0.5
+    cy = (objs[:, 1] + objs[:, 3]) * 0.5
+    return int(np.count_nonzero(shapely.contains_xy(poly, cx, cy)))
 
 
 def cleanup_vram(device: str = "cuda:0"):
@@ -330,8 +366,12 @@ class RTSPStreamSimulator:
     - Tracks dropped frames count, drop rate %, and frame arrival latency.
     """
 
-    def __init__(self, source: str, target_fps: float = 25.0, buffer_size: int = 1, is_paced: bool = True):
+    def __init__(self, source: str, target_fps: float = 25.0, buffer_size: int = 1, is_paced: bool = True,
+                 decoder: str = "opencv", out_width: int = 640):
         self.source = source
+        self.decoder = decoder
+        self.out_width = out_width
+        self.scale = 1.0  # camera pixels per delivered pixel (GPU decoding delivers detector-sized frames)
         self.target_fps = target_fps
         self.buffer_size = buffer_size
         self.is_paced = is_paced
@@ -344,7 +384,8 @@ class RTSPStreamSimulator:
         self.cap: Optional[cv.VideoCapture] = None
 
     def start(self):
-        self.cap = cv.VideoCapture(self.source)
+        self.cap = make_capture(self.source, self.decoder, self.out_width)
+        self.scale = float(getattr(self.cap, "scale", 1.0))
         if not self.cap.isOpened():
             raise RuntimeError(f"Failed to open video stream source: {self.source}")
 
@@ -353,6 +394,16 @@ class RTSPStreamSimulator:
         self.frames_dropped = 0
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
+
+    def reset_counters(self):
+        """Forget start-up frames so measurement covers steady state only."""
+        while True:
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                break
+        self.frames_ingested = 0
+        self.frames_dropped = 0
 
     def stop(self):
         self.running = False
@@ -488,6 +539,9 @@ class ThreadedCameraWorker(threading.Thread):
         is_paced: bool = True,
         display: bool = False,
         model_lock: Optional[threading.Lock] = None,
+        tracker_type: str = "byetrack",
+        buffer_size: int = 2,
+        decoder: str = "opencv",
     ):
         super().__init__(daemon=True)
         self.stream_id = stream_id
@@ -500,9 +554,11 @@ class ThreadedCameraWorker(threading.Thread):
         self.display = display
         self.model_lock = model_lock or threading.Lock()
 
-        self.simulator = RTSPStreamSimulator(source=stream_source, target_fps=target_fps, is_paced=is_paced)
-        min_hits = 1 if self.skip_frames > 0 else 2
-        self.tracker = Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3)
+        self.simulator = RTSPStreamSimulator(
+            source=stream_source, target_fps=target_fps, buffer_size=buffer_size, is_paced=is_paced,
+            decoder=decoder, out_width=imgsz,
+        )
+        self.tracker = make_tracker(tracker_type, skip_frames)
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
         self.target_classes = get_model_target_classes(self.model)
 
@@ -558,19 +614,14 @@ class ThreadedCameraWorker(threading.Thread):
 
                 t_inf = (time.perf_counter() - t_infer0) * 1000.0
 
-                dets = []
-                if len(results) and len(results[0].boxes):
-                    for box in results[0].boxes:
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        conf = float(box.conf[0])
-                        dets.append([x1, y1, x2, y2, conf])
-                dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
+                # 4. Tracking
+                t_trk0 = time.perf_counter()
+                dets_arr = extract_dets(results[0]) if len(results) else np.empty((0, 6))
+                if self.simulator.scale != 1.0 and len(dets_arr):
+                    dets_arr[:, :4] *= self.simulator.scale
                 self.last_dets = dets_arr
                 self.inferred_frames += 1
-
-                # 4. Tracking (SORT)
-                t_trk0 = time.perf_counter()
-                tracked_objs = self.tracker.update(dets_arr)
+                tracked_objs = update_tracker(self.tracker, dets_arr)
                 self.last_tracked = tracked_objs
                 t_trk = (time.perf_counter() - t_trk0) * 1000.0
             else:
@@ -582,9 +633,7 @@ class ThreadedCameraWorker(threading.Thread):
 
             # 5. Spatial Analytics (Polygon containment)
             t_ana0 = time.perf_counter()
-            for obj in tracked_objs:
-                cx, cy = (obj[0] + obj[2]) / 2.0, (obj[1] + obj[3]) / 2.0
-                _ = self.test_poly.contains(Point(cx, cy))
+            count_in_polygon(self.test_poly, tracked_objs)
             t_ana = (time.perf_counter() - t_ana0) * 1000.0
 
             # 6. UI Drawing & Visual HUD (if display is enabled)
@@ -640,6 +689,9 @@ class BatchedCameraPipeline:
         target_fps: float = 25.0,
         is_paced: bool = True,
         display: bool = False,
+        tracker_type: str = "byetrack",
+        buffer_size: int = 2,
+        decoder: str = "opencv",
     ):
         self.stream_sources = stream_sources
         self.num_streams = len(stream_sources)
@@ -651,10 +703,11 @@ class BatchedCameraPipeline:
         self.display = display
 
         self.simulators = [
-            RTSPStreamSimulator(source=src, target_fps=target_fps, is_paced=is_paced) for src in stream_sources
+            RTSPStreamSimulator(source=src, target_fps=target_fps, buffer_size=buffer_size, is_paced=is_paced,
+                                decoder=decoder, out_width=imgsz)
+            for src in stream_sources
         ]
-        min_hits = 1 if self.skip_frames > 0 else 2
-        self.trackers = [Sort(max_age=25, min_hits=min_hits, iou_threshold=0.3) for _ in range(self.num_streams)]
+        self.trackers = [make_tracker(tracker_type, skip_frames) for _ in range(self.num_streams)]
         self.last_tracked: List[np.ndarray] = [np.empty((0, 5)) for _ in range(self.num_streams)]
         self.test_poly = Polygon([[100, 100], [1800, 100], [1800, 1000], [100, 1000]])
         self.target_classes = get_model_target_classes(self.model)
@@ -665,9 +718,22 @@ class BatchedCameraPipeline:
         self.inferred_batches = 0
         self.total_dropped_frames = 0
 
+    def open_sources(self, timeout_s: float = 15.0):
+        """Opens every camera and waits for its first frame. Camera start-up (GPU decoders take
+        ~0.4 s each) is not steady-state throughput, so it happens before the clock starts."""
+        for sim in self.simulators:
+            if not sim.running:
+                sim.start()
+        deadline = time.perf_counter() + timeout_s
+        while time.perf_counter() < deadline and any(sim.queue.empty() for sim in self.simulators):
+            time.sleep(0.01)
+        for sim in self.simulators:
+            sim.reset_counters()
+
     def run_for(self, duration_sec: float):
         for sim in self.simulators:
-            sim.start()
+            if not sim.running:
+                sim.start()
 
         self.running = True
         t_start = time.perf_counter()
@@ -723,16 +789,10 @@ class BatchedCameraPipeline:
             tracked_list = []
             if should_run_yolo:
                 for idx in range(self.num_streams):
-                    dets_arr = np.empty((0, 5))
-                    if idx < len(results) and len(results[idx].boxes):
-                        dets = []
-                        for box in results[idx].boxes:
-                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                            conf = float(box.conf[0])
-                            dets.append([x1, y1, x2, y2, conf])
-                        dets_arr = np.array(dets) if len(dets) else np.empty((0, 5))
-
-                    tracked = self.trackers[idx].update(dets_arr)
+                    dets_arr = extract_dets(results[idx]) if idx < len(results) else np.empty((0, 6))
+                    if self.simulators[idx].scale != 1.0 and len(dets_arr):
+                        dets_arr[:, :4] *= self.simulators[idx].scale
+                    tracked = update_tracker(self.trackers[idx], dets_arr)
                     self.last_tracked[idx] = tracked
                     tracked_list.append(tracked)
             else:
@@ -744,9 +804,7 @@ class BatchedCameraPipeline:
             # 4. Spatial Analytics (Polygon containment)
             t_ana0 = time.perf_counter()
             for idx in range(self.num_streams):
-                for obj in tracked_list[idx]:
-                    cx, cy = (obj[0] + obj[2]) / 2.0, (obj[1] + obj[3]) / 2.0
-                    _ = self.test_poly.contains(Point(cx, cy))
+                count_in_polygon(self.test_poly, tracked_list[idx])
             t_ana = (time.perf_counter() - t_ana0) * 1000.0
 
             # 5. Visual Rendering & Multi-Camera Display Grid
@@ -833,17 +891,30 @@ def run_single_test(
     target_fps: float = 25.0,
     is_paced: bool = True,
     display: bool = False,
-    imgsz: int = 640,
+    imgsz: Optional[int] = None,
     device: str = "cuda:0",
     profiler: Optional[HardwareProfiler] = None,
+    conf: float = 0.10,
+    tracker_type: str = "byetrack",
+    buffer_size: int = 2,
+    decoder: str = "auto",
 ) -> Dict[str, Any]:
-    print(f"\n[{model_name}] {n_streams} stream(s), mode={pipeline_mode}, skip={skip_frames}, display={display}")
+    print(
+        f"\n[{model_name}] {n_streams} stream(s), mode={pipeline_mode}, skip={skip_frames}, "
+        f"display={display}, tracker={tracker_type}, conf={conf}, buffer={buffer_size}, decoder={decoder}"
+    )
 
     # Ensure clean VRAM state before test
     cleanup_vram(device)
 
+    built = engine_imgsz(model_name)
+    if imgsz is None:
+        imgsz = built or 640
+    elif built and built != imgsz:
+        print(f"  ! {model_name} was built for imgsz={built}; requested {imgsz} may fail on a fixed-shape engine")
+
     # Load Model
-    model = YOLO(model_name)
+    model = YOLO(model_name, task="detect")
 
     # Prepare stream sources
     sources = [video_sources[i % len(video_sources)] for i in range(n_streams)]
@@ -857,6 +928,24 @@ def run_single_test(
         _ = model(dummy, verbose=False, device=device, imgsz=imgsz)
     if "cuda" in device and torch.cuda.is_available():
         torch.cuda.synchronize()
+
+    pipeline = None
+    if pipeline_mode == "batched":
+        pipeline = BatchedCameraPipeline(
+            stream_sources=sources,
+            model=model,
+            device=device,
+            conf=conf,
+            imgsz=imgsz,
+            skip_frames=skip_frames,
+            target_fps=target_fps,
+            is_paced=is_paced,
+            display=display,
+            tracker_type=tracker_type,
+            buffer_size=buffer_size,
+            decoder=decoder,
+        )
+        pipeline.open_sources()
 
     # Start Profiling
     profiler.start()
@@ -876,12 +965,16 @@ def run_single_test(
                 stream_source=sources[idx],
                 model=model,
                 device=device,
+                conf=conf,
                 imgsz=imgsz,
                 skip_frames=skip_frames,
                 target_fps=target_fps,
                 is_paced=is_paced,
                 display=display,
                 model_lock=model_lock,
+                tracker_type=tracker_type,
+                buffer_size=buffer_size,
+                decoder=decoder,
             )
             workers.append(w)
             w.start()
@@ -945,16 +1038,6 @@ def run_single_test(
         latencies_summary = combined_tracker.compute_summary()
 
     elif pipeline_mode == "batched":
-        pipeline = BatchedCameraPipeline(
-            stream_sources=sources,
-            model=model,
-            device=device,
-            imgsz=imgsz,
-            skip_frames=skip_frames,
-            target_fps=target_fps,
-            is_paced=is_paced,
-            display=display,
-        )
         pipeline.run_for(duration_sec)
         t_elapsed = time.perf_counter() - t_start
         hw_metrics = profiler.stop()
@@ -974,6 +1057,11 @@ def run_single_test(
         "streams": n_streams,
         "mode": pipeline_mode,
         "skip_frames": skip_frames,
+        "tracker": tracker_type,
+        "conf": conf,
+        "imgsz": imgsz,
+        "buffer_size": buffer_size,
+        "decoder": decoder,
         "display": display,
         "paced": is_paced,
         "target_fps": target_fps,
@@ -1007,6 +1095,7 @@ def run_single_test(
         "peak_system_ram_gb": round(hw_metrics["peak_system_ram_gb"], 2),
         # Latencies
         "latencies": latencies_summary,
+        "e2e_p50_ms": round(latencies_summary.get("e2e_ms", {}).get("p50", 0.0), 1),
         "time_series": hw_metrics.get("time_series", {}),
     }
 
@@ -1103,17 +1192,23 @@ class FeasibilityAnalyzer:
             bottlenecks.append(f"Host CPU Multithreading / Video Decoding Backpressure ({cpu_util:.1f}% load)")
         if best_run.get("avg_gpu_mem_bus_pct", 0.0) >= 70.0:
             bottlenecks.append(f"GPU PCIe / Memory Controller Bus Bandwidth Limit ({best_run['avg_gpu_mem_bus_pct']:.1f}%)")
+        if not bottlenecks and not (meets_fps and drops_acceptable):
+            # Averages hide it, but frames are being dropped while every device has headroom:
+            # the serial host-side loop (decode hand-off, preprocessing, tracking) is the limit.
+            bottlenecks.append(
+                f"Host-side pipeline loop (decode, preprocessing, tracking): GPU only {gpu_util:.1f}% busy "
+                f"while {drop_rate:.1f}% of frames are dropped"
+            )
         if not bottlenecks:
             bottlenecks.append("None (Hardware operates with healthy margin across all subsystems)")
 
-        cost_per_stream_gpu = max(5.0, gpu_util / max(1, best_run["streams"]))
-        cost_per_stream_cpu = max(4.0, cpu_util / max(1, best_run["streams"]))
-        cost_per_stream_vram = max(150.0, (vram_mb - 800.0) / max(1, best_run["streams"]))
-
-        max_streams_gpu = int(85.0 / cost_per_stream_gpu) if cost_per_stream_gpu > 0 else 8
-        max_streams_cpu = int(85.0 / cost_per_stream_cpu) if cost_per_stream_cpu > 0 else 8
-        max_streams_vram = int((total_vram_mb - 1500.0) / cost_per_stream_vram) if cost_per_stream_vram > 0 else 8
-        max_safe_streams = max(1, min(max_streams_gpu, max_streams_cpu, max_streams_vram))
+        # Measured, not extrapolated: the largest tested stream count that met the target.
+        passing = [
+            r["streams"]
+            for r in self.results
+            if r["fps_per_camera"] >= self.target_fps * 0.90 and r.get("drop_rate_pct", 0.0) < 5.0
+        ]
+        max_safe_streams = max(passing) if passing else 0
 
         return {
             "verdict": verdict,
@@ -1219,7 +1314,7 @@ class ReportGenerator:
         print(f"VRAM: {feasibility['vram_used_mb']:.0f} MB / {feasibility['total_vram_mb']:.0f} MB ({feasibility['vram_headroom_mb']/1024.0:.2f} GB free)")
         print(f"CPU load: {feasibility['cpu_util_pct']:.1f}% ({feasibility['cpu_headroom_pct']:.1f}% headroom)")
         print(f"Frame drop rate: {feasibility['drop_rate_pct']:.2f}%")
-        print(f"Estimated capacity: ~{feasibility['max_safe_streams_at_target_fps']} cameras @ {feasibility['target_fps']} FPS")
+        print(f"Largest tested stream count meeting target: {feasibility['max_safe_streams_at_target_fps']} cameras @ {feasibility['target_fps']} FPS")
         if feasibility.get("bottlenecks"):
             print(f"Bottlenecks: {', '.join(feasibility['bottlenecks'])}")
         print("-" * 90)
@@ -1242,6 +1337,11 @@ class ReportGenerator:
             "streams",
             "mode",
             "skip_frames",
+            "tracker",
+            "conf",
+            "imgsz",
+            "buffer_size",
+            "decoder",
             "display",
             "paced",
             "target_fps",
@@ -1259,6 +1359,7 @@ class ReportGenerator:
             "peak_process_ram_mb",
             "avg_gpu_temp_c",
             "avg_gpu_power_w",
+            "e2e_p50_ms",
         ]
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
@@ -1307,7 +1408,7 @@ class ReportGenerator:
         )
         md.append(f"- **Frame Drop Rate:** **{feasibility['drop_rate_pct']:.2f}%**")
         md.append(
-            f"- **Max Safe Stream Capacity:** **{feasibility['max_safe_streams_at_target_fps']} Camera Streams** @ {feasibility['target_fps']} FPS"
+            f"- **Largest Tested Stream Count Meeting Target:** **{feasibility['max_safe_streams_at_target_fps']} Camera Streams** @ {feasibility['target_fps']} FPS"
         )
         md.append(f"- **Identified Bottlenecks:** {', '.join(feasibility['bottlenecks'])}\n")
 
@@ -1498,7 +1599,7 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["yolov8n.pt", "yolov8s.pt"],
+        default=["models/yolo26s_thai_traffic_manual_v1_640.engine"],
         help="YOLO model checkpoint files to benchmark",
     )
     parser.add_argument(
@@ -1516,20 +1617,20 @@ def main():
     parser.add_argument(
         "--target-fps",
         type=float,
-        default=15.0,
+        default=25.0,
         help="Target frame rate per camera feed (e.g. 15.0 or 25.0 FPS)",
     )
     parser.add_argument(
         "--mode",
         choices=["threaded", "batched", "both"],
-        default="threaded",
+        default="batched",
         help="Vision pipeline architecture mode",
     )
     parser.add_argument(
         "--frame-skips",
         nargs="+",
         type=int,
-        default=[0],
+        default=[1],
         help="Frame skipping intervals to evaluate (0 = every frame, 1 = every 2nd frame, 2 = every 3rd)",
     )
     parser.add_argument(
@@ -1545,8 +1646,8 @@ def main():
     parser.add_argument(
         "--imgsz",
         type=int,
-        default=640,
-        help="YOLO inference image size (e.g. 640, 480, 1280)",
+        default=None,
+        help="YOLO inference image size (default: the size a .engine was built for, else 640)",
     )
     parser.add_argument(
         "--videos",
@@ -1569,6 +1670,30 @@ def main():
         "--save-plots",
         action="store_true",
         help="Generate and save graphical performance charts (PNG)",
+    )
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.10,
+        help="Detection confidence threshold (run_multi_camera.py default is 0.10)",
+    )
+    parser.add_argument(
+        "--tracker",
+        choices=["byetrack", "sort"],
+        default="byetrack",
+        help="Tracker, same implementations and thresholds as run_multi_camera.py",
+    )
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=2,
+        help="Frames each camera queue holds before the oldest is dropped",
+    )
+    parser.add_argument(
+        "--decoder",
+        choices=["auto", "nvdec", "opencv"],
+        default="auto",
+        help="Video decoding: 'nvdec' decodes and resizes on the NVIDIA GPU (same path as main.py run)",
     )
 
     args = parser.parse_args()
@@ -1638,6 +1763,10 @@ def main():
                         imgsz=args.imgsz,
                         device=device,
                         profiler=profiler,
+                        conf=args.conf,
+                        tracker_type=args.tracker,
+                        buffer_size=args.buffer_size,
+                        decoder=args.decoder,
                     )
                     all_results.append(res)
                     time.sleep(1.0)

@@ -48,7 +48,7 @@ def main():
     bench_parser.add_argument(
         "--models",
         nargs="+",
-        default=["yolov8n.pt", "yolov8s.pt"],
+        default=["models/yolo26s_thai_traffic_manual_v1_640.engine"],
         help="YOLO model checkpoint files to benchmark",
     )
     bench_parser.add_argument(
@@ -66,20 +66,20 @@ def main():
     bench_parser.add_argument(
         "--target-fps",
         type=float,
-        default=15.0,
+        default=25.0,
         help="Target frame rate per camera feed",
     )
     bench_parser.add_argument(
         "--mode",
         choices=["threaded", "batched", "both"],
-        default="threaded",
+        default="batched",
         help="Vision pipeline architecture mode",
     )
     bench_parser.add_argument(
         "--frame-skips",
         nargs="+",
         type=int,
-        default=[0],
+        default=[1],
         help="Frame skipping intervals (0 = every frame, 1 = every 2nd, 2 = every 3rd)",
     )
     bench_parser.add_argument(
@@ -95,8 +95,8 @@ def main():
     bench_parser.add_argument(
         "--imgsz",
         type=int,
-        default=640,
-        help="YOLO inference image size",
+        default=None,
+        help="YOLO inference image size (default: the size a .engine was built for, else 640)",
     )
     bench_parser.add_argument(
         "--videos",
@@ -119,6 +119,30 @@ def main():
         "--save-plots",
         action="store_true",
         help="Generate 4-panel analysis charts (PNG)",
+    )
+    bench_parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.10,
+        help="Detection confidence threshold (same default as main.py run)",
+    )
+    bench_parser.add_argument(
+        "--tracker",
+        choices=["byetrack", "sort"],
+        default="byetrack",
+        help="Tracker, same implementations and thresholds as main.py run",
+    )
+    bench_parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=2,
+        help="Frames each camera queue holds before the oldest is dropped",
+    )
+    bench_parser.add_argument(
+        "--decoder",
+        choices=["auto", "nvdec", "opencv"],
+        default="auto",
+        help="Video decoding: 'nvdec' decodes and resizes on the NVIDIA GPU (same path as main.py run)",
     )
 
     # 3. Interactive Lane Polygon & Counting Gate Calibration

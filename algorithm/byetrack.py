@@ -21,6 +21,16 @@ except (ImportError, ValueError):
     from utils import linear_assignment, iou_batch
 
 
+# Kalman model constants (constant-velocity on [cx, cy, s, r]); built once, not per track per frame.
+_F = np.eye(8, dtype=np.float32)
+_F[:4, 4:] = np.eye(4, dtype=np.float32)
+_Q = np.diag([1, 1, 1, 1, 0.01, 0.01, 0.01, 0.01]).astype(np.float32)
+_H = np.zeros((4, 8), dtype=np.float32)
+_H[:4, :4] = np.eye(4, dtype=np.float32)
+_R = np.diag([1, 1, 10, 10]).astype(np.float32)
+_I8 = np.eye(8, dtype=np.float32)
+
+
 class TrackState:
     New = 0
     Tracked = 1
@@ -112,11 +122,7 @@ class STrack:
         if self.mean is None:
             return
 
-        F = np.eye(8, dtype=np.float32)
-        for i in range(4):
-            F[i, i + 4] = 1.0  # Constant velocity model
-
-        Q = np.diag([1, 1, 1, 1, 0.01, 0.01, 0.01, 0.01]).astype(np.float32)
+        F, Q = _F, _Q  # constant velocity model
 
         self.mean = np.dot(F, self.mean)
         self.covariance = np.dot(np.dot(F, self.covariance), F.T) + Q
@@ -148,10 +154,7 @@ class STrack:
         r = w / max(1e-6, h)
 
         z = np.array([cx, cy, s, r], dtype=np.float32)
-        H = np.zeros((4, 8), dtype=np.float32)
-        H[:4, :4] = np.eye(4, dtype=np.float32)
-
-        R = np.diag([1, 1, 10, 10]).astype(np.float32)
+        H, R = _H, _R
 
         y = z - np.dot(H, self.mean)
         S = np.dot(np.dot(H, self.covariance), H.T) + R
@@ -162,8 +165,7 @@ class STrack:
         K = np.dot(np.dot(self.covariance, H.T), S_inv)
 
         self.mean = self.mean + np.dot(K, y)
-        I = np.eye(8, dtype=np.float32)
-        self.covariance = np.dot(I - np.dot(K, H), self.covariance)
+        self.covariance = np.dot(_I8 - np.dot(K, H), self.covariance)
 
         if not np.all(np.isfinite(self.mean)) or not np.all(np.isfinite(self.covariance)):
             self.mean = np.array([cx, cy, max(10.0, s), float(np.clip(r, 0.1, 10.0)), 0, 0, 0, 0], dtype=np.float32)

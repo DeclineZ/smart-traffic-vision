@@ -2,7 +2,7 @@
 
 Multi-camera vehicle detection and tracking for adaptive traffic control. The runner measures current lane occupancy, queued/moving/unknown vehicles, and directed gate crossings. Camera health and observation times travel with the measurements.
 
-The primary model is `models/yolo26s_thai_traffic.pt`. ByteTrack is the default tracker. TensorRT is optional and must be built and verified on the deployment hardware.
+The default model is `models/yolo26s_thai_traffic_manual_v1_640.engine`, a TensorRT build of `yolo26s_thai_traffic_manual_v1_640.pt` (the runner falls back to the `.pt` when no engine has been built on the machine). Engines are GPU-specific: build one with `export_trt.py` and check it with `tools.trt_parity` on the deployment hardware. ByteTrack is the default tracker.
 
 ## Guides
 

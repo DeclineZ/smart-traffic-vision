@@ -1,13 +1,16 @@
 """Exercise real RTSP and MQTT recovery on loopback only; never uses field URLs.
 
 Requires ffmpeg, an explicit MediaMTX binary and the optional amqtt test package.
-RTSP uses a recording; MQTT uses the real-model main fixture. No signal receiver
-or database is started. Results do not certify camera/NVR or deployment latency.
+RTSP uses a recording read through the runner's decoder (--decoder, as in main.py run);
+MQTT uses the real-model main fixture. The camera is reached through a loopback relay
+that can stop forwarding with the connection left open, like a hung camera. No signal
+receiver or database is started. Results do not certify camera/NVR or deployment latency.
 """
 
 import argparse
 import asyncio
 import copy
+from functools import partial
 import json
 import logging
 import os
@@ -20,7 +23,9 @@ import uuid
 
 from amqtt.broker import Broker
 import paho.mqtt.client as mqtt
+import psutil
 
+from trt_pipeline.nvdec import NvdecCapture, ffmpeg_exe, make_capture
 from trt_pipeline.payload import iso_utc
 from trt_pipeline.publisher import MQTTPublisher
 from trt_pipeline.stream import StreamBufferWorker
@@ -54,6 +59,69 @@ def stop_child(child):
             child.wait(timeout=5)
 
 
+def decoder_processes():
+    """Running children of this process that are the GPU decoder's ffmpeg (not the feeder's)."""
+    exe = os.path.normcase(os.path.abspath(ffmpeg_exe() or ""))
+    found = []
+    for child in psutil.Process().children(recursive=True):
+        try:
+            if os.path.normcase(child.exe()) == exe and child.is_running():
+                found.append(child.pid)
+        except psutil.Error:
+            pass
+    return found
+
+
+class StallRelay:
+    """Loopback TCP relay to the RTSP server. ``stall()`` stops forwarding but keeps every
+    connection open, so only a read timeout can notice it (a hung camera, not a closed one)."""
+
+    def __init__(self, upstream_port):
+        self.upstream_port = upstream_port
+        self.flowing = asyncio.Event()
+        self.flowing.set()
+        self.writers = set()
+        self.server = None
+        self.port = None
+
+    async def start(self):
+        self.server = await asyncio.start_server(self._accept, "127.0.0.1", 0)
+        self.port = self.server.sockets[0].getsockname()[1]
+
+    def stall(self):
+        self.flowing.clear()
+
+    def resume(self):
+        self.flowing.set()
+
+    async def _accept(self, reader, writer):
+        try:
+            upstream_reader, upstream_writer = await asyncio.open_connection("127.0.0.1", self.upstream_port)
+        except OSError:
+            writer.close()
+            return
+        await asyncio.gather(self._forward(reader, upstream_writer), self._forward(upstream_reader, writer))
+
+    async def _forward(self, reader, writer):
+        self.writers.add(writer)
+        try:
+            while data := await reader.read(65536):
+                await self.flowing.wait()
+                writer.write(data)
+                await writer.drain()
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            self.writers.discard(writer)
+            writer.close()
+
+    async def close(self):
+        self.flowing.set()
+        self.server.close()
+        for writer in list(self.writers):
+            writer.close()
+
+
 async def exercise(args, report):
     rtsp_port, mqtt_port = free_port(), free_port()
     artifacts = ROOT / ".venv/network-smoke" / ("run-" + uuid.uuid4().hex[:8])
@@ -62,22 +130,27 @@ async def exercise(args, report):
     config.write_text(f"logLevel: warn\nrtspAddress: 127.0.0.1:{rtsp_port}\nrtspTransports: [tcp]\n"
                       "rtmp: false\nhls: false\nwebrtc: false\nsrt: false\nmoq: false\n"
                       "api: false\nmetrics: false\npprof: false\nplayback: false\npaths:\n  all_others: {}\n", encoding="utf-8")
-    url = f"rtsp://127.0.0.1:{rtsp_port}/camera"
+    publish_url = f"rtsp://127.0.0.1:{rtsp_port}/camera"
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     server_log = (artifacts / "server.log").open("w", encoding="utf-8")
     feeder_log = (artifacts / "feeder.log").open("w", encoding="utf-8")
-    server = feeder = worker = publisher = subscriber = broker = None
+    server = feeder = worker = publisher = subscriber = broker = relay = None
     messages = queue.Queue()
     ready = False
     broker_config = {"listeners": {"default": {"type": "tcp", "bind": f"127.0.0.1:{mqtt_port}"}},
                      "plugins": {"amqtt.plugins.authentication.AnonymousAuthPlugin": {"allow_anonymous": True}}}
 
     def feed():
+        scale = ["-vf", f"scale={args.feed_width}:-2"] if args.feed_width else []
         return subprocess.Popen([args.ffmpeg, "-hide_banner", "-loglevel", "error", "-re", "-stream_loop", "-1",
-                                 "-i", str(Path(args.video).resolve()), "-an", "-vf", "scale=640:360",
+                                 "-i", str(Path(args.video).resolve()), "-an", *scale,
                                  "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-                                 "-g", "25", "-pix_fmt", "yuv420p", "-f", "rtsp", "-rtsp_transport", "tcp", url],
+                                 "-g", "25", "-pix_fmt", "yuv420p", "-f", "rtsp", "-rtsp_transport", "tcp", publish_url],
                                 stdout=feeder_log, stderr=feeder_log, creationflags=flags)
+
+    async def recovered_after(epoch, label, timeout=20):
+        return await wait_until(lambda: (p if (p := worker.poll()) and p.epoch > epoch and p.age_s() < .75 else None),
+                                label, timeout=timeout)
 
     def connected(client, userdata, flags, reason_code, properties):
         if reason_code == 0:
@@ -107,26 +180,62 @@ async def exercise(args, report):
         if server.poll() is not None:
             raise RuntimeError(f"MediaMTX exited; inspect {artifacts}")
         feeder = feed()
-        worker = StreamBufferWorker("loopback", url, open_timeout_s=5, read_timeout_s=5,
-                                    max_consecutive_failures=1, reconnect_initial_s=.25, reconnect_max_s=1)
+        relay = StallRelay(rtsp_port)
+        await relay.start()
+        url = f"rtsp://127.0.0.1:{relay.port}/camera"
+        # Built as the runner builds a live camera (run_multi_camera.py), with its default timeouts and
+        # failure count; only the reconnect backoff is shortened to keep the smoke quick.
+        worker = StreamBufferWorker("loopback", url, capture_factory=partial(make_capture, url, args.decoder, args.imgsz),
+                                    reconnect_initial_s=.25, reconnect_max_s=1)
         worker.start()
-        first = await wait_until(worker.poll, "first decoded RTSP frame")
+        first = await wait_until(worker.poll, "first decoded RTSP frame", timeout=30)
+        decoder_used = type(worker.cap).__name__
+        expected_children = 1 if isinstance(worker.cap, NvdecCapture) else 0
+        children = {"connected": len(decoder_processes())}
         await asyncio.sleep(1.2)
         newest = await wait_until(lambda: (p if (p := worker.poll()) and p.age_s() < .75 else None), "latest decoded frame")
         assert newest.seq > first.seq + 5 and newest.age_s() < .75, f"RTSP latest frame: seq {first.seq}->{newest.seq}, age {newest.age_s()}"
         assert worker.frames_dropped > 0, "RTSP queue did not discard old frames"
+
+        # Camera goes away (connection closed by the server).
         stop_child(feeder)
+        lost_at = time.monotonic()
         await wait_until(lambda: worker.state in ("offline", "reconnecting"), "RTSP loss detected")
+        loss_detect_s = time.monotonic() - lost_at
         await wait_until(lambda: worker.status()["lastFrameAgeSec"] > 1.5, "unusable RTSP observation age")
         old_epoch = worker.epoch
         feeder = feed()
-        recovered = await wait_until(lambda: (p if (p := worker.poll()) and p.epoch > old_epoch else None),
-                                     "RTSP reconnect epoch", timeout=20)
-        assert recovered.age_s() < .75, f"RTSP recovery age {recovered.age_s()}"
-        report["rtsp"] = {"framesIngested": worker.frames_ingested, "framesDropped": worker.frames_dropped,
+        recovered = await recovered_after(old_epoch, "RTSP reconnect epoch")
+        await asyncio.sleep(1)
+        children["afterReconnect"] = len(decoder_processes())
+
+        # Camera hangs: the connection stays open but no data arrives.
+        stalled_cap = worker.cap
+        relay.stall()
+        stalled_at = time.monotonic()
+        await wait_until(lambda: worker.state in ("offline", "reconnecting"), "RTSP stall detected", timeout=30)
+        stall_detect_s = time.monotonic() - stalled_at
+        stall_error = getattr(stalled_cap, "last_error", None)
+        await asyncio.sleep(2)
+        stalled_epoch = worker.epoch
+        relay.resume()
+        resumed = await recovered_after(stalled_epoch, "RTSP reconnect after stall", timeout=30)
+        resumed_age_s = resumed.age_s()
+        await asyncio.sleep(1)
+        children["afterStall"] = len(decoder_processes())
+
+        # A stall must end through the transport timeout, well before three read backstops pass.
+        assert stall_detect_s < worker.read_timeout_s + 5, f"RTSP stall took {stall_detect_s:.1f}s to detect"
+        assert all(n == expected_children for n in children.values()), f"decoder processes {children}"
+        report["rtsp"] = {"decoder": args.decoder, "decoderUsed": decoder_used,
+                          "framesIngested": worker.frames_ingested, "framesDropped": worker.frames_dropped,
                           "reconnects": worker.reconnects, "firstEpoch": first.epoch, "recoveredEpoch": recovered.epoch,
-                          "latestAgeMs": round(recovered.age_s() * 1000, 1), "decodedResolution": list(recovered.frame.shape[:2]),
-                          "latestOnlyPassed": True, "outageAndRecoveryPassed": True}
+                          "stallRecoveredEpoch": resumed.epoch,
+                          "lossDetectSec": round(loss_detect_s, 2), "stallDetectSec": round(stall_detect_s, 2),
+                          "stallDecoderError": stall_error,
+                          "latestAgeMs": round(resumed_age_s * 1000, 1), "decodedResolution": list(resumed.frame.shape[:2]),
+                          "frameScale": resumed.scale, "decoderProcesses": children,
+                          "latestOnlyPassed": True, "outageAndRecoveryPassed": True, "stallAndRecoveryPassed": True}
 
         broker = Broker(broker_config)
         await broker.start()
@@ -174,6 +283,9 @@ async def exercise(args, report):
             await asyncio.to_thread(worker.stop)
             report["readerShutdownSec"] = round(time.monotonic() - started, 3)
             report["readerStopped"] = not worker.thread.is_alive()
+            report["decoderProcessesAfterStop"] = len(decoder_processes())
+        if relay:
+            await relay.close()
         if publisher:
             await asyncio.to_thread(publisher.stop)
         if subscriber:
@@ -188,6 +300,8 @@ async def exercise(args, report):
         report["artifacts"] = str(artifacts.relative_to(ROOT))
         if worker and worker.thread.is_alive():
             raise RuntimeError("RTSP reader did not stop")
+        if report.get("decoderProcessesAfterStop"):
+            raise RuntimeError(f"{report['decoderProcessesAfterStop']} decoder process(es) left running after stop")
 
 
 def main(argv=None):
@@ -195,10 +309,13 @@ def main(argv=None):
     parser.add_argument("--mediamtx", required=True)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--video", default=str(ROOT / "videos/cam44_north.avi"))
+    parser.add_argument("--feed-width", type=int, default=0, help="Restream at this width (default: the recording's)")
+    parser.add_argument("--decoder", choices=("auto", "nvdec", "opencv"), default="auto", help="As main.py run --decoder")
+    parser.add_argument("--imgsz", type=int, default=640, help="Detector input width the GPU decoder resizes to")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
-    report = {"scope": "isolated loopback RTSP reader and MQTT transport; real-model fixture, no inference",
+    report = {"scope": "isolated loopback RTSP reader (runner decoder, close and stall faults) and MQTT transport; real-model fixture, no inference",
               "startedAt": iso_utc(time.time()), "passed": False}
     try:
         asyncio.run(exercise(args, report))

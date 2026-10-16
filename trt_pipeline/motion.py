@@ -22,6 +22,8 @@ with many vehicles do not grow memory.
 
 from __future__ import annotations
 
+import math
+
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, Optional, Sequence, Tuple
@@ -111,17 +113,20 @@ class MotionStateClassifier:
         if dt < s.min_history_s:
             return None
         # average the first/last few positions to reduce detector jitter
+        # (plain Python: this runs per vehicle per frame, and numpy's call overhead on 2-3 points dominated)
         k = max(1, min(3, len(window) // 3))
-        first = np.mean([(p[1], p[2]) for p in window[:k]], axis=0)
-        last = np.mean([(p[1], p[2]) for p in window[-k:]], axis=0)
+        first = (sum(p[1] for p in window[:k]) / k, sum(p[2] for p in window[:k]) / k)
+        last = (sum(p[1] for p in window[-k:]) / k, sum(p[2] for p in window[-k:]) / k)
         if s.homography is not None:
             a = self._project(*first)
             b = self._project(*last)
-            dist = float(np.hypot(b[0] - a[0], b[1] - a[1]))
+            dist = math.hypot(b[0] - a[0], b[1] - a[1])
         else:
-            box_h = float(np.median([p[3] for p in window]))
-            dist = float(np.hypot(*(last - first))) / max(box_h, 1.0)
-        if not np.isfinite(dist):
+            heights = sorted(p[3] for p in window)
+            mid = len(heights) // 2
+            box_h = heights[mid] if len(heights) % 2 else (heights[mid - 1] + heights[mid]) / 2.0
+            dist = math.hypot(last[0] - first[0], last[1] - first[1]) / max(box_h, 1.0)
+        if not math.isfinite(dist):
             return None
         return dist / dt
 

@@ -100,8 +100,9 @@ class ImageHealthMonitor:
         h, w = gray.shape[:2]
         return cv.resize(gray, (SHIFT_W, max(1, int(round(h * SHIFT_W / float(w))))), interpolation=cv.INTER_AREA)
 
-    def measure_shift(self, frame: np.ndarray) -> Optional[tuple]:
-        """(shift in full-resolution px, inlier count) or None when inconclusive."""
+    def measure_shift(self, frame: np.ndarray, frame_scale: float = 1.0) -> Optional[tuple]:
+        """(shift in full-resolution px, inlier count) or None when inconclusive.
+        ``frame_scale`` is camera pixels per frame pixel when the frame was delivered downscaled."""
         if self._ref_desc is None or len(self._ref_kp) < self.s.min_inliers:
             return None
         kp, desc = self._orb.detectAndCompute(self._shift_image(frame), None)
@@ -120,7 +121,7 @@ class ImageHealthMonitor:
         # displacement of the image centre under the fitted similarity
         cx, cy = SHIFT_W / 2.0, SHIFT_W * frame.shape[0] / (2.0 * frame.shape[1])
         moved = model @ np.array([cx, cy, 1.0])
-        scale = frame.shape[1] / float(SHIFT_W)
+        scale = frame.shape[1] * frame_scale / float(SHIFT_W)
         return float(np.hypot(moved[0] - cx, moved[1] - cy) * scale), n_in
 
     def reset(self) -> None:
@@ -131,8 +132,8 @@ class ImageHealthMonitor:
         self._shift_votes = 0
         self.flags.update(black=False, frozen=False, lowDetail=False)
 
-    def check(self, frame: np.ndarray, now: float) -> Dict[str, Any]:
-        """``now`` is a monotonic time in seconds."""
+    def check(self, frame: np.ndarray, now: float, frame_scale: float = 1.0) -> Dict[str, Any]:
+        """``now`` is a monotonic time in seconds; ``frame_scale`` as in ``measure_shift``."""
         if now - self._last_check < self.s.check_interval_s:
             return self.flags
         self._last_check = now
@@ -163,7 +164,7 @@ class ImageHealthMonitor:
 
         if self._ref_desc is not None and now - self._last_shift_check >= self.s.shift_check_interval_s:
             self._last_shift_check = now
-            res = None if self.flags["black"] else self.measure_shift(frame)
+            res = None if self.flags["black"] else self.measure_shift(frame, frame_scale)
             if res is not None:
                 shift, n_in = res
                 self.flags["shiftPx"] = round(shift, 1)

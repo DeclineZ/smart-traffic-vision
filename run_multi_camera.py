@@ -31,6 +31,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
@@ -46,8 +47,10 @@ from trt_pipeline.controller_main import MainControllerAdapter
 from trt_pipeline.gates import GateFlowManager, VirtualGate
 from trt_pipeline.lane_validation import validate_config_file
 from trt_pipeline.motion import MotionStateClassifier, QueueSettings
+from trt_pipeline.nvdec import make_capture
 from trt_pipeline.payload import LaneMetricsManager, PayloadBuilder, invalidate_lane, iso_utc
 from trt_pipeline.stream import FileReplaySource, FramePacket, StreamBufferWorker, is_live_source, redact_source
+from trt_pipeline.tools import engine_imgsz, engine_settings
 from trt_pipeline.voter import TrackClassVotingFilter
 
 logger = logging.getLogger("ProductionMultiCameraRunner")
@@ -72,7 +75,11 @@ DEFAULT_CONFIGS = {
     "west": "config/config_west.json",
     "northeast": "config/config_northeast.json",
 }
-DEFAULT_MODEL = "models/yolo26s_thai_traffic.pt"
+# Best measured setup on the RTX 5060 laptop (see docs/HARDWARE_BENCHMARK_GUIDE.md): the manual_v1 model
+# as a TensorRT engine at 640 px, inferring every 2nd frame (--skip-frames 1). Engines are built per GPU
+# with export_trt.py, so a machine without one falls back to the same weights in PyTorch.
+DEFAULT_MODEL = "models/yolo26s_thai_traffic_manual_v1_640.engine"
+DEFAULT_MODEL_FALLBACK = "models/yolo26s_thai_traffic_manual_v1_640.pt"
 
 # Per-camera JSON sections this runner does not read. Settings come from the CLI.
 IGNORED_CONFIG_SECTIONS = ("model", "tracker", "mqtt", "processing", "tracking", "density", "output", "classes")
@@ -124,6 +131,7 @@ class CameraRuntime:
     epoch_inferences: int = 0
     stale_frames_dropped: int = 0
     last_frame: Optional[np.ndarray] = None
+    last_frame_scale: float = 1.0  # camera pixels per last_frame pixel
     last_tracked: np.ndarray = field(default_factory=lambda: np.empty((0, 6)))
     last_obs_wall: Optional[float] = None
     last_obs_mono: Optional[float] = None
@@ -180,6 +188,7 @@ class BatchedCameraPipeline:
         output_mode: str = "shadow",
         controller_config: Optional[str] = None,
         allow_replay_controller: bool = False,
+        decoder: str = "auto",
     ):
         if not (len(camera_names) == len(config_paths) == len(video_sources)):
             raise ValueError("camera_names, config_paths and video_sources must have the same length")
@@ -193,6 +202,7 @@ class BatchedCameraPipeline:
         self.target_fps = float(target_fps)
         self.skip_frames = max(0, int(skip_frames))
         self.display = display
+        self.decoder = decoder
         self.nvenc_out = nvenc_out
         self.pub_interval = float(pub_interval)
         self.intersection_id = intersection_id
@@ -354,8 +364,12 @@ class BatchedCameraPipeline:
                 raise ValueError("Mixing recorded files and live streams in one run is not supported")
             self.replay_mode = not any(live)
             for cam, src in zip(self.cams, self.video_sources):
-                cam.source = (FileReplaySource(cam.name, src, replay_fps=replay_fps) if self.replay_mode
-                              else StreamBufferWorker(name=cam.name, source=src, target_fps=self.target_fps))
+                # GPU decoding hands over frames already resized to the detector's input width.
+                factory = partial(make_capture, src, self.decoder, self.imgsz)
+                cam.source = (FileReplaySource(cam.name, src, replay_fps=replay_fps, capture_factory=factory)
+                              if self.replay_mode
+                              else StreamBufferWorker(name=cam.name, source=src, target_fps=self.target_fps,
+                                                      capture_factory=factory))
         self.is_file_mode = self.replay_mode
         if (self.controller_adapter and not allow_replay_controller
                 and (self.replay_mode or any(isinstance(c.source, FileReplaySource) for c in self.cams))):
@@ -503,6 +517,7 @@ class BatchedCameraPipeline:
             "tracker": {"type": self.tracker_type, "trackThresh": self.track_thresh,
                         "lowThresh": self.low_thresh, "matchThresh": self.match_thresh},
             "skipFrames": self.skip_frames,
+            "decoder": self.decoder,
             "publishIntervalSec": self.pub_interval,
             "maxFrameAgeSec": self.max_frame_age_s,
             "maxObservationAgeSec": self.max_observation_age_s,
@@ -725,18 +740,20 @@ class BatchedCameraPipeline:
             captured_mono = p.captured_mono if p.captured_mono is not None else time.monotonic() - frame_age
             if cam.last_obs_mono is not None and captured_mono - cam.last_obs_mono > self.max_observation_age_s:
                 self._reset_camera(cam)
-            h, w = p.frame.shape[:2]
-            if cam.expected_resolution and (w, h) != cam.expected_resolution:
+            # camera resolution; a decoder that downscales reports its factor in p.scale
+            h, w = (int(round(d * p.scale)) for d in p.frame.shape[:2])
+            if cam.expected_resolution and (abs(w - cam.expected_resolution[0]) > p.scale
+                                            or abs(h - cam.expected_resolution[1]) > p.scale):
                 if cam.frame_invalid_reason != "resolution_mismatch":
                     self._reset_camera(cam)
                     logger.error(f"[{cam.name}] frame {w}x{h} does not match calibration "
                                  f"{cam.expected_resolution[0]}x{cam.expected_resolution[1]}")
                 cam.frame_invalid_reason = "resolution_mismatch"
-                cam.last_frame = p.frame
+                cam.last_frame, cam.last_frame_scale = p.frame, p.scale
                 continue
             cam.frame_invalid_reason = None
-            cam.health.check(p.frame, time.monotonic())
-            cam.last_frame = p.frame
+            cam.health.check(p.frame, time.monotonic(), p.scale)
+            cam.last_frame, cam.last_frame_scale = p.frame, p.scale
             if cam.health.verdict():
                 if not cam.health_invalid:
                     self._reset_camera(cam, reset_health=False)
@@ -758,6 +775,8 @@ class BatchedCameraPipeline:
 
             for (cam, p), result in zip(due, results):
                 dets = self._extract_dets(result)
+                if p.scale != 1.0 and len(dets):
+                    dets[:, :4] *= p.scale  # back to camera pixels, where lanes and gates are calibrated
                 objs = self._track(cam, dets)
                 self.class_voter.prune(cam_idx=cam.idx, active_track_ids={int(o[4]) for o in objs})
                 cam.motion.prune(p.obs_t)
@@ -1016,6 +1035,7 @@ class BatchedCameraPipeline:
             gates=gates_render,
             annotations=annotations,
             cam_status=statuses,
+            frame_scales=[c.last_frame_scale for c in self.cams],
         )
         if not self.display_worker.poll_window():
             logger.info("User requested exit from preview window (pressed 'q').")
@@ -1026,8 +1046,11 @@ class BatchedCameraPipeline:
         try:
             self.start()
             logger.info(f"Pipeline running: {self.num_streams} cameras | frame skipping 1-in-{self.skip_frames + 1}")
+            # Replay keeps the recording's real-time rate on a fixed schedule: a light step (no detection)
+            # may run early to absorb a heavy step's overrun, as a live loop would by taking the newest frame.
+            frame_period = 1.0 / self.target_fps if self.target_fps > 0 else 0.0
+            next_due = time.perf_counter()
             while self.running:
-                t0 = time.perf_counter()
                 try:
                     self.step()
                     self.consecutive_errors = 0
@@ -1038,10 +1061,13 @@ class BatchedCameraPipeline:
                     if self.consecutive_errors >= self.max_consecutive_errors:
                         raise RuntimeError("Too many consecutive processing errors; exiting for supervisor restart")
                     time.sleep(min(1.0, 0.05 * self.consecutive_errors))
-                if self.replay_mode and self.target_fps > 0:
-                    remaining = 1.0 / self.target_fps - (time.perf_counter() - t0)
-                    if remaining > 0:
-                        time.sleep(remaining)
+                if self.replay_mode and frame_period > 0:
+                    next_due += frame_period
+                    delay = next_due - time.perf_counter()
+                    if delay > 0:
+                        time.sleep(delay)
+                    elif delay < -0.5:
+                        next_due = time.perf_counter()  # far behind: run slower than real time, never burst
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt caught. Shutting down pipeline...")
         finally:
@@ -1112,13 +1138,16 @@ def build_pipeline_args() -> argparse.ArgumentParser:
                      help="True recording frame rate for file replay (default: file metadata)")
 
     mdl = parser.add_argument_group("model and tracking")
-    mdl.add_argument("--model", default=DEFAULT_MODEL, help="YOLO .pt or TensorRT .engine path")
+    mdl.add_argument("--model", default=None,
+                     help=f"YOLO .pt or TensorRT .engine path (default: {DEFAULT_MODEL}, "
+                          f"or {DEFAULT_MODEL_FALLBACK} if that engine has not been built here)")
     mdl.add_argument("--model-sha256", default=env("VISION_MODEL_SHA256"), help="Refuse to start unless the model matches")
     mdl.add_argument("--device", default=None, help="'cuda:0', 'cpu' (default: cuda:0 if available)")
     mdl.add_argument("--allow-cpu", action="store_true", help="Permit running without a CUDA GPU (development only)")
     mdl.add_argument("--conf", type=float, default=0.10,
                      help="Detector confidence; must be <= --low-thresh so ByteTrack's low-confidence stage gets input")
-    mdl.add_argument("--imgsz", type=int, default=640, help="Inference image size")
+    mdl.add_argument("--imgsz", type=int, default=None,
+                     help="Inference image size (default: the size a .engine was built for, else 640)")
     mdl.add_argument("--tracker", choices=["byetrack", "sort"], default="byetrack")
     mdl.add_argument("--track-thresh", type=float, default=0.40, help="Min detection confidence to start a track")
     mdl.add_argument("--low-thresh", type=float, default=0.10, help="Min confidence for ByteTrack's second stage")
@@ -1131,6 +1160,9 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     run = parser.add_argument_group("timing")
     run.add_argument("--fps", type=float, default=25.0, help="Max processing iterations per second")
     run.add_argument("--skip-frames", type=int, default=1, help="Infer on 1 of every N+1 frames per camera")
+    run.add_argument("--decoder", choices=("auto", "nvdec", "opencv"), default=env("VISION_DECODER", "auto"),
+                     help="Video decoding: 'nvdec' decodes and resizes on the NVIDIA GPU via ffmpeg (needed for "
+                          "8 cameras on one PC); 'auto' uses it when available, else OpenCV on the CPU")
     run.add_argument("--max-frame-age", type=float, default=1.0, help="Drop frames older than this (s) before inference")
     run.add_argument("--max-observation-age", type=float, default=1.5, help="Lanes invalid when last observation is older (s)")
     run.add_argument("--pub-interval", type=float, default=1.0, help="Publish interval (s)")
@@ -1260,13 +1292,28 @@ def main(argv: Optional[List[str]] = None) -> int:
     if device.startswith("cuda") and not torch.cuda.is_available():
         logger.error(f"Requested device {device} but CUDA is not available.")
         return 2
-    model_path = args.model if os.path.isabs(args.model) or os.path.exists(args.model) else os.path.join(REPO_ROOT, args.model)
+    def model_file(p: str) -> str:
+        return p if os.path.isabs(p) or os.path.exists(p) else os.path.join(REPO_ROOT, p)
+
+    model_path = model_file(args.model or DEFAULT_MODEL)
+    if args.model is None and not os.path.exists(model_path):
+        logger.warning(f"{DEFAULT_MODEL} not found (build it with export_trt.py); using {DEFAULT_MODEL_FALLBACK}")
+        model_path = model_file(DEFAULT_MODEL_FALLBACK)
+    imgsz = args.imgsz or engine_imgsz(model_path) or 640
 
     try:
         names, configs, sources = resolve_run_plan(args)
     except (ValueError, FileNotFoundError) as exc:
         logger.error(f"Configuration error: {exc}")
         return 2
+
+    built = engine_settings(model_path)
+    if built and not built.get("dynamic", True) and len(names) > int(built.get("batch", 1)):
+        logger.error(f"{os.path.basename(model_path)} was built for a fixed batch of {built.get('batch', 1)}; "
+                     f"{len(names)} cameras need a dynamic-batch engine (export_trt.py --batch {len(names)})")
+        return 2
+    if built.get("imgsz") and int(built["imgsz"]) != imgsz:
+        logger.warning(f"{os.path.basename(model_path)} was built for imgsz={built['imgsz']}, running at {imgsz}")
 
     tls = {"ca": args.mqtt_tls_ca, "cert": args.mqtt_tls_cert, "key": args.mqtt_tls_key,
            "insecure": args.mqtt_tls_insecure}
@@ -1290,7 +1337,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             pickup_bias=args.pickup_bias,
             enable_voting=not args.no_voting,
             tracker_type=args.tracker,
-            imgsz=args.imgsz,
+            imgsz=imgsz,
             source_id=args.source_id,
             track_thresh=args.track_thresh,
             low_thresh=args.low_thresh,
@@ -1308,6 +1355,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             output_mode=args.output_mode,
             controller_config=args.controller_config,
             allow_replay_controller=args.allow_replay_controller,
+            decoder=args.decoder,
         )
     except (ValueError, FileNotFoundError) as exc:
         logger.error(f"Startup error: {exc}")

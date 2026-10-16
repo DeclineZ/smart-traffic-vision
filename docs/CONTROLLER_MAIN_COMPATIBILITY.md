@@ -17,7 +17,7 @@ python main.py run --cameras all --sources-file /etc/traffic-vision/sources.json
   --record-payloads /var/log/traffic-vision/payloads.jsonl --display
 ```
 
-Adjust paths for Windows. The default model remains `yolo26s_thai_traffic.pt`.
+Adjust paths for Windows. The default model is `yolo26s_thai_traffic_manual_v1_640.engine` (falls back to the `.pt` if no engine is built).
 TLS and credentials remain supported; use the listener actually configured by
 the broker owner. This command does not provision the broker or start anything
 in the controller repo. CLI output still defaults to shadow when the explicit

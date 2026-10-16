@@ -1,6 +1,6 @@
 # Validation and hardware checks
 
-Use the production runner to establish count validity and freshness. The separate hardware benchmark helps diagnose scaling, but uses a synthetic stream/SORT path and does not establish production acceptance.
+Use the production runner to establish count validity and freshness. The separate hardware benchmark helps diagnose scaling with the production model, tracker and decoder, but its synthetic stream loop does not establish production acceptance.
 
 Save generated reports in ignored `output/` or an external evidence bundle.
 
@@ -14,7 +14,7 @@ python -m tools.soak --minutes 5 --replay-fps 25 \
   --outage east:60:15 --outage northeast:150:15 --out output/soak.json
 ```
 
-Use `--model models/yolo26s_thai_traffic.engine` to test a verified TensorRT engine. Publishing stays in memory unless `--mqtt-broker` is explicitly supplied. Never route replay counts to a live signal controller.
+The runner defaults to `models/yolo26s_thai_traffic_manual_v1_640.engine` (see TensorRT export below); pass `--model` to test another verified engine. Publishing stays in memory unless `--mqtt-broker` is explicitly supplied. Never route replay counts to a live signal controller.
 
 Require zero processing errors, no unexplained required-camera suppression, bounded memory/history, and recovery after each injected outage. The dead camera must become unknown, never an invented zero; healthy cameras must stay valid. Northeast's upstream outage must not block the main projection.
 
@@ -45,6 +45,21 @@ Keep the export metadata beside the engine and verify the source-model and engin
 
 Parity checks detection matching, class agreement, lane occupancy and warmed latency for batches of 1–5 cameras. Passing parity establishes agreement with PyTorch, not ground-truth count accuracy.
 
+## GPU video decoding
+
+`--decoder auto` (the default for `main.py run` and `main.py benchmark`) decodes each camera with NVIDIA NVDEC through the ffmpeg bundled in `imageio-ffmpeg` and resizes on the GPU to the detector's input width, so Python receives 640x360 frames instead of 1080p. Software decoding of eight 1080p H.264 streams costs ~11 ms of CPU per frame; this path ~1 ms. On the RTX 5060 laptop it is what lets the runner analyse 8 cameras at the full rate. `auto` falls back to OpenCV when no NVIDIA decoder is available; `--decoder nvdec` refuses to fall back; `--decoder opencv` forces the CPU path. Detections from downscaled frames are mapped back to camera pixels before lanes and gates.
+
+The resize reproduces what Ultralytics does to a full frame (cv2 `INTER_LINEAR`), because that is what accuracy was validated on. Re-check after changing decoder, ffmpeg build, input size or camera codec:
+
+```bash
+python -m tools.decode_parity --model models/yolo26s_thai_traffic_manual_v1_640.engine \
+  --frames 30 --val-dir data/manual_v1_dataset --out output/decode-parity.json
+```
+
+The acceptance test decodes each hand-labelled frame from its recording through the GPU path and scores it against the labels next to the original image (recall may not drop by more than 1 point; measured 2026-10-15: 81.1% vs 81.7%). Box-level agreement with OpenCV decoding is reported for information (~95-97% of boxes): hardware and software decoders differ by about one grey level, which flips some low-confidence boxes either way.
+
+Each camera runs one ffmpeg process with its own CUDA context (~0.2 GB of GPU memory per camera).
+
 ## Labelled count accuracy
 
 Use clips held out from training, with labels at agreed observation times:
@@ -67,9 +82,8 @@ The full test suite checks the pinned main contract and stale fallback using act
 Use the approved model explicitly:
 
 ```bash
-python main.py benchmark --streams 1 2 4 8 \
-  --models models/yolo26s_thai_traffic.pt --mode both --duration 10 \
+python main.py benchmark --streams 1 2 4 5 8 --frame-skips 1 2 --duration 20 \
   --out-dir output/hardware --save-plots
 ```
 
-Use `--display` to measure rendering overhead and `--unpaced` to explore maximum capacity. Reports show throughput, frame drops, stage timing, GPU memory/utilisation and CPU load. These are synthetic sizing measurements; final acceptance comes from the production soak, count accuracy and live transport checks above.
+Defaults match `main.py run`: the 640 TensorRT engine, batched mode, ByteTrack, conf 0.10, GPU decoding. Cameras are opened before timing starts. Use `--decoder opencv` to compare the CPU decoding path, `--display` to measure rendering overhead and `--unpaced` to explore maximum capacity. Close games and other GPU-heavy applications first: a running game roughly halved the 8-camera result on the development laptop. Reports show throughput, frame drops, stage timing, GPU memory/utilisation and CPU load. These are synthetic sizing measurements; final acceptance comes from the production soak, count accuracy and live transport checks above.

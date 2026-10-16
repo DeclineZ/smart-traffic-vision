@@ -61,11 +61,14 @@ class NVENCVideoWriter:
         self.fps = fps
         self.bitrate = bitrate
         self.process: Optional[subprocess.Popen] = None
+        self.frames_written = 0
         self._init_ffmpeg()
 
     def _init_ffmpeg(self):
+        from .nvdec import ffmpeg_exe
+
         cmd = [
-            "ffmpeg",
+            ffmpeg_exe() or "ffmpeg",
             "-y",
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
@@ -88,9 +91,20 @@ class NVENCVideoWriter:
             self.process = None
 
     def write(self, frame: np.ndarray) -> None:
+        h, w = frame.shape[:2]
+        if (w, h) != (self.width, self.height):
+            # Raw video has no header: a size mismatch shears every frame. The rendered grid (with its
+            # header banner) defines the size; once encoding has started, later frames are fitted to it.
+            if self.frames_written == 0:
+                self.close()
+                self.width, self.height = w, h
+                self._init_ffmpeg()
+            else:
+                frame = cv.resize(frame, (self.width, self.height))
         if self.process and self.process.stdin:
             try:
-                self.process.stdin.write(frame.tobytes())
+                self.process.stdin.write(np.ascontiguousarray(frame).tobytes())
+                self.frames_written += 1
             except (BrokenPipeError, OSError):
                 self.close()
 
@@ -213,6 +227,7 @@ class AsyncDisplayWorker:
         gates: Optional[List[List[Dict[str, Any]]]] = None,
         annotations: Optional[List[Dict[int, Any]]] = None,
         cam_status: Optional[List[Dict[str, Any]]] = None,
+        frame_scales: Optional[List[float]] = None,
     ) -> None:
         """
         Non-blocking snapshot submit. If rendering is busy, drop preview frame
@@ -221,11 +236,14 @@ class AsyncDisplayWorker:
         annotations[i] maps track_id -> (lane_id, state) for vehicles that are
         counted; vehicles absent from it are drawn as not counted.
         cam_status[i] is the camera status dict published in the payload.
+        frame_scales[i] is camera pixels per frame pixel, for frames the decoder delivered downscaled
+        (boxes, lanes and gates are in camera pixels).
         """
         if not self.running:
             return
 
-        payload = (frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status)
+        payload = (frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status,
+                   frame_scales)
         if self.queue.full():
             try:
                 _ = self.queue.get_nowait()
@@ -276,8 +294,9 @@ class AsyncDisplayWorker:
                 time.sleep(0.01)
                 continue
 
-            padded = tuple(raw_payload) + (None,) * (8 - len(raw_payload))
-            frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status = padded[:8]
+            padded = tuple(raw_payload) + (None,) * (9 - len(raw_payload))
+            (frames, tracked_list, cam_names, lane_configs, header_stats, gates, annotations, cam_status,
+             frame_scales) = padded[:9]
 
             num_streams = len(frames)
             vis_frames = []
@@ -290,8 +309,9 @@ class AsyncDisplayWorker:
                     continue
 
                 vis = cv.resize(f, self.tile_size)
-                scale_x = self.tile_size[0] / f.shape[1]
-                scale_y = self.tile_size[1] / f.shape[0]
+                fs = frame_scales[idx] if frame_scales and idx < len(frame_scales) else 1.0
+                scale_x = self.tile_size[0] / (f.shape[1] * fs)
+                scale_y = self.tile_size[1] / (f.shape[0] * fs)
 
                 # 1. Draw Lane Polygons if configured
                 if lane_configs and idx < len(lane_configs):

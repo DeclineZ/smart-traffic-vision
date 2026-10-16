@@ -57,6 +57,7 @@ class FramePacket:
     captured_wall: float   # time.time() when the frame was captured/decoded locally
     obs_t: float           # seconds on this camera's observation clock (monotonic within an epoch)
     captured_mono: Optional[float] = None  # local freshness clock, independent of wall-clock corrections
+    scale: float = 1.0     # camera pixels per frame pixel (>1 when the decoder delivers a downscaled frame)
 
     def age_s(self, now_wall: Optional[float] = None) -> float:
         if self.captured_mono is not None:
@@ -223,7 +224,8 @@ class StreamBufferWorker:
                 backoff = self.reconnect_initial_s
                 self.last_error = None
                 packet = FramePacket(frame=frame, seq=self.seq + 1, epoch=self.epoch,
-                                     captured_wall=time.time(), obs_t=time.perf_counter(), captured_mono=time.monotonic())
+                                     captured_wall=time.time(), obs_t=time.perf_counter(), captured_mono=time.monotonic(),
+                                     scale=float(getattr(self.cap, "scale", 1.0)))
                 with self._cond:
                     if self._latest is not None and self._latest.seq > self._consumed_seq:
                         self.frames_dropped += 1
@@ -387,7 +389,8 @@ class FileReplaySource:
         self.frame_shape = frame.shape[:2]
         self.state = "ok"
         return FramePacket(frame=frame, seq=self.seq, epoch=self.epoch,
-                           captured_wall=self.last_frame_wall, obs_t=obs_t, captured_mono=self.last_frame_mono)
+                           captured_wall=self.last_frame_wall, obs_t=obs_t, captured_mono=self.last_frame_mono,
+                           scale=float(getattr(self.cap, "scale", 1.0)))
 
     def status(self) -> Dict[str, Any]:
         age = None if self.last_frame_mono is None else max(0.0, time.monotonic() - self.last_frame_mono)

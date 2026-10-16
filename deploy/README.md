@@ -99,9 +99,14 @@ an explicit MediaMTX executable. It has been checked with the
 [official MediaMTX 1.21.1 release](https://github.com/bluenviron/mediamtx/releases/tag/v1.21.1).
 Keep helper binaries outside version control. The tool binds RTSP and MQTT to
 random loopback ports and disables MediaMTX's other listeners. It restreams one
-recording at 640×360, exercises the real camera reader and publisher, and feeds
-the received wire fixture to the pinned-main harness. It does no YOLO inference
-and starts no system backend/database. It is not a field acceptance test.
+recording at its own resolution (1080p; `--feed-width` scales it) and reads it with
+the runner's camera reader and decoder (`--decoder`, default `auto` as in
+`main.py run`). It checks first connect, a closed stream (feeder stopped) and a hung
+stream (a relay stops forwarding but keeps the connection open), each followed by
+reconnection with a new epoch, and that exactly one ffmpeg decoder process runs per
+camera and none remain after stop. It then exercises the publisher and feeds the
+received wire fixture to the pinned-main harness. It does no YOLO inference and
+starts no system backend/database. It is not a field acceptance test.
 
 ```powershell
 .venv\Scripts\python.exe -m tools.local_transport_smoke --mediamtx .venv/network-smoke/mediamtx.exe --ffmpeg ffmpeg --out output/local-transport.json
