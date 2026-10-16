@@ -45,6 +45,8 @@ python main.py run --cameras all --display --replay-fps 25
 
 Set replay FPS to the recording's actual capture rate. Some supplied files report suspicious 150 FPS metadata; replay speed affects observation age and motion classification.
 
+Defaults: the 640 TensorRT engine, detection on every 2nd frame (`--skip-frames 1`), and GPU video decoding (`--decoder auto`): each camera is decoded and resized on the NVIDIA GPU's video decoder through the ffmpeg in `imageio-ffmpeg`, falling back to OpenCV on the CPU when no NVIDIA decoder is available. On an RTX 5060 Laptop GPU this runs 8 cameras at ~24 frames per camera per second; see [validation and hardware](docs/HARDWARE_BENCHMARK_GUIDE.md). Keep the junction PC dedicated: other GPU-heavy programs (games) cut throughput substantially.
+
 Evaluate live cameras without updating the controller:
 
 ```bash
@@ -64,7 +66,7 @@ python main.py run --cameras all --sources-file /path/to/sources.json \
 
 Stop the intersection's mock generator and other count producers before cutover. Main's default Compose setup includes a mock producer. Recorded footage is rejected in controller mode unless the explicit offline-test override is used. Use shadow mode when evaluating alongside the current producer.
 
-Choose another approved backend with `--model`; for example, `--model models/yolo26s_thai_traffic.engine`. Use `python main.py run --help` for thresholds, TLS, source timeouts and output options.
+Choose another approved backend with `--model`; for example, `--model models/yolo26s_thai_traffic_manual_v1_960.pt --imgsz 960` (more accurate on small and distant vehicles; keeps up with 5 cameras on the laptop above, not 8). A TensorRT engine must be built on the deployment GPU with `export_trt.py` and checked with `tools.trt_parity` and `tools.decode_parity` before use. Use `python main.py run --help` for thresholds, TLS, source timeouts, decoder and output options.
 
 ## Configuration and measurement rules
 
