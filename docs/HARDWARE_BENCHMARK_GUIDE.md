@@ -39,6 +39,8 @@ python -m tools.trt_parity --model models/yolo26s_thai_traffic.pt \
   --engine models/yolo26s_thai_traffic.engine --frames 40 --out output/trt-parity.json
 ```
 
+For the 960 px model add `--imgsz 960 --fixed-size` (and `--workspace 4`): Ultralytics' dynamic export lets image height/width grow to at least twice `imgsz`, which at 960 px with 8 cameras needs more scratch memory than an 8 GB GPU has. `--fixed-size` keeps the batch dynamic (1-8) and caps height/width at `imgsz`; check it with `tools.trt_parity --imgsz 960`.
+
 The first command builds FP32. FP16 is the export default when `--no-half` is omitted; some TensorRT/Ultralytics combinations need NVIDIA's model-optimisation package. Follow the export diagnostic and validate that environment before enabling it.
 
 Keep the export metadata beside the engine and verify the source-model and engine hashes. Rebuild and recheck after changing the GPU/runtime, source weights, precision or input size.

@@ -101,6 +101,71 @@ def export_yolo_to_tensorrt(
     return str(exported_path)
 
 
+def export_fixed_size_engine(
+    model_path: str,
+    imgsz: int = 960,
+    batch: int = 8,
+    device: int | str = 0,
+    workspace: int = 4,
+) -> str:
+    """
+    FP32 engine with dynamic batch (1..batch) and height/width bounded at imgsz.
+
+    Ultralytics' dynamic export lets height/width grow to max(2, workspace) x imgsz, so at 960 px
+    with 8 cameras TensorRT plans for 8 x 1920x1920 (or larger) inputs and asks for more scratch
+    memory than an 8 GB GPU has. Inference never exceeds imgsz on the long side (16:9 cameras are
+    letterboxed to e.g. 544x960), so the profile stops there. The file keeps Ultralytics' metadata
+    header, so YOLO(engine) loads it unchanged.
+    """
+    import ast
+    import json
+
+    import onnx
+    import tensorrt as trt
+    from ultralytics import YOLO
+
+    model_path = Path(model_path)
+    onnx_path = YOLO(str(model_path)).export(format="onnx", imgsz=imgsz, dynamic=True, batch=batch,
+                                             simplify=True, device=device)
+    meta = {}
+    for prop in onnx.load(onnx_path).metadata_props:
+        try:
+            meta[prop.key] = ast.literal_eval(prop.value)
+        except (ValueError, SyntaxError):
+            meta[prop.key] = prop.value
+    meta["batch"] = batch
+    meta["imgsz"] = [imgsz, imgsz]
+    if isinstance(meta.get("args"), dict):
+        meta["args"].update({"batch": batch, "dynamic": True, "workspace": workspace})
+
+    logger = trt.Logger(trt.Logger.WARNING)
+    builder = trt.Builder(logger)
+    network = builder.create_network(0)
+    parser = trt.OnnxParser(network, logger)
+    if not parser.parse_from_file(str(onnx_path)):
+        raise RuntimeError("ONNX parse failed: " + "; ".join(str(parser.get_error(i)) for i in range(parser.num_errors)))
+    config = builder.create_builder_config()
+    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, int(workspace * (1 << 30)))
+    profile = builder.create_optimization_profile()
+    inp = network.get_input(0)
+    profile.set_shape(inp.name, min=(1, 3, 32, 32), opt=(batch, 3, imgsz, imgsz), max=(batch, 3, imgsz, imgsz))
+    config.add_optimization_profile(profile)
+
+    t0 = time.perf_counter()
+    serialized = builder.build_serialized_network(network, config)
+    if serialized is None:
+        raise RuntimeError("TensorRT engine build failed; see the TensorRT log above")
+    engine_path = model_path.with_suffix(".engine")
+    header = json.dumps(meta).encode()
+    with open(engine_path, "wb") as f:
+        f.write(len(header).to_bytes(4, byteorder="little", signed=True))
+        f.write(header)
+        f.write(serialized)
+    print(f"[SUCCESS] Bounded engine (batch 1-{batch}, up to {imgsz}x{imgsz}, FP32) built in "
+          f"{time.perf_counter() - t0:.1f}s -> {engine_path}")
+    return str(engine_path)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Export a YOLO .pt checkpoint to a TensorRT .engine",
@@ -113,6 +178,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", type=int, default=0, help="CUDA device index (default: 0)")
     parser.add_argument("--no-half", action="store_true", help="Disable FP16 half-precision (use FP32)")
     parser.add_argument("--fixed-batch", action="store_true", help="Disable dynamic batching")
+    parser.add_argument("--fixed-size", action="store_true",
+                        help="Dynamic batch (1..--batch) with height/width capped at imgsz, FP32. Needed for 960 px "
+                             "with 8 cameras on 8 GB GPUs, where the default dynamic export runs out of memory")
     return parser
 
 
@@ -152,19 +220,26 @@ def write_engine_metadata(engine_path: str, source_model: str, **settings) -> st
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
-    engine = export_yolo_to_tensorrt(
-        model_path=args.model,
-        imgsz=args.imgsz,
-        half=not args.no_half,
-        dynamic=not args.fixed_batch,
-        batch=args.batch,
-        device=args.device,
-        workspace=args.workspace,
-    )
+    if args.fixed_size:
+        if not args.no_half or args.fixed_batch:
+            parser.error("--fixed-size builds an FP32 dynamic-batch engine: add --no-half, drop --fixed-batch")
+        engine = export_fixed_size_engine(args.model, imgsz=args.imgsz, batch=args.batch, device=args.device,
+                                          workspace=args.workspace)
+    else:
+        engine = export_yolo_to_tensorrt(
+            model_path=args.model,
+            imgsz=args.imgsz,
+            half=not args.no_half,
+            dynamic=not args.fixed_batch,
+            batch=args.batch,
+            device=args.device,
+            workspace=args.workspace,
+        )
     meta = write_engine_metadata(engine, args.model, imgsz=args.imgsz, half=not args.no_half,
-                                 dynamic=not args.fixed_batch, batch=args.batch)
+                                 dynamic=not args.fixed_batch, batch=args.batch, fixed_size=args.fixed_size)
     print(f"Engine metadata: {meta}")
     print("Engines are specific to this GPU model and TensorRT version; rebuild on the deployment hardware.")
 

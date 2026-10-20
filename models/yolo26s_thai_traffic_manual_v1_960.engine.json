@@ -1,15 +1,16 @@
 {
   "engine": "yolo26s_thai_traffic_manual_v1_960.engine",
-  "engineSha256": "296f34d83de338082159615a5eaae9b4d6a0a41191a0dcab611add90e5327ac6",
+  "engineSha256": "e964f4e217348548b1ab9e310710f6284835242020eb9c163578d1814618819b",
   "sourceModel": "yolo26s_thai_traffic_manual_v1_960.pt",
   "sourceSha256": "74c33d8cba46bbcf17b458929bc1029f8dcbc3c285a5a6a0f4cc92ea3c970225",
   "settings": {
     "imgsz": 960,
     "half": false,
-    "dynamic": false,
-    "batch": 1
+    "dynamic": true,
+    "batch": 8,
+    "fixed_size": true
   },
-  "builtAt": "2026-10-15T19:57:31+0700",
+  "builtAt": "2026-10-20T19:48:11+0700",
   "host": "LAPTOP-E6PICN3M",
   "tensorrt": "11.2.1.2",
   "torch": "2.12.0.dev20260408+cu128",

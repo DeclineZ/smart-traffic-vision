@@ -66,7 +66,7 @@ python main.py run --cameras all --sources-file /path/to/sources.json \
 
 Stop the intersection's mock generator and other count producers before cutover. Main's default Compose setup includes a mock producer. Recorded footage is rejected in controller mode unless the explicit offline-test override is used. Use shadow mode when evaluating alongside the current producer.
 
-Choose another approved backend with `--model`; for example, `--model models/yolo26s_thai_traffic_manual_v1_960.pt --imgsz 960` (more accurate on small and distant vehicles; keeps up with 5 cameras on the laptop above, not 8). A TensorRT engine must be built on the deployment GPU with `export_trt.py` and checked with `tools.trt_parity` and `tools.decode_parity` before use. Use `python main.py run --help` for thresholds, TLS, source timeouts, decoder and output options.
+Choose another approved backend with `--model`; for example, `--model models/yolo26s_thai_traffic_manual_v1_960.engine` (more accurate on small and distant vehicles; on the laptop above it runs 5 cameras at the full rate and 8 cameras at about 8 detections per camera per second). Build engines on the deployment GPU with `export_trt.py` (for the 960 model: `--imgsz 960 --batch 8 --no-half --workspace 4 --fixed-size`; the default dynamic export runs out of memory on 8 GB GPUs) and check them with `tools.trt_parity` and `tools.decode_parity` before use. Use `python main.py run --help` for thresholds, TLS, source timeouts, decoder and output options.
 
 ## Configuration and measurement rules
 
