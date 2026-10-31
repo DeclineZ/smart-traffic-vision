@@ -22,16 +22,16 @@
             578
           ],
           [
-            589,
-            274
-          ],
-          [
-            669,
-            264
-          ],
-          [
             1510,
             569
+          ],
+          [
+            906,
+            350
+          ],
+          [
+            771,
+            350
           ]
         ]
       },
@@ -40,20 +40,20 @@
         "description": "North Lane 2",
         "polygon": [
           [
-            1555,
-            564
-          ],
-          [
             1649,
             542
           ],
           [
-            780,
-            263
+            1051,
+            350
           ],
           [
-            692,
-            264
+            939,
+            350
+          ],
+          [
+            1555,
+            564
           ]
         ]
       },
@@ -62,20 +62,20 @@
         "description": "North Lane 3",
         "polygon": [
           [
-            1867,
-            493
-          ],
-          [
             1763,
             542
           ],
           [
-            788,
-            267
+            1867,
+            493
           ],
           [
-            846,
-            250
+            1266,
+            350
+          ],
+          [
+            1082,
+            350
           ]
         ]
       }
@@ -106,8 +106,11 @@
       1920,
       1080
     ],
-    "revision": "2026-10-04-batch2b",
+    "revision": "20261031T104007035757Z",
     "reference_image": "reference/north.jpg",
-    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning."
+    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning.",
+    "previous_revision": "2026-10-04-batch2b",
+    "saved_at": "2026-10-31T10:40:07+00:00",
+    "saved_by": "vision-team (north lanes trimmed to ~57 m, y>=350)"
   }
 }
