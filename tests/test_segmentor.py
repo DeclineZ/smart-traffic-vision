@@ -5,6 +5,7 @@ Unit tests for the Interactive Segmentor & Calibrator Tool:
 - Point-to-line Euclidean distance
 - Geometry loading and saving with automatic .bak backup
 - Multi-exit gate configuration persistence
+- Outgoing road creation (mode 4) and role persistence
 """
 
 import json
@@ -18,6 +19,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tools.segmentor import (
     CAMERA_PRESETS,
+    InteractiveCalibrator,
     compute_gate_normal,
     point_to_line_dist,
     load_config_geometry,
@@ -131,6 +133,52 @@ class TestSegmentor(unittest.TestCase):
         self.assertEqual(loaded_gates[2]["gate_id"], "GATE_E_EXIT")
         # Ensure original fields are preserved
         self.assertEqual(loaded_cfg["camera_info"]["camera_id"], "CAM-02")
+
+    def test_outgoing_road_creation_and_persistence(self):
+        config_path = os.path.join(self.test_dir, "config_test_north.json")
+        initial_data = {
+            "camera_info": {"camera_id": "CAM-01", "location": "North"},
+            "lane_metrics": {
+                "lanes": {
+                    "N1": {"direction": "N", "polygon": [[100, 100], [200, 100], [200, 200], [100, 200]]}
+                }
+            },
+            "gates": []
+        }
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(initial_data, f, indent=2)
+
+        # Mock calibrator instance
+        calibrator = InteractiveCalibrator.__new__(InteractiveCalibrator)
+        calibrator.direction = "north"
+        calibrator.lane_prefix = "N"
+        calibrator.lanes = dict(initial_data["lane_metrics"]["lanes"])
+        calibrator.gates = []
+        calibrator.mode = "OUTGOING"
+        calibrator.in_progress_points = [(300, 100), (400, 100), (400, 200), (300, 200)]
+        calibrator.notification_msg = ""
+        calibrator.notification_color = (0, 0, 0)
+        calibrator.notification_expiry = 0.0
+        calibrator._prompt_lane_details = lambda default_lid, role="queue": default_lid
+
+        # Complete outgoing road interactive creation
+        calibrator._create_lane_interactive(role="outgoing")
+
+        # Verify OUT_N was created with role: outgoing
+        self.assertIn("OUT_N", calibrator.lanes)
+        out_lane = calibrator.lanes["OUT_N"]
+        self.assertEqual(out_lane["role"], "outgoing")
+        self.assertEqual(out_lane["direction"], "N")
+        self.assertEqual(len(out_lane["polygon"]), 4)
+
+        # Save to disk and verify persistence
+        saved = save_config_geometry(config_path, calibrator.lanes, calibrator.gates)
+        self.assertTrue(saved)
+
+        loaded_lanes, _, _ = load_config_geometry(config_path)
+        self.assertIn("OUT_N", loaded_lanes)
+        self.assertEqual(loaded_lanes["OUT_N"].get("role"), "outgoing")
+        self.assertEqual(loaded_lanes["OUT_N"].get("direction"), "N")
 
 
 if __name__ == "__main__":

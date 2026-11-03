@@ -1,0 +1,121 @@
+{
+  "_comment": "=== North Upstream Approach Configuration (Using South Cam 43 as Upstream Feed) ===",
+  "camera_info": {
+    "camera_id": "INT-001-CAM-N-UPSTREAM",
+    "location": "North Corridor 100m Upstream",
+    "intersection_id": "INT-001",
+    "description": "Upstream camera feeding North approach virtual carts"
+  },
+  "video": {
+    "path": "./videos/cam43_south.avi",
+    "skip": 0,
+    "max_frames": 0
+  },
+  "lane_metrics": {
+    "lanes": {
+      "NU1": {
+        "direction": "N",
+        "description": "North_upstream Lane N1",
+        "polygon": [
+          [
+            261,
+            513
+          ],
+          [
+            915,
+            372
+          ],
+          [
+            1131,
+            411
+          ],
+          [
+            633,
+            606
+          ]
+        ],
+        "role": "upstream",
+        "target_lane": "N1"
+      },
+      "NU2": {
+        "direction": "N",
+        "description": "North_upstream Lane N2",
+        "polygon": [
+          [
+            1066,
+            708
+          ],
+          [
+            642,
+            608
+          ],
+          [
+            1137,
+            411
+          ],
+          [
+            1347,
+            450
+          ]
+        ],
+        "role": "upstream",
+        "target_lane": "N2"
+      },
+      "NU3": {
+        "direction": "N",
+        "description": "North_upstream Lane N3",
+        "polygon": [
+          [
+            1066,
+            708
+          ],
+          [
+            1474,
+            810
+          ],
+          [
+            1540,
+            484
+          ],
+          [
+            1348,
+            450
+          ]
+        ],
+        "role": "upstream",
+        "target_lane": "N3"
+      }
+    }
+  },
+  "gates": [
+    {
+      "gate_id": "GATE_N_IN",
+      "p1": [
+        258,
+        514
+      ],
+      "p2": [
+        1470,
+        808
+      ],
+      "type": "ingress",
+      "direction": [
+        -0.236,
+        0.972
+      ],
+      "label": "INFLOW_N",
+      "target_dir": "N"
+    }
+  ],
+  "calibration": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "revision": "20261103T120653145466Z",
+    "reference_image": "reference/config_north_upstream-20261103T120653145466Z.jpg",
+    "previous_revision": "20261103T120641519890Z",
+    "saved_at": "2026-11-03T12:06:53+00:00",
+    "saved_by": "seawa"
+  }
+}

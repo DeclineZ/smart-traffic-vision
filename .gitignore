@@ -94,3 +94,12 @@ data/
 result_test_skip.zip
 benchmark/hardware-results/
 *.csv
+
+live_counts.jsonl
+live_counts.jsonl.1
+*.jsonl
+sources.json
+
+# Auto-generated calibration revision backups and timestamped frame dumps
+config/history/
+config/reference/*-*Z.jpg

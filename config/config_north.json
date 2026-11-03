@@ -15,69 +15,92 @@
     "lanes": {
       "N1": {
         "direction": "N",
-        "description": "North Lane 1",
+        "description": "North Lane N1",
         "polygon": [
           [
-            1316,
-            578
+            1005,
+            465
           ],
           [
-            1510,
-            569
+            800,
+            472
           ],
           [
-            906,
-            350
+            1516,
+            849
           ],
           [
-            771,
-            350
+            1886,
+            804
           ]
         ]
       },
       "N2": {
         "direction": "N",
-        "description": "North Lane 2",
+        "description": "North Lane N2",
         "polygon": [
           [
-            1649,
-            542
+            800,
+            471
           ],
           [
-            1051,
-            350
+            602,
+            480
           ],
           [
-            939,
-            350
+            1056,
+            897
           ],
           [
-            1555,
-            564
+            1515,
+            852
           ]
         ]
       },
       "N3": {
         "direction": "N",
-        "description": "North Lane 3",
+        "description": "North Lane N3",
         "polygon": [
           [
-            1763,
-            542
+            603,
+            477
           ],
           [
-            1867,
-            493
+            338,
+            489
           ],
           [
-            1266,
-            350
+            406,
+            952
           ],
           [
-            1082,
-            350
+            1058,
+            900
           ]
         ]
+      },
+      "OUT_N": {
+        "direction": "N",
+        "description": "North Outgoing Road OUT_N",
+        "polygon": [
+          [
+            828,
+            386
+          ],
+          [
+            1274,
+            384
+          ],
+          [
+            1548,
+            452
+          ],
+          [
+            1008,
+            464
+          ]
+        ],
+        "role": "outgoing"
       }
     }
   },
@@ -85,17 +108,17 @@
     {
       "gate_id": "GATE_N_STOPLINE",
       "p1": [
-        1316,
-        584
+        336,
+        489
       ],
       "p2": [
-        1872,
-        494
+        1005,
+        464
       ],
       "type": "stopline",
       "direction": [
-        0.16,
-        0.987
+        -0.037,
+        -0.999
       ],
       "label": "STOPLINE",
       "target_dir": "N"
@@ -106,11 +129,11 @@
       1920,
       1080
     ],
-    "revision": "20261031T104007035757Z",
-    "reference_image": "reference/north.jpg",
+    "revision": "20261103T142456790145Z",
+    "reference_image": "reference/config_north-20261103T142456790145Z.jpg",
     "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning.",
-    "previous_revision": "2026-10-04-batch2b",
-    "saved_at": "2026-10-31T10:40:07+00:00",
-    "saved_by": "vision-team (north lanes trimmed to ~57 m, y>=350)"
+    "previous_revision": "20261103T142456631525Z",
+    "saved_at": "2026-11-03T14:24:56+00:00",
+    "saved_by": "seawa"
   }
 }

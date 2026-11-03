@@ -1,17 +1,18 @@
 {
   "engine": "yolo26s_thai_traffic_manual_v1_640.engine",
-  "engineSha256": "1f10a29ff9b2f86644dd3c9b4fb2a685c3229b04f465e5e2dd44c6ed0b56202c",
+  "engineSha256": "4d6bad178c69765b82528cecaad8764712caf7c3a33eb2668188fca17fd6f16a",
   "sourceModel": "yolo26s_thai_traffic_manual_v1_640.pt",
   "sourceSha256": "04b2245903de7c1cf7f0e5865cbbb7b3e0763fb29e6d939d0e8eae04635f55f5",
   "settings": {
     "imgsz": 640,
     "half": false,
     "dynamic": true,
-    "batch": 8
+    "batch": 8,
+    "fixed_size": false
   },
-  "builtAt": "2026-10-15T19:48:50+0700",
-  "host": "LAPTOP-E6PICN3M",
-  "tensorrt": "11.2.1.2",
-  "torch": "2.12.0.dev20260408+cu128",
-  "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU"
+  "builtAt": "2026-11-03T20:57:17+0700",
+  "host": "desktop",
+  "tensorrt": "10.14.1.48.post1",
+  "torch": "2.9.1+cu126",
+  "gpu": "NVIDIA GeForce RTX 4060"
 }
