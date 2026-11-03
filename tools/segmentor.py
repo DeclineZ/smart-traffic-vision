@@ -36,7 +36,7 @@ APPROACH_CONFIGS = {
         "camera_id": "CAM-01",
         "video": "./videos/cam44_north.avi",
         "config": "./config/config_north.json",
-        "lane_prefix": "N",
+        "lane_prefix": "NU",
         "suggested_gates": [
             {"id": "GATE_N_STOPLINE", "label": "STOPLINE", "type": "stopline"},
             {"id": "GATE_N_IN", "label": "INFLOW_N", "type": "ingress"},
@@ -75,12 +75,12 @@ APPROACH_CONFIGS = {
             {"id": "GATE_W_IN", "label": "INFLOW_W", "type": "ingress"},
         ],
     },
-    "northeast": {
-        "name": "Northeast Elevated Corridor (CAM-05 / CAM-45)",
+    "north_upstream": {
+        "name": "North Upstream Corridor (CAM-05 / CAM-45)",
         "camera_id": "CAM-05",
-        "video": "./videos/cam45_northeast.avi",
-        "config": "./config/config_northeast.json",
-        "lane_prefix": "NE",
+        "video": "./videos/cam43_south.avi",
+        "config": "./config/config_north_upstream.json",
+        "lane_prefix": "NU",
         "suggested_gates": [
             {"id": "GATE_NE_IN", "label": "INFLOW_NE", "type": "ingress"},
             {"id": "GATE_NE_STOPLINE", "label": "STOP_NE", "type": "stopline"},
@@ -1107,7 +1107,7 @@ def main():
         "--approach",
         type=str,
         dest="direction",
-        choices=["north", "south", "east", "west", "northeast", "custom"],
+        choices=["north", "south", "east", "west", "northeast", "north_upstream", "custom"],
         default=None,
         help="Target approach / camera direction (automatically resolves video and config files)",
     )

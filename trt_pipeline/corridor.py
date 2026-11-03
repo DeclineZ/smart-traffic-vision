@@ -827,6 +827,16 @@ class CorridorQueueEstimator:
                 "handover_exact": lst.handover_exact_count,
                 "handover_borrowed": lst.handover_borrowed_count,
                 "expired_tokens": lst.expired_tokens_count,
+                "tokens_detail": [
+                    {
+                        "id": t.id,
+                        "v_type": t.v_type,
+                        "age_sec": round(t.age, 2),
+                        "ttl_remaining_sec": round(max(0.0, t.ttl - t.age), 2),
+                        "ttl_total_sec": round(t.ttl, 2),
+                    }
+                    for t in lst.cart
+                ],
                 "is_lane_empty": (lst.demand_count == 0 and lst.vis_motorcycles_cam1 == 0),
             }
 

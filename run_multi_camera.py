@@ -74,6 +74,7 @@ DEFAULT_CONFIGS = {
     "east": "config/config_east.json",
     "west": "config/config_west.json",
     "northeast": "config/config_northeast.json",
+    "north_upstream": "config/config_north_upstream.json",
 }
 # Best measured setup on the RTX 5060 laptop (see docs/HARDWARE_BENCHMARK_GUIDE.md): the manual_v1 model
 # as a TensorRT engine at 640 px, inferring every 2nd frame (--skip-frames 1). Engines are built per GPU

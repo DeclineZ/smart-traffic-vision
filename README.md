@@ -31,78 +31,105 @@ python -m pip install -r requirements.txt
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-`requirements-lock.txt` records the verified development environment, including optional tools. Validate a fresh target installation before deployment; it is not a portable guarantee for every GPU/runtime.
+---
 
-Obtain the approved weights separately; models and recordings are excluded from Git. Put recordings under `videos/` using the paths in the camera configs. Store live URLs and passwords outside the repository; see [the sources example](deploy/sources.example.json). Node.js is needed only for controller compatibility tests. FFmpeg, MediaMTX and `amqtt` are optional dependencies for the local transport smoke tool.
+## Live Stream Simulation & Dual-Camera Workflow
 
-## Run
+To simulate IP cameras using local recordings with real-time network streaming and playback controls:
 
-Replay all five recordings in shadow mode:
+### 1. Start the Network Camera Streamer
+Streams video continuously over UDP (MPEG-TS) and automatically populates `sources.json`:
 
-```bash
-python main.py run --cameras all --display --replay-fps 25
+```powershell
+.\.venv\Scripts\python.exe stream_cameras.py
 ```
 
-Set replay FPS to the recording's actual capture rate. Some supplied files report suspicious 150 FPS metadata; replay speed affects observation age and motion classification.
+#### Streamer Keyboard Controls:
+| Key | Action | Description |
+| :---: | :--- | :--- |
+| **`[SPACE]`** | **Pause / Play** | Freezes video playback while keeping network stream alive |
+| **`[→]` / `[←]`** | **Forward / Rewind 5s** | Skip +5s or -5s across all camera feeds |
+| **`[↑]` / `[↓]`** | **Fast Forward / Rewind 15s** | Skip +15s or -15s |
+| **`[R]`** | **Restart Video** | Reset playback to `0:00` |
+| **`[Q]`** / Esc | **Quit** | Stop all video streams |
 
-Defaults: the 640 TensorRT engine, detection on every 2nd frame (`--skip-frames 1`), and GPU video decoding (`--decoder auto`): each camera is decoded and resized on the NVIDIA GPU's video decoder through the ffmpeg in `imageio-ffmpeg`, falling back to OpenCV on the CPU when no NVIDIA decoder is available. On an RTX 5060 Laptop GPU this runs 8 cameras at ~24 frames per camera per second; see [validation and hardware](docs/HARDWARE_BENCHMARK_GUIDE.md). Keep the junction PC dedicated: other GPU-heavy programs (games) cut throughput substantially.
+*(To stream all 8 cameras for a 4-way intersection, run `stream_cameras.py --all-8`).*
 
-Evaluate live cameras without updating the controller:
+---
 
-```bash
-python main.py run --cameras all --sources-file /path/to/sources.json \
-  --output-mode shadow --mqtt-broker mqtt://controller-host:1883 --display
+### 2. Run the Multi-Camera Vision Algorithm
+Processes streams, tracks vehicles, manages Virtual Carts, and outputs controller payloads:
+
+```powershell
+.\.venv\Scripts\python.exe run_multi_camera.py `
+  --cameras north north_upstream `
+  --sources-file sources.json `
+  --model models/yolo26s_thai_traffic.pt `
+  --output-mode controller `
+  --controller-config config/controller_1approach.json `
+  --record-payloads live_counts.jsonl `
+  --display
 ```
 
-For the existing controller main, use the complete calibrated stop-line profile:
+---
 
-```bash
-python main.py run --cameras all --sources-file /path/to/sources.json \
-  --output-mode controller --controller-config config/controller_main.json \
-  --mqtt-broker mqtt://controller-host:1883 \
-  --health-file /path/to/health.json --record-payloads /path/to/payloads.jsonl \
-  --log-file /path/to/vision.log --display
+### 3. Inspect Live Outputs & Virtual Cart Buffer
+
+#### Watch Clean Controller Payloads:
+Filters out diagnostic logs and displays the exact wire payload sent to the signal controller:
+```powershell
+.\.venv\Scripts\python.exe watch_counts.py
+```
+```json
+{
+  "intersectionId": "INT-001",
+  "cameraId": "CAM-01",
+  "timestamp": "2026-11-03T12:35:00.000Z",
+  "lanes": [
+    { "laneId": "N1", "direction": "N", "count": 3 },
+    { "laneId": "N2", "direction": "N", "count": 2 },
+    { "laneId": "N3", "direction": "N", "count": 1 }
+  ],
+  "outgoingfull": { "N": false, "E": false, "S": false, "W": false }
+}
 ```
 
-Stop the intersection's mock generator and other count producers before cutover. Main's default Compose setup includes a mock producer. Recorded footage is rejected in controller mode unless the explicit offline-test override is used. Use shadow mode when evaluating alongside the current producer.
-
-Choose another approved backend with `--model`; for example, `--model models/yolo26s_thai_traffic_manual_v1_960.engine` (more accurate on small and distant vehicles; on the laptop above it runs 5 cameras at the full rate and 8 cameras at about 8 detections per camera per second). Build engines on the deployment GPU with `export_trt.py` (for the 960 model: `--imgsz 960 --batch 8 --no-half --workspace 4 --fixed-size`; the default dynamic export runs out of memory on 8 GB GPUs) and check them with `tools.trt_parity` and `tools.decode_parity` before use. Use `python main.py run --help` for thresholds, TLS, source timeouts, decoder and output options.
-
-## Configuration and measurement rules
-
-Camera configs hold source paths, physical camera identity, lane/gate geometry, queue settings, calibration and camera-health thresholds. Detector, tracker, MQTT and publication settings come from CLI/environment options; old ignored config sections have been removed from the bundled files.
-
-- A vehicle belongs to the first polygon covering its road-contact point, normally the bottom-centre of its box. Overlapping lanes therefore need calibration review.
-- Occupancy is queued + moving + unknown-state vehicles. Motion state uses elapsed time and perspective-normalised displacement; it is not a frame-count threshold.
-- An unavailable camera produces unknown readings in the rich payload. Zero means an observed empty region.
-- Main receives occupancy for all nine configured stop-line regions under its registered source `CAM-01`. Northeast upstream regions are excluded. Any invalid or stale required reading withholds the entire main snapshot.
-- Live timestamps describe local frame acquisition. They cannot prove how long a camera/NVR buffered the image before delivery; measure that delay on site.
-- Calibration is loaded at startup. Restart after saving or restoring it.
-
-The existing controller dashboard retains the last counts during silence. Monitor vision health and delivery state as well as that dashboard; see [controller limitations](docs/CONTROLLER_MAIN_COMPATIBILITY.md).
-
-## Developer checks
-
-```bash
-python -m unittest discover -s tests -v
-python -m tools.validate_calibration
-python main.py run --cameras all --output-mode controller --allow-replay-controller --check-config
+#### Inspect Virtual Cart Buffer & Inflow per Lane:
+Monitors real visible cars, virtual cart tokens in flight, inflow rates, and queue freeze state:
+```powershell
+.\.venv\Scripts\python.exe watch_buffer.py
 ```
 
-The last command validates bundled recordings without starting cameras or MQTT; the replay override is only for this isolated check. The compatibility fixtures execute pinned controller main source with external I/O replaced. Keep these fixtures and regression tests when changing publication behavior.
+#### Inspect Detailed In-Memory Tokens & Remaining TTL:
+Inspects individual vehicle IDs and remaining lifespan in memory (`Zone B: 100m -> 55m`) to verify tokens do not exceed per-lane TTL:
+```powershell
+.\.venv\Scripts\python.exe watch_buffer.py --memory
+```
 
-Bundled geometry passes structural validation but has six overlap warnings. This is not physical calibration approval. E1/NE1 geometry, upstream ownership, labelled count accuracy and a 24–72 hour field soak still require commissioning.
+---
 
-## Operator tools
+## Calibration
 
-| Command | Purpose |
-|---|---|
-| `python main.py calibrate --video <source> --sec 0 --n 1` | Draw road polygons and directed gates |
-| `python -m tools.calibration_history list <config>` | Inspect saved calibration revisions |
-| `python -m tools.calibration_history restore <config> <revision>` | Restore a validated revision, then restart |
-| `python -m tools.healthcheck --file <health.json>` | Check runner/camera health |
-| `python -m tools.eval_counts --help` | Compare recorded measurements with labelled truth |
-| `python -m tools.diagnostic_export --help` | Bundle measurements/configuration for an incident |
-| `python main.py benchmark --help` | Profile hardware with the separate synthetic benchmark |
+Launch the interactive polygon and counting gate calibration GUI:
 
-Save generated reports in ignored `output/` or an external evidence bundle. The repository keeps the instructions, tests and active calibration rather than an accumulating audit history.
+```powershell
+# Calibrate North Stop-line (Cam 1)
+.\.venv\Scripts\python.exe tools/segmentor.py --direction north
+
+# Calibrate North Upstream (Cam 2)
+.\.venv\Scripts\python.exe tools/segmentor.py --direction north_upstream
+```
+
+- **`[1]`**: Draw lane polygons (Click vertices, press `[C]` to complete).
+- **`[2]`**: Draw directed gates (`stopline` or `ingress`).
+- **`[3]`**: Select / inspect / delete (`[D]`) existing shapes.
+- **`[S]`**: Save directly to config JSON.
+
+---
+
+## Developer Checks
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m tools.validate_calibration
+```
