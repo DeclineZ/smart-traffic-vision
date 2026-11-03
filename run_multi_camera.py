@@ -140,6 +140,7 @@ class CameraRuntime:
     health_invalid: bool = False
     maintenance_active: bool = False
     fps_window: List[float] = field(default_factory=list)
+    track_lane_assignments: Dict[int, str] = field(default_factory=dict)
 
 
 class BatchedCameraPipeline:
@@ -297,7 +298,23 @@ class BatchedCameraPipeline:
 
         # 2. Gates (validated: unique IDs, explicit direction and type)
         camera_ids = [self._camera_id_for(i) for i in range(self.num_streams)]
-        self.gate_manager = GateFlowManager(camera_names=self.camera_names, camera_ids=camera_ids)
+        lane_mappings: Dict[str, str] = {}
+        for idx, cfg in enumerate(self.camera_configs):
+            lm_lanes = cfg.get("lane_metrics", {}).get("lanes", {}) if isinstance(cfg.get("lane_metrics"), dict) else {}
+            for lid, linfo in lm_lanes.items():
+                if isinstance(linfo, dict) and "target_lane" in linfo:
+                    lane_mappings[lid] = str(linfo["target_lane"])
+                elif lid.startswith("NE"):
+                    lane_mappings[lid] = "N" + lid[2:]
+
+        self.gate_manager = GateFlowManager(
+            camera_names=self.camera_names,
+            camera_ids=camera_ids,
+            lane_mappings=lane_mappings,
+        )
+        for idx in range(len(self.camera_configs)):
+            self.gate_manager.set_camera_lanes(idx, self.lane_configs[idx])
+
         for idx, cfg in enumerate(self.camera_configs):
             for g_cfg in cfg.get("gates", []) or []:
                 try:
@@ -310,6 +327,7 @@ class BatchedCameraPipeline:
                         direction_vec=g_cfg.get("direction"),
                         label=g_cfg.get("label", g_cfg["gate_id"]),
                         target_dir=g_cfg.get("target_dir"),
+                        lane_id=g_cfg.get("lane_id"),
                     ))
                 except (KeyError, ValueError) as exc:
                     raise ValueError(f"Invalid gate in {self.config_paths[idx]}: {exc}") from exc
@@ -602,6 +620,7 @@ class BatchedCameraPipeline:
         cam.last_obs_t = None
         cam.frames_seen = 0
         cam.epoch_inferences = 0
+        cam.track_lane_assignments.clear()
         self.class_voter.reset(cam_idx=cam.idx)
         self.gate_manager.reset_camera(cam.idx)
         logger.info(f"[{cam.name}] observation discontinuity (epoch {cam.epoch}): temporal state reset")
@@ -611,16 +630,16 @@ class BatchedCameraPipeline:
         ys = objs[:, 3] if cam.anchor == "bottom_center" else (objs[:, 1] + objs[:, 3]) * 0.5
         return xs, ys
 
-    def _evaluate_lanes(self, cam: CameraRuntime, objs: np.ndarray, t: float) -> None:
+    def _evaluate_lanes(self, cam: CameraRuntime, objs: np.ndarray, t: float) -> Dict[int, str]:
         """
         Rebuilds the camera's current lane occupancy from one observed frame.
-        Each track is assigned to at most one lane: the first configured lane whose
-        polygon covers its anchor point (boundary included).
+        Applies sticky lane assignment (hysteresis) to prevent motorcycle flickering
+        across lane dividing lines, and returns {track_id: assigned_lane_id}.
         """
         metrics = cam.metrics
         metrics.reset()
         if objs is None or len(objs) == 0:
-            return
+            return {}
 
         xs, ys = self._anchors(cam, objs)
         heights = np.maximum(1.0, objs[:, 3] - objs[:, 1])
@@ -630,7 +649,30 @@ class BatchedCameraPipeline:
             states[tid] = cam.motion.update(tid, (float(xs[i]), float(ys[i])), float(heights[i]), t)
 
         assigned = np.zeros(len(objs), dtype=bool)
-        seen: set = set()
+        track_to_lane: Dict[int, str] = {}
+        active_tids = {int(objs[i, 4]) for i in range(len(objs))}
+
+        # Clean up stale track lane assignments
+        cam.track_lane_assignments = {
+            tid: lid for tid, lid in cam.track_lane_assignments.items() if tid in active_tids
+        }
+
+        # First pass: check if previously assigned track is still inside its previous lane
+        for i in range(len(objs)):
+            tid = int(objs[i, 4])
+            prev_lane = cam.track_lane_assignments.get(tid)
+            if prev_lane and prev_lane in cam.lanes:
+                poly = cam.lanes[prev_lane]["polygon"]
+                if poly is not None and not poly.is_empty:
+                    if shapely.intersects_xy(poly, xs[i:i+1], ys[i:i+1])[0]:
+                        assigned[i] = True
+                        track_to_lane[tid] = prev_lane
+                        cls_id = int(objs[i, 5]) if objs.shape[1] >= 6 else self.default_car_cls
+                        metrics.register_vehicle(lane_id=prev_lane, track_id=tid,
+                                                 vehicle_class=self.class_names.get(cls_id, "car"),
+                                                 state=states[tid])
+
+        # Second pass: assign remaining unassigned tracks to covering lane polygons
         for lane_id, linfo in cam.lanes.items():
             poly = linfo["polygon"]
             if poly is None or poly.is_empty:
@@ -638,16 +680,17 @@ class BatchedCameraPipeline:
             inside = shapely.intersects_xy(poly, xs, ys)
             for i in np.where(inside & ~assigned)[0]:
                 tid = int(objs[i, 4])
-                if tid in seen:
-                    continue
                 assigned[i] = True
-                seen.add(tid)
+                track_to_lane[tid] = lane_id
+                cam.track_lane_assignments[tid] = lane_id
                 cls_id = int(objs[i, 5]) if objs.shape[1] >= 6 else self.default_car_cls
                 metrics.register_vehicle(lane_id=lane_id, track_id=tid,
                                          vehicle_class=self.class_names.get(cls_id, "car"),
                                          state=states[tid])
             if assigned.all():
                 break
+
+        return track_to_lane
 
     def _track(self, cam: CameraRuntime, dets: np.ndarray) -> np.ndarray:
         """Runs the tracker and returns (M, 6) [x1, y1, x2, y2, track_id, voted_class]."""
@@ -780,14 +823,59 @@ class BatchedCameraPipeline:
                 objs = self._track(cam, dets)
                 self.class_voter.prune(cam_idx=cam.idx, active_track_ids={int(o[4]) for o in objs})
                 cam.motion.prune(p.obs_t)
-                self._evaluate_lanes(cam, objs, p.obs_t)
-                self.gate_manager.update_tracks(cam.idx, objs, now=p.obs_t)
+                track_lanes = self._evaluate_lanes(cam, objs, p.obs_t)
+                self.gate_manager.update_tracks(cam.idx, objs, now=p.obs_t, track_lanes=track_lanes)
                 cam.last_tracked = objs
                 cam.last_obs_wall = p.captured_wall
                 cam.last_obs_mono = p.captured_mono if p.captured_mono is not None else time.monotonic() - p.age_s()
                 cam.last_obs_t = p.obs_t
                 cam.inferences += 1
                 cam.epoch_inferences += 1
+
+            # Synchronize visual occupancy into CorridorQueueEstimator (Virtual Cart & Spillback Engine)
+            lane_vis = {}
+            for c in self.cams:
+                if not c.health_invalid and c.frame_invalid_reason is None and not c.maintenance_active:
+                    unit_factor = 3.6 if c.motion.settings.units == "m/s" else 16.2  # ~4.5m car body length * 3.6 km/h per m/s
+                    for lid, lcfg in c.lanes.items():
+                        v = c.metrics.lanes[lid]["vehicles"]
+                        q_cars = len(v["queued"]["cars"])
+                        m_cars = len(v["moving"]["cars"])
+                        u_cars = len(v["unknown"]["cars"])
+                        t_cars = q_cars + m_cars + u_cars
+                        m_bikes = len(v["queued"]["motorbike"]) + len(v["moving"]["motorbike"]) + len(v["unknown"]["motorbike"])
+
+                        car_tids = v["queued"]["cars"] | v["moving"]["cars"] | v["unknown"]["cars"]
+                        car_tracks = {}
+                        speeds_kmh = []
+                        has_stopped = q_cars > 0
+                        for tid in car_tids:
+                            rec = c.metrics._tracks.get(tid)
+                            car_tracks[tid] = rec[3] if rec else "car"
+                            spd_raw = c.motion.speed_of(tid)
+                            if spd_raw is not None:
+                                spd_kmh = float(spd_raw) * unit_factor
+                                speeds_kmh.append(spd_kmh)
+                                if spd_kmh < 8.0:
+                                    has_stopped = True
+                            elif tid in v["queued"]["cars"]:
+                                speeds_kmh.append(0.0)
+
+                        avg_speed_kmh = round(sum(speeds_kmh) / len(speeds_kmh), 2) if speeds_kmh else (0.0 if has_stopped else 0.0)
+                        lane_vis[lid] = {
+                            "role": lcfg.get("role", "queue"),
+                            "cars_queued": q_cars,
+                            "cars_moving": m_cars,
+                            "cars_total": t_cars,
+                            "motorcycles": m_bikes,
+                            "has_stopped": has_stopped,
+                            "avg_speed_kmh": avg_speed_kmh,
+                            "car_tracks": car_tracks,
+                        }
+            self.gate_manager.corridor_estimator.update_visual_occupancy(
+                lane_vis,
+                now_mono=time.monotonic(),
+            )
 
         self.total_processed_batches = self.batch_idx
         mono = time.monotonic()
@@ -903,6 +991,11 @@ class BatchedCameraPipeline:
         now_wall = now_wall if now_wall is not None else time.time()
         self._load_maintenance()
         cam_statuses = [self.camera_status(c, now_wall) for c in self.cams]
+        traffic_flow = self.gate_manager.get_mqtt_telemetry(
+            now_wall, camera_validity={c.idx: st["status"] in VALID_STATUSES for c, st in zip(self.cams, cam_statuses)}
+        )
+        by_lane_flow = traffic_flow.get("by_lane", {})
+
         lanes: List[Dict[str, Any]] = []
         valid_obs = []
         for cam, st in zip(self.cams, cam_statuses):
@@ -911,9 +1004,83 @@ class BatchedCameraPipeline:
                 valid_obs.append(cam.last_obs_wall)
             for lane in cam.metrics.snapshot():
                 lane["observedAt"] = st["observedAt"]
+                lid = lane["laneId"]
                 if valid:
                     lane["valid"] = True
                     lane["invalidReason"] = None
+                    lane["visualOccupancyCount"] = lane["count"]
+                    if lid in by_lane_flow:
+                        lf = by_lane_flow[lid]
+                        # When Virtual Cart / Spillback or Cam 2 upstream adds demand beyond Cam 1 visual occupancy,
+                        # count reflects the fused vehicle demand (or Cam 1 occupancy when single-cam).
+                        has_dual_cam_or_cart = (
+                            lf.get("vis_cam2", 0) > 0
+                            or lf.get("cart_tokens", 0) > 0
+                            or lf.get("spillback", False)
+                        )
+                        if has_dual_cam_or_cart:
+                            lane["count"] = int(lf.get("demand_count", lane["count"]))
+                        lane["demandCount"] = int(lf.get("demand_count", lane.get("count", 0)))
+                        lane["waitingCount"] = int(lf.get("waiting_cars", lane.get("queuedCount", 0)))
+                        lane["visCam1"] = int(lf.get("vis_cam1", 0))
+                        lane["visCam2"] = int(lf.get("vis_cam2", 0))
+                        lane["cartTokens"] = int(lf.get("cart_tokens", 0))
+                        lane["isFrozen"] = bool(lf.get("is_frozen", False))
+                        lane["spillback"] = bool(lf.get("spillback", False))
+                        if lf.get("override_capacity") is not None:
+                            lane["overrideCapacity"] = int(lf["override_capacity"])
+                        lane["avgSpeedKmh"] = float(lf.get("avg_speed_kmh", 0.0))
+                        lane["flowRate"] = float(lf.get("flow_rate", 0.0))
+                        lane["inflowRate"] = float(lf.get("inflow_rate", 0.0))
+                        lane["saturationFlowRate"] = float(lf.get("saturation_flow_rate", 0.5))
+                        lane["maxPressure"] = float(lf.get("max_pressure", 0.0))
+                        lane["cars"] = {
+                            "waiting": lf.get("waiting_cars", lane.get("queuedCount", 0)),
+                            "demand": lf.get("demand_count", lane.get("count", 0)),
+                            "vis_cam1": lf.get("vis_cam1", 0),
+                            "vis_cam2": lf.get("vis_cam2", 0),
+                            "cart_tokens": lf.get("cart_tokens", 0),
+                            "is_frozen": lf.get("is_frozen", False),
+                            "spillback": lf.get("spillback", False),
+                            "inflow": lf.get("inflow", 0),
+                            "outflow": lf.get("outflow", 0),
+                            "visual_queued": lf.get("visual_queued_cars", 0),
+                            "avg_speed_kmh": lf.get("avg_speed_kmh", 0.0),
+                            "flow_rate": lf.get("flow_rate", 0.0),
+                        }
+                        lane["motorcycles"] = {
+                            "visual_count": lf.get("visual_motorcycles", 0),
+                        }
+                    else:
+                        lane["demandCount"] = lane.get("count", 0)
+                        lane["waitingCount"] = lane.get("queuedCount", 0)
+                        lane["visCam1"] = lane.get("vehicles", {}).get("queued", {}).get("cars", 0) + lane.get("vehicles", {}).get("moving", {}).get("cars", 0) + lane.get("vehicles", {}).get("unknown", {}).get("cars", 0)
+                        lane["visCam2"] = 0
+                        lane["cartTokens"] = 0
+                        lane["isFrozen"] = False
+                        lane["spillback"] = False
+                        lane["avgSpeedKmh"] = 0.0
+                        lane["flowRate"] = 0.0
+                        lane["inflowRate"] = 0.0
+                        lane["saturationFlowRate"] = 0.5
+                        lane["maxPressure"] = round(lane["visCam1"] * 0.5, 3)
+                        lane["cars"] = {
+                            "waiting": lane.get("queuedCount", 0),
+                            "demand": lane["visCam1"],
+                            "vis_cam1": lane["visCam1"],
+                            "vis_cam2": 0,
+                            "cart_tokens": 0,
+                            "is_frozen": False,
+                            "spillback": False,
+                            "inflow": 0,
+                            "outflow": 0,
+                            "visual_queued": lane.get("queuedCount", 0),
+                            "avg_speed_kmh": 0.0,
+                            "flow_rate": 0.0,
+                        }
+                        lane["motorcycles"] = {
+                            "visual_count": 0,
+                        }
                     lanes.append(lane)
                 else:
                     lanes.append(invalidate_lane(lane, st["reason"] or st["status"]))
@@ -933,8 +1100,7 @@ class BatchedCameraPipeline:
             frame_idx=self.batch_idx,
             lanes_snapshot=lanes,
             meta=meta,
-            traffic_flow=self.gate_manager.get_mqtt_telemetry(
-                now_wall, camera_validity={c.idx: st["status"] in VALID_STATUSES for c, st in zip(self.cams, cam_statuses)}),
+            traffic_flow=traffic_flow,
             cameras=cam_statuses,
             observed_at=min(valid_obs) if valid_obs else now_wall,
             published_at=now_wall,

@@ -88,17 +88,24 @@ class MainControllerAdapter:
             lanes.append({"laneId": lid, "direction": direction, "count": count})
         if self.blockers:
             return None
+        default_outgoing = {"N": False, "E": False, "S": False, "W": False}
+        raw_outgoing = payload.get("outgoingfull")
+        if isinstance(raw_outgoing, dict):
+            outgoingfull = {d: bool(raw_outgoing.get(d, False)) for d in ("N", "E", "S", "W")}
+        else:
+            outgoingfull = default_outgoing
         return {
             "intersectionId": payload["intersectionId"],
             "cameraId": self.camera_id,
             "timestamp": iso_utc(min(observations)),
             "meta": {
                 "frameId": payload["meta"]["frameId"],
-                "countKind": "occupancy",
+                "countKind": payload["meta"].get("countKind", "occupancy"),
                 "visionSourceId": payload["sourceId"],
                 "visionSessionId": payload["sessionId"],
                 "visionSequence": payload["sequence"],
                 "physicalCameraIds": sorted({by_id[lid]["cameraId"] for lid in self.lanes}),
             },
             "lanes": lanes,
+            "outgoingfull": outgoingfull,
         }
