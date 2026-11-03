@@ -463,8 +463,8 @@ class GateFlowManager:
             "windowSec": round(window_s, 3),
             "gates": gates_out,
             "by_direction": by_dir,
-            "corridor_by_direction": corridor_data["by_direction"],
-            "by_lane": corridor_data["by_lane"],
+
+
             "outgoingfull": corridor_data.get("outgoingfull", {"N": False, "E": False, "S": False, "W": False}),
             "motorcycle_count_cam1": corridor_data.get("motorcycle_count_cam1", 0),
             "alarm_flags": corridor_data.get("alarm_flags", {
@@ -509,7 +509,7 @@ class GateFlowManager:
             arr, dep = entry["arrivals"], entry["departures"]
             if arr is None and dep is None:
                 continue
-            corr_d = report["corridor_by_direction"].get(d, {})
+            corr_d = self.corridor_estimator.get_telemetry()["by_direction"].get(d, {})
             legacy[d] = {
                 "inflow": arr["count"] if arr else None,
                 "cleared": dep["count"] if dep else None,
@@ -524,9 +524,14 @@ class GateFlowManager:
             }
         return {
             "by_direction": legacy,
-            "by_lane": report["by_lane"],
+            "by_lane": self.corridor_estimator.get_telemetry()["by_lane"],
             "outgoingfull": report["outgoingfull"],
             "motorcycle_count_cam1": report["motorcycle_count_cam1"],
             "alarm_flags": report["alarm_flags"],
             "interval": report,
         }
+
+
+
+
+

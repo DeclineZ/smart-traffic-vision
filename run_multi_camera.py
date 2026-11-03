@@ -98,7 +98,7 @@ VALID_STATUSES = ("ok", "degraded")
 # queue:    lane is part of the approach's stop-line queue (used for signal timing)
 # upstream: lane further back on the approach (arrivals / spill-back context only);
 #           kept out of queue totals so two cameras on one approach never add up
-LANE_ROLES = ("queue", "upstream")
+LANE_ROLES = ("queue", "upstream", "outgoing")
 
 
 def sha256_file(path: str) -> str:
@@ -865,6 +865,7 @@ class BatchedCameraPipeline:
                         avg_speed_kmh = round(sum(speeds_kmh) / len(speeds_kmh), 2) if speeds_kmh else (0.0 if has_stopped else 0.0)
                         lane_vis[lid] = {
                             "role": lcfg.get("role", "queue"),
+                            "direction": lcfg.get("direction", "N"),
                             "cars_queued": q_cars,
                             "cars_moving": m_cars,
                             "cars_total": t_cars,
@@ -1549,3 +1550,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
+

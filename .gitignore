@@ -96,6 +96,7 @@ benchmark/hardware-results/
 *.csv
 
 live_counts.jsonl
+live_counts.jsonl.1
 *.jsonl
 sources.json
 

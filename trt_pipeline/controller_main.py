@@ -55,7 +55,7 @@ class MainControllerAdapter:
             lid = lane["laneId"]
             if lid in by_id:
                 self.blockers.append(f"duplicate_lane:{lid}")
-            if lid not in self.lanes and lane.get("role", "queue") != "upstream":
+            if lid not in self.lanes and lane.get("role", "queue") not in ("upstream", "outgoing"):
                 self.blockers.append(f"unexpected_stopline_lane:{lid}")
             by_id[lid] = lane
         lanes, observations = [], []
@@ -109,3 +109,4 @@ class MainControllerAdapter:
             "lanes": lanes,
             "outgoingfull": outgoingfull,
         }
+

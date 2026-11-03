@@ -1,0 +1,139 @@
+{
+  "_comment": "=== North Approach (CAM_44) Configuration ===",
+  "camera_info": {
+    "camera_id": "INT-001-CAM-N",
+    "location": "North Avenue Approach",
+    "intersection_id": "INT-001",
+    "description": "Main avenue looking North towards intersection"
+  },
+  "video": {
+    "path": "./videos/cam44_north.avi",
+    "skip": 0,
+    "max_frames": 0
+  },
+  "lane_metrics": {
+    "lanes": {
+      "N1": {
+        "direction": "N",
+        "description": "North Lane N1",
+        "polygon": [
+          [
+            1005,
+            465
+          ],
+          [
+            800,
+            472
+          ],
+          [
+            1516,
+            849
+          ],
+          [
+            1886,
+            804
+          ]
+        ]
+      },
+      "N2": {
+        "direction": "N",
+        "description": "North Lane N2",
+        "polygon": [
+          [
+            800,
+            471
+          ],
+          [
+            602,
+            480
+          ],
+          [
+            1056,
+            897
+          ],
+          [
+            1515,
+            852
+          ]
+        ]
+      },
+      "N3": {
+        "direction": "N",
+        "description": "North Lane N3",
+        "polygon": [
+          [
+            603,
+            477
+          ],
+          [
+            338,
+            489
+          ],
+          [
+            406,
+            952
+          ],
+          [
+            1058,
+            900
+          ]
+        ]
+      },
+      "OUT_N": {
+        "direction": "N",
+        "description": "North Outgoing Road OUT_N",
+        "polygon": [
+          [
+            828,
+            386
+          ],
+          [
+            1274,
+            384
+          ],
+          [
+            1548,
+            452
+          ],
+          [
+            1008,
+            464
+          ]
+        ],
+        "role": "outgoing"
+      }
+    }
+  },
+  "gates": [
+    {
+      "gate_id": "GATE_N_STOPLINE",
+      "p1": [
+        336,
+        489
+      ],
+      "p2": [
+        1005,
+        464
+      ],
+      "type": "stopline",
+      "direction": [
+        -0.037,
+        -0.999
+      ],
+      "label": "STOPLINE",
+      "target_dir": "N"
+    }
+  ],
+  "calibration": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "revision": "20261103T142456631525Z",
+    "reference_image": "reference/config_north-20261103T142456631525Z.jpg",
+    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning.",
+    "previous_revision": "20261103T142456458630Z",
+    "saved_at": "2026-11-03T14:24:56+00:00",
+    "saved_by": "seawa"
+  }
+}

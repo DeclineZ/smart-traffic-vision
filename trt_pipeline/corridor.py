@@ -209,6 +209,7 @@ class CorridorQueueEstimator:
 
         # Outgoing road full status per direction (N, E, S, W -> bool)
         self.outgoing_full: Dict[str, bool] = {"N": False, "E": False, "S": False, "W": False}
+        self.outgoing_stopped_since: Dict[str, Optional[float]] = {"N": None, "E": None, "S": None, "W": None}
 
     def register_lane(
         self,
@@ -605,7 +606,14 @@ class CorridorQueueEstimator:
 
         # Outgoing road full status per direction (default False; not implemented yet)
         for d in ("N", "E", "S", "W"):
-            self.outgoing_full.setdefault(d, False)
+            if outgoing_stopped_by_dir.get(d, False):
+                if self.outgoing_stopped_since.get(d) is None:
+                    self.outgoing_stopped_since[d] = now
+                elif now - self.outgoing_stopped_since[d] >= 3.0:
+                    self.outgoing_full[d] = True
+            else:
+                self.outgoing_stopped_since[d] = None
+                self.outgoing_full[d] = False
 
         # Update direction-level motorcycle pools (Cam 1 only policy)
         for d in set(list(self.moto_pools.keys()) + [l.direction for l in self.lanes.values()]):
@@ -851,4 +859,5 @@ class CorridorQueueEstimator:
                 "target_override_lane": spillback_lanes[0] if spillback_lanes else None,
             },
         }
+
 

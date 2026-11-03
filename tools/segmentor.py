@@ -36,7 +36,7 @@ APPROACH_CONFIGS = {
         "camera_id": "CAM-01",
         "video": "./videos/cam44_north.avi",
         "config": "./config/config_north.json",
-        "lane_prefix": "NU",
+        "lane_prefix": "N",
         "suggested_gates": [
             {"id": "GATE_N_STOPLINE", "label": "STOPLINE", "type": "stopline"},
             {"id": "GATE_N_IN", "label": "INFLOW_N", "type": "ingress"},
@@ -86,6 +86,17 @@ APPROACH_CONFIGS = {
             {"id": "GATE_NE_STOPLINE", "label": "STOP_NE", "type": "stopline"},
         ],
     },
+    "northeast": {
+        "name": "North Upstream Corridor (CAM-05 / CAM-45)",
+        "camera_id": "CAM-05",
+        "video": "./videos/cam43_south.avi",
+        "config": "./config/config_north_upstream.json",
+        "lane_prefix": "NU",
+        "suggested_gates": [
+            {"id": "GATE_NE_IN", "label": "INFLOW_NE", "type": "ingress"},
+            {"id": "GATE_NE_STOPLINE", "label": "STOP_NE", "type": "stopline"},
+        ],
+    },
 }
 CAMERA_PRESETS = APPROACH_CONFIGS
 
@@ -96,7 +107,9 @@ COLOR_STOPLINE = (0, 165, 255)        # Amber / Orange
 COLOR_INGRESS = (255, 220, 0)         # Cyan
 COLOR_EGRESS = (255, 50, 220)         # Magenta
 COLOR_SELECTED = (0, 255, 255)        # Bright Yellow
-COLOR_IN_PROGRESS = (0, 230, 255)     # Yellow-Orange
+COLOR_IN_PROGRESS = (0, 230, 255)
+COLOR_OUTGOING_FILL = (0, 140, 255)       # Orange fill for outgoing road
+COLOR_OUTGOING_EDGE = (0, 165, 255)       # Bright Orange border     # Yellow-Orange
 COLOR_HUD_BG = (20, 20, 22)           # Dark Acrylic
 
 
@@ -410,9 +423,10 @@ class InteractiveCalibrator:
         self.cursor_pos = (x, y)
 
         if event == cv.EVENT_LBUTTONDOWN:
-            if self.mode == "LANE":
+            if self.mode in ("LANE", "OUTGOING"):
                 self.in_progress_points.append((x, y))
-                self.set_notification(f"Lane vertex #{len(self.in_progress_points)} added at ({x}, {y}). [C] to complete.")
+                mode_desc = "Outgoing road" if self.mode == "OUTGOING" else "Lane"
+                self.set_notification(f"{mode_desc} vertex #{len(self.in_progress_points)} added at ({x}, {y}). [C] to complete.")
 
             elif self.mode == "GATE":
                 if len(self.in_progress_points) == 0:
@@ -504,32 +518,59 @@ class InteractiveCalibrator:
         self.gates.append(new_gate)
         self.set_notification(f"Added Gate: {gate_id} ({g_type.upper()})! Remember to press [S] to Save.", COLOR_LANE_EDGE)
 
-    def _create_lane_interactive(self) -> None:
+    def _create_lane_interactive(self, role: str = "queue") -> None:
         """Completes lane polygon creation."""
         if len(self.in_progress_points) < 3:
-            self.set_notification("Lane requires at least 3 points! Click more points or [R] to reset.", (0, 0, 255))
+            item_name = "Outgoing road" if role == "outgoing" else "Lane"
+            self.set_notification(f"{item_name} requires at least 3 points! Click more points or [R] to reset.", (0, 0, 255))
             return
 
-        # Generate default lane id: e.g. S1, S2, S3...
         used_ids = set(self.lanes.keys())
-        idx = 1
-        while f"{self.lane_prefix}{idx}" in used_ids:
-            idx += 1
-        default_lid = f"{self.lane_prefix}{idx}"
+        dir_map = {"north": "N", "south": "S", "east": "E", "west": "W"}
+        dir_char = dir_map.get(self.direction.lower(), (self.lane_prefix[0].upper() if self.lane_prefix else "N"))
+        if dir_char not in ("N", "S", "E", "W"):
+            dir_char = "N"
 
-        lid = self._prompt_lane_details(default_lid)
+        if role == "outgoing":
+            prefix = f"OUT_{dir_char}"
+            default_lid = prefix
+            idx = 1
+            while default_lid in used_ids:
+                idx += 1
+                default_lid = f"{prefix}_{idx}"
+        else:
+            idx = 1
+            while f"{self.lane_prefix}{idx}" in used_ids:
+                idx += 1
+            default_lid = f"{self.lane_prefix}{idx}"
+
+        lid = self._prompt_lane_details(default_lid, role=role)
         if not lid:
-            self.set_notification("Lane creation cancelled.", (0, 165, 255))
+            self.set_notification(f"{'Outgoing road' if role == 'outgoing' else 'Lane'} creation cancelled.", (0, 165, 255))
             return
+
+        # Infer direction: if lid is like OUT_S or S1, infer from name, else fallback to approach dir
+        lane_dir = dir_char
+        for part in lid.upper().replace("-", "_").split("_"):
+            if part in ("N", "S", "E", "W"):
+                lane_dir = part
+                break
 
         polygon_pts = [[int(x), int(y)] for x, y in self.in_progress_points]
-        self.lanes[lid] = {
-            "direction": self.lane_prefix[0] if self.lane_prefix else "N",
-            "description": f"{self.direction.capitalize()} Lane {lid}",
+        lane_entry: Dict[str, Any] = {
+            "direction": lane_dir,
+            "description": f"{self.direction.capitalize()} {'Outgoing Road' if role == 'outgoing' else 'Lane'} {lid}",
             "polygon": polygon_pts,
         }
+        if role == "outgoing":
+            lane_entry["role"] = "outgoing"
+
+        self.lanes[lid] = lane_entry
         self.in_progress_points.clear()
-        self.set_notification(f"Added Lane: {lid} ({len(polygon_pts)} points)! Remember to press [S] to Save.", COLOR_LANE_EDGE)
+        self.set_notification(
+            f"Added {'Outgoing Road' if role == 'outgoing' else 'Lane'}: {lid} ({len(polygon_pts)} points)! Remember to press [S] to Save.",
+            COLOR_OUTGOING_EDGE if role == "outgoing" else COLOR_LANE_EDGE,
+        )
 
     def _prompt_gate_details(
         self, default_id: str, default_label: str, gate_type: str
@@ -622,7 +663,7 @@ class InteractiveCalibrator:
             print(f"[WARN] Dialog error ({e}), using default: {default_id}")
             return default_id, default_label, gate_type
 
-    def _prompt_lane_details(self, default_lid: str) -> Optional[str]:
+    def _prompt_lane_details(self, default_lid: str, role: str = "queue") -> Optional[str]:
         """Opens dialog to enter Lane ID."""
         try:
             import tkinter as tk
@@ -631,9 +672,15 @@ class InteractiveCalibrator:
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
+            title = "Outgoing Road ID" if role == "outgoing" else "Lane ID"
+            prompt_msg = (
+                f"Enter Outgoing Road Identifier (e.g. {default_lid}):"
+                if role == "outgoing"
+                else f"Enter Lane Identifier (e.g. {self.lane_prefix}1, {self.lane_prefix}2):"
+            )
             lid = simpledialog.askstring(
-                "Lane ID",
-                f"Enter Lane Identifier (e.g. {self.lane_prefix}1, {self.lane_prefix}2):",
+                title,
+                prompt_msg,
                 initialvalue=default_lid,
                 parent=root,
             )
@@ -672,8 +719,9 @@ class InteractiveCalibrator:
         mode_str = f"MODE: [{self.mode}]"
         if self.mode == "GATE":
             mode_str += f" ({self.active_gate_type.upper()})"
+        badge_color = COLOR_OUTGOING_EDGE if self.mode == "OUTGOING" else (COLOR_SELECTED if self.mode == "SELECT" else COLOR_LANE_EDGE)
         cv.rectangle(canvas, (w - 380, 10), (w - 180, 46), (40, 40, 45), -1)
-        cv.rectangle(canvas, (w - 380, 10), (w - 180, 46), COLOR_SELECTED if self.mode == "SELECT" else COLOR_LANE_EDGE, 1)
+        cv.rectangle(canvas, (w - 380, 10), (w - 180, 46), badge_color, 1)
         cv.putText(canvas, mode_str, (w - 370, 33), cv.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv.LINE_AA)
 
         # Save Button Indicator
@@ -683,7 +731,7 @@ class InteractiveCalibrator:
 
         # Footer Shortcuts
         shortcuts = (
-            "[1] Lane Mode  |  [2] Gate Mode  |  [3] Select/Delete  |  [Tab] Gate Type  |  "
+            "[1] Lane  |  [2] Gate  |  [3] Select  |  [4] Outgoing  |  [Tab] Gate Type  |  "
             "[F] Flip Arrow  |  [C] Complete  |  [Z] Undo  |  [N]/[P] Seek Frames  |  [S] Save  |  [Q] Exit"
         )
         cv.putText(canvas, shortcuts, (15, h - 16), cv.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1, cv.LINE_AA)
@@ -720,13 +768,17 @@ class InteractiveCalibrator:
                 np_pts = np.array(pts, dtype=np.int32)
                 is_selected = self.selected_item == ("lane", lid)
                 edge_col = COLOR_SELECTED if is_selected else COLOR_LANE_EDGE
-                cv.fillPoly(poly_overlay, [np_pts], COLOR_LANE_FILL)
+                is_outgoing = linfo.get("role") == "outgoing"
+                fill_col = COLOR_OUTGOING_FILL if is_outgoing else COLOR_LANE_FILL
+                if not is_selected and is_outgoing:
+                    edge_col = COLOR_OUTGOING_EDGE
+                cv.fillPoly(poly_overlay, [np_pts], fill_col)
                 cv.polylines(canvas, [np_pts], isClosed=True, color=edge_col, thickness=3 if is_selected else 2, lineType=cv.LINE_AA)
 
                 # Centroid for label pill
                 cx = int(np.mean([p[0] for p in pts]))
                 cy = int(np.mean([p[1] for p in pts]))
-                lbl = f"LANE {lid}"
+                lbl = f"OUTGOING {lid}" if is_outgoing else f"LANE {lid}"
                 (lw, lh), _ = cv.getTextSize(lbl, cv.FONT_HERSHEY_SIMPLEX, 0.45, 1)
                 cv.rectangle(canvas, (cx - lw // 2 - 4, cy - lh - 4), (cx + lw // 2 + 4, cy + 4), (10, 10, 10), -1)
                 cv.rectangle(canvas, (cx - lw // 2 - 4, cy - lh - 4), (cx + lw // 2 + 4, cy + 4), edge_col, 1)
@@ -774,8 +826,9 @@ class InteractiveCalibrator:
 
         # 3. Render In-Progress Drawing
         if self.in_progress_points:
+            in_prog_col = COLOR_OUTGOING_EDGE if self.mode == "OUTGOING" else COLOR_IN_PROGRESS
             for idx, pt in enumerate(self.in_progress_points):
-                cv.circle(canvas, pt, 6, COLOR_IN_PROGRESS, -1)
+                cv.circle(canvas, pt, 6, in_prog_col, -1)
                 cv.putText(canvas, f"#{idx+1}", (pt[0] + 8, pt[1] - 8), cv.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv.LINE_AA)
 
             if len(self.in_progress_points) > 1:
@@ -783,14 +836,14 @@ class InteractiveCalibrator:
                     canvas,
                     [np.array(self.in_progress_points, dtype=np.int32)],
                     isClosed=False,
-                    color=COLOR_IN_PROGRESS,
+                    color=in_prog_col,
                     thickness=2,
                     lineType=cv.LINE_AA,
                 )
 
             # Live rubber-band line to mouse cursor
             last_pt = self.in_progress_points[-1]
-            cv.line(canvas, last_pt, self.cursor_pos, (0, 200, 255), 1, cv.LINE_AA)
+            cv.line(canvas, last_pt, self.cursor_pos, in_prog_col, 1, cv.LINE_AA)
 
             if self.mode == "GATE" and len(self.in_progress_points) == 1:
                 # Show live normal arrow while placing gate endpoint
@@ -838,6 +891,11 @@ class InteractiveCalibrator:
                     self.selected_item = None
                     self.set_notification(f"Switched to [GATE] mode ({self.active_gate_type.upper()}). Click start and end points.", COLOR_STOPLINE)
 
+                elif key == ord("4"):
+                    self.mode = "OUTGOING"
+                    self.in_progress_points.clear()
+                    self.selected_item = None
+                    self.set_notification("Switched to [OUTGOING] mode. Click 4 corners for outgoing exit road, press [C] to complete.", COLOR_OUTGOING_EDGE)
                 elif key == ord("3"):
                     self.mode = "SELECT"
                     self.in_progress_points.clear()
@@ -873,7 +931,9 @@ class InteractiveCalibrator:
 
                 elif key in (ord("c"), ord("C"), 13):  # 'c' or Enter
                     if self.mode == "LANE":
-                        self._create_lane_interactive()
+                        self._create_lane_interactive(role="queue")
+                    elif self.mode == "OUTGOING":
+                        self._create_lane_interactive(role="outgoing")
 
                 elif key in (ord("z"), ord("Z"), 8):  # 'z' or Backspace (Undo)
                     if self.in_progress_points:
@@ -1126,3 +1186,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
