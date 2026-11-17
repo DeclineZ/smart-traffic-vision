@@ -69,6 +69,9 @@ def get_segment_intersection(
 class VirtualGate:
     """Directed 2D tripwire with lane classification and anti-jitter protections."""
 
+    ID_SWITCH_WINDOW_S = 0.5
+    ID_SWITCH_RADIUS_PX = 15.0
+
     def __init__(
         self,
         gate_id: str,
@@ -128,9 +131,9 @@ class VirtualGate:
 
         self.crossed_track_ids: Dict[int, float] = {}  # track_id -> observation time of crossing
         self.recent_crossings: deque[Dict[str, Any]] = deque(maxlen=200)
-        # Spatial-temporal suppression for ID-switches on the gate line:
-        # deque of (crossing_point, timestamp, class_id, lane_id)
-        self.recent_crossing_points: deque[Tuple[Tuple[float, float], float, int, Optional[str]]] = deque(maxlen=50)
+        # Recent counted crossings, used to recognise a tracker ID switch on the gate line:
+        # deque of (crossing_point, timestamp, class_id, lane_id, track_id)
+        self.recent_crossing_points: deque[Tuple[Tuple[float, float], float, int, Optional[str], int]] = deque(maxlen=50)
         self.last_flash_ts: float = 0.0
 
     def check_crossing(
@@ -141,10 +144,16 @@ class VirtualGate:
         class_id: int = 0,
         now: Optional[float] = None,
         lane_id: Optional[str] = None,
+        active_track_ids: Optional[Set[int]] = None,
     ) -> bool:
         """
         True if the step p_prev -> p_curr is a new forward crossing of this gate.
         Assigns the crossing to lane_id or self.lane_id.
+
+        active_track_ids: track IDs present in the current frame. When given, a crossing is treated
+        as a tracker ID switch (and not counted) only if the track that crossed at the same spot
+        within ID_SWITCH_WINDOW_S has disappeared from the frame. A vehicle following closely
+        keeps its own live track, so it is still counted. Without it no crossing is suppressed.
         """
         if track_id in self.crossed_track_ids:
             return False
@@ -165,14 +174,9 @@ class VirtualGate:
         ts = now if now is not None else time.monotonic()
         cross_pt = get_segment_intersection(p_prev, p_curr, self.p1, self.p2) or p_curr
 
-        # EDGE CASE 4 & 5: Spatial-temporal cooldown against ID switches right on the line
-        # If an ID switched while crossing, a new ID crossing within 0.5s at almost the exact point
-        # in a subsequent frame is the same vehicle; remember it as crossed without double-incrementing.
-        for prev_pt, prev_ts, prev_cls, _ in self.recent_crossing_points:
-            if 0.0 < ts - prev_ts <= 0.5 and prev_cls == class_id:
-                if np.hypot(cross_pt[0] - prev_pt[0], cross_pt[1] - prev_pt[1]) < 15.0:
-                    self.crossed_track_ids[track_id] = ts
-                    return False
+        if active_track_ids is not None and self._is_id_switch(cross_pt, ts, class_id, active_track_ids):
+            self.crossed_track_ids[track_id] = ts  # same vehicle under a new ID: remember, don't recount
+            return False
 
         assigned_lane = lane_id or self.lane_id or "unknown"
         self.crossed_track_ids[track_id] = ts
@@ -184,7 +188,7 @@ class VirtualGate:
         self.interval_lane_counts[assigned_lane] += 1
         self.last_flash_ts = time.time()
 
-        self.recent_crossing_points.append((cross_pt, ts, class_id, assigned_lane))
+        self.recent_crossing_points.append((cross_pt, ts, class_id, assigned_lane, track_id))
         self.recent_crossings.append({
             "gate_id": self.gate_id,
             "track_id": track_id,
@@ -206,6 +210,18 @@ class VirtualGate:
         # Also clean up crossing points older than 5 seconds
         while self.recent_crossing_points and now - self.recent_crossing_points[0][1] > 5.0:
             self.recent_crossing_points.popleft()
+
+    def _is_id_switch(
+        self, cross_pt: Tuple[float, float], ts: float, class_id: int, active_track_ids: Set[int]
+    ) -> bool:
+        for prev_pt, prev_ts, prev_cls, _, prev_tid in self.recent_crossing_points:
+            if prev_tid in active_track_ids:
+                continue  # that vehicle is still tracked, so this is a different one
+            if prev_cls != class_id or not 0.0 < ts - prev_ts <= self.ID_SWITCH_WINDOW_S:
+                continue
+            if np.hypot(cross_pt[0] - prev_pt[0], cross_pt[1] - prev_pt[1]) < self.ID_SWITCH_RADIUS_PX:
+                return True
+        return False
 
     def reset_tracks(self) -> None:
         """Called after a camera discontinuity; track IDs from the previous epoch are meaningless."""
@@ -368,11 +384,10 @@ class GateFlowManager:
             return crossed
 
         objs = tracked_objs if tracked_objs is not None else np.empty((0, 6))
-        active: Set[int] = set()
+        active: Set[int] = {int(obj[4]) for obj in objs}
         for obj in objs:
             ox1, oy1, ox2, oy2, track_id = float(obj[0]), float(obj[1]), float(obj[2]), float(obj[3]), int(obj[4])
             cls_id = int(obj[5]) if len(obj) >= 6 else 0
-            active.add(track_id)
             curr_pt = ((ox1 + ox2) * 0.5, oy2)  # bottom-centre road contact point
             key = (cam_idx, track_id)
 
@@ -381,7 +396,8 @@ class GateFlowManager:
                 for gate in cam_gates:
                     cross_pt = get_segment_intersection(prev[0], curr_pt, gate.p1, gate.p2) or curr_pt
                     lane_id = self.resolve_lane_for_crossing(cam_idx, gate, track_id, prev[0], curr_pt, cross_pt, t)
-                    if gate.check_crossing(track_id, prev[0], curr_pt, cls_id, now=t, lane_id=lane_id):
+                    if gate.check_crossing(track_id, prev[0], curr_pt, cls_id, now=t, lane_id=lane_id,
+                                           active_track_ids=active):
                         crossed.append(gate.gate_id)
                         # Feed crossing to Corridor Queue Estimator
                         self.corridor_estimator.record_gate_crossing(

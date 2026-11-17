@@ -76,22 +76,21 @@ APPROACH_CONFIGS = {
         ],
     },
     "north_upstream": {
-        "name": "North Upstream Corridor (CAM-05 / CAM-45)",
-        "camera_id": "CAM-05",
+        "name": "North Upstream Corridor (placeholder feed: south footage until a real upstream camera exists)",
+        "camera_id": "CAM-NU",
         "video": "./videos/cam43_south.avi",
         "config": "./config/config_north_upstream.json",
         "lane_prefix": "NU",
         "suggested_gates": [
-            {"id": "GATE_NE_IN", "label": "INFLOW_NE", "type": "ingress"},
-            {"id": "GATE_NE_STOPLINE", "label": "STOP_NE", "type": "stopline"},
+            {"id": "GATE_NU_IN", "label": "INFLOW_NU", "type": "ingress"},
         ],
     },
     "northeast": {
-        "name": "North Upstream Corridor (CAM-05 / CAM-45)",
+        "name": "Northeast Elevated Corridor (CAM-05 / CAM-45)",
         "camera_id": "CAM-05",
-        "video": "./videos/cam43_south.avi",
-        "config": "./config/config_north_upstream.json",
-        "lane_prefix": "NU",
+        "video": "./videos/cam45_northeast.avi",
+        "config": "./config/config_northeast.json",
+        "lane_prefix": "NE",
         "suggested_gates": [
             {"id": "GATE_NE_IN", "label": "INFLOW_NE", "type": "ingress"},
             {"id": "GATE_NE_STOPLINE", "label": "STOP_NE", "type": "stopline"},
@@ -107,9 +106,9 @@ COLOR_STOPLINE = (0, 165, 255)        # Amber / Orange
 COLOR_INGRESS = (255, 220, 0)         # Cyan
 COLOR_EGRESS = (255, 50, 220)         # Magenta
 COLOR_SELECTED = (0, 255, 255)        # Bright Yellow
-COLOR_IN_PROGRESS = (0, 230, 255)
+COLOR_IN_PROGRESS = (0, 230, 255)     # Yellow-Orange
 COLOR_OUTGOING_FILL = (0, 140, 255)       # Orange fill for outgoing road
-COLOR_OUTGOING_EDGE = (0, 165, 255)       # Bright Orange border     # Yellow-Orange
+COLOR_OUTGOING_EDGE = (0, 165, 255)       # Bright Orange border
 COLOR_HUD_BG = (20, 20, 22)           # Dark Acrylic
 
 

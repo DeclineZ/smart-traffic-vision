@@ -170,5 +170,52 @@ class TestGateFlowManager(unittest.TestCase):
         self.assertLessEqual(m._cam_observed_s[0], 0.2 + 1e-6)
 
 
+
+class TestIdSwitchOnGateLine(unittest.TestCase):
+    """A tracker ID switch on the line must not double count; close-following vehicles must still count."""
+
+    def test_close_followers_each_counted_while_tracked(self):
+        g = gate()
+        for k, tid in enumerate(range(1, 6)):  # 5 motorbikes 0.2 s apart in the same wheel track
+            still_tracked = set(range(1, tid + 1))
+            g.check_crossing(tid, (250, 180), (250, 220), 3, now=0.2 * k, active_track_ids=still_tracked)
+        self.assertEqual(g.count, 5)
+
+    def test_new_id_where_lost_track_just_crossed_is_not_recounted(self):
+        g = gate()
+        self.assertTrue(g.check_crossing(1, (250, 190), (250, 205), 2, now=0.00, active_track_ids={1}))
+        # track 1 vanishes; the same car comes back as track 9 and is seen crossing at the same spot
+        self.assertFalse(g.check_crossing(9, (251, 195), (251, 206), 2, now=0.12, active_track_ids={9}))
+        self.assertEqual(g.count, 1)
+        self.assertFalse(g.check_crossing(9, (251, 196), (251, 210), 2, now=0.16, active_track_ids={9}))
+
+    def test_lost_track_does_not_suppress_after_window_other_class_or_far_away(self):
+        for tid, pt, cls, t in ((9, 251, 2, 0.6), (9, 251, 3, 0.1), (9, 290, 2, 0.1)):
+            g = gate()
+            g.check_crossing(1, (250, 190), (250, 205), 2, now=0.0, active_track_ids={1})
+            self.assertTrue(g.check_crossing(tid, (pt, 190), (pt, 210), cls, now=t, active_track_ids={tid}))
+            self.assertEqual(g.count, 2)
+
+    def test_no_suppression_without_frame_context(self):
+        g = gate()
+        for tid in range(1, 6):
+            g.check_crossing(tid, (250, 180), (250, 220))
+        self.assertEqual(g.count, 5)
+
+    def test_manager_passes_frame_tracks(self):
+        m = GateFlowManager(["a"])
+        m.add_gate(gate("G1"))
+        # two cars in one lane 0.2 s apart, both tracked throughout: two counts
+        m.update_tracks(0, np.array([obj(1, 250, 195), obj(2, 250, 170)]), now=0.0)
+        m.update_tracks(0, np.array([obj(1, 250, 210), obj(2, 250, 190)]), now=0.1)
+        m.update_tracks(0, np.array([obj(1, 250, 230), obj(2, 250, 205)]), now=0.2)
+        self.assertEqual(m.gates["G1"].count, 2)
+        # ID switch: track 3 crosses, disappears, comes back as 4 and crosses again at the same spot
+        m.update_tracks(0, np.array([obj(3, 150, 195)]), now=1.0)
+        m.update_tracks(0, np.array([obj(3, 150, 204)]), now=1.1)
+        m.update_tracks(0, np.array([obj(4, 151, 197)]), now=1.2)
+        m.update_tracks(0, np.array([obj(4, 151, 206)]), now=1.3)
+        self.assertEqual(m.gates["G1"].count, 3)
+
 if __name__ == "__main__":
     unittest.main()

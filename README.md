@@ -96,6 +96,8 @@ Processes streams, tracks vehicles, manages Virtual Carts, and outputs controlle
 
 *(If not using UDP streamer, replace `--sources-file sources.json` with `--videos ./videos/cam44_north.avi ./videos/cam43_south.avi`).*
 
+`north_upstream` is opt-in: running without `--cameras` (or with `--cameras all`) starts only the five standard cameras (north, south, east, west, northeast). Name `north_upstream` explicitly to enable the corridor. Its config currently replays south-camera footage (`cam43_south.avi`) as a placeholder, so corridor numbers are not meaningful until a real upstream feed is calibrated.
+
 ---
 
 ### 3. Inspect Live Outputs & Monitors

@@ -89,7 +89,7 @@
   },
   "gates": [
     {
-      "gate_id": "GATE_N_IN",
+      "gate_id": "GATE_NU_IN",
       "p1": [
         258,
         514
@@ -103,7 +103,7 @@
         -0.236,
         0.972
       ],
-      "label": "INFLOW_N",
+      "label": "INFLOW_NU",
       "target_dir": "N"
     }
   ],

@@ -103,3 +103,5 @@ sources.json
 # Auto-generated calibration revision backups and timestamped frame dumps
 config/history/
 config/reference/*-*Z.jpg
+
+config/*.bak

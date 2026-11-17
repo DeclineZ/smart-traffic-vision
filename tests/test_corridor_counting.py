@@ -245,13 +245,15 @@ class TestGateLaneClassification(unittest.TestCase):
     def test_edge_case_4_id_switch_cooldown_on_gate(self):
         """
         EDGE CASE 4: A vehicle crosses the gate (Track 5). In the very next frame (0.1s later),
-        a new ID (Track 6) appears at the exact same location across the gate.
-        Spatial-temporal cooldown prevents double-counting.
+        a new ID (Track 6) appears at the exact same location across the gate while Track 5 is
+        gone from the frame. That is an ID switch, so it is not counted again.
         """
-        self.gate.check_crossing(5, (180.0, 190.0), (180.0, 210.0), class_id=0, now=2.0, lane_id="N1")
+        self.gate.check_crossing(5, (180.0, 190.0), (180.0, 210.0), class_id=0, now=2.0, lane_id="N1",
+                                 active_track_ids={5})
         self.assertEqual(self.gate.count, 1)
 
-        res = self.gate.check_crossing(6, (182.0, 190.0), (182.0, 211.0), class_id=0, now=2.1, lane_id="N1")
+        res = self.gate.check_crossing(6, (182.0, 190.0), (182.0, 211.0), class_id=0, now=2.1, lane_id="N1",
+                                       active_track_ids={6})
         self.assertFalse(res)
         self.assertEqual(self.gate.count, 1)
 

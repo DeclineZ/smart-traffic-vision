@@ -41,7 +41,7 @@
         "polygon": [
           [
             800,
-            471
+            472
           ],
           [
             602,
@@ -52,8 +52,8 @@
             897
           ],
           [
-            1515,
-            852
+            1516,
+            849
           ]
         ]
       },
@@ -62,8 +62,8 @@
         "description": "North Lane N3",
         "polygon": [
           [
-            603,
-            477
+            602,
+            480
           ],
           [
             338,
@@ -74,8 +74,8 @@
             952
           ],
           [
-            1058,
-            900
+            1056,
+            897
           ]
         ]
       },
@@ -131,7 +131,7 @@
     ],
     "revision": "20261103T142456790145Z",
     "reference_image": "reference/config_north-20261103T142456790145Z.jpg",
-    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning.",
+    "note": "Reference frame taken 60 s into the configured recording; replace with a live frame when commissioning. N2/N3 shared edges snapped to their neighbours to remove 78/683 sq px overlaps (PR #7 review).",
     "previous_revision": "20261103T142456631525Z",
     "saved_at": "2026-11-03T14:24:56+00:00",
     "saved_by": "seawa"

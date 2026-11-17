@@ -76,6 +76,11 @@ DEFAULT_CONFIGS = {
     "northeast": "config/config_northeast.json",
     "north_upstream": "config/config_north_upstream.json",
 }
+# Cameras that exist only on corridor-enabled sites. They are never part of the default or 'all' run
+# plan, so a standard 5-camera intersection does not fail looking for a stream it does not have;
+# name them explicitly with --cameras to enable them.
+OPT_IN_CAMERAS = ("north_upstream",)
+STANDARD_CAMERAS = [n for n in DEFAULT_CONFIGS if n not in OPT_IN_CAMERAS]
 # Best measured setup on the RTX 5060 laptop (see docs/HARDWARE_BENCHMARK_GUIDE.md): the manual_v1 model
 # as a TensorRT engine at 640 px, inferring every 2nd frame (--skip-frames 1). Engines are built per GPU
 # with export_trt.py, so a machine without one falls back to the same weights in PyTorch.
@@ -1296,7 +1301,9 @@ def build_pipeline_args() -> argparse.ArgumentParser:
     )
     src = parser.add_argument_group("cameras and sources")
     src.add_argument("--cameras", nargs="+", default=None,
-                     help=f"Camera names ({' '.join(DEFAULT_CONFIGS)} or 'all'). Default: all, or derived from --configs")
+                     help=f"Camera names ({' '.join(DEFAULT_CONFIGS)} or 'all'). Default/'all': "
+                          f"{' '.join(STANDARD_CAMERAS)}, or derived from --configs. "
+                          f"Opt-in only: {' '.join(OPT_IN_CAMERAS)}")
     src.add_argument("--configs", nargs="+", default=None, help="Calibration JSON per camera (same order as --cameras)")
     src.add_argument("--videos", nargs="+", default=None,
                      help="Source per camera (file or rtsp://). Prefer --sources-file for credentials")
@@ -1376,13 +1383,13 @@ def resolve_run_plan(args: argparse.Namespace) -> Tuple[List[str], List[str], Li
     if args.cameras and "all" in args.cameras:
         if len(args.cameras) != 1:
             raise ValueError("'all' cannot be combined with other camera names")
-        names = list(DEFAULT_CONFIGS)
+        names = list(STANDARD_CAMERAS)
     elif args.cameras:
         names = list(args.cameras)
     elif args.configs:
         names = [os.path.splitext(os.path.basename(p))[0].replace("config_", "") for p in args.configs]
     else:
-        names = list(DEFAULT_CONFIGS)
+        names = list(STANDARD_CAMERAS)
 
     if len(set(names)) != len(names):
         raise ValueError(f"Duplicate camera names: {names}")
