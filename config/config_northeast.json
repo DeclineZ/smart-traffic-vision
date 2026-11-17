@@ -15,6 +15,7 @@
     "lanes": {
       "NE1": {
         "direction": "N",
+        "target_lane": "N1",
         "description": "Northeast Lane NE1",
         "polygon": [
           [
@@ -38,6 +39,7 @@
       },
       "NE2": {
         "direction": "N",
+        "target_lane": "N2",
         "description": "Northeast Lane NE2",
         "polygon": [
           [
@@ -65,6 +67,7 @@
       },
       "NE3": {
         "direction": "N",
+        "target_lane": "N3",
         "description": "Northeast Lane NE3",
         "polygon": [
           [

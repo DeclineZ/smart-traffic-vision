@@ -87,12 +87,15 @@ class MotionStateClassifier:
     def __init__(self, settings: Optional[QueueSettings] = None):
         self.settings = settings or QueueSettings()
         self._tracks: Dict[int, _TrackMotion] = {}
+        # (x, y, box_h, t) for recently lost queued vehicles (EDGE CASE 4: ID switch handover)
+        self._recent_queued: Deque[Tuple[float, float, float, float]] = deque(maxlen=50)
 
     def __len__(self) -> int:
         return len(self._tracks)
 
     def reset(self) -> None:
         self._tracks.clear()
+        self._recent_queued.clear()
 
     def _project(self, x: float, y: float) -> Tuple[float, float]:
         h = self.settings.homography
@@ -135,7 +138,25 @@ class MotionStateClassifier:
         s = self.settings
         tm = self._tracks.get(track_id)
         if tm is None or (tm.samples and t - tm.samples[-1][0] > s.window_s):
+            inherited_queued = False
+            # Check existing queued tracks that recently went silent
+            for existing_tid, existing_tm in self._tracks.items():
+                if existing_tid != track_id and existing_tm.state == QUEUED and existing_tm.samples:
+                    last_s = existing_tm.samples[-1]
+                    if 0.1 <= t - existing_tm.last_t <= 2.0:
+                        if math.hypot(anchor_xy[0] - last_s[1], anchor_xy[1] - last_s[2]) <= max(last_s[3] * 0.75, 25.0):
+                            inherited_queued = True
+                            break
+            # Check recently pruned queued tracks
+            if not inherited_queued:
+                for rx, ry, rh, rt in self._recent_queued:
+                    if t - rt <= 2.0 and math.hypot(anchor_xy[0] - rx, anchor_xy[1] - ry) <= max(rh * 0.75, 25.0):
+                        inherited_queued = True
+                        break
             tm = _TrackMotion()
+            if inherited_queued:
+                tm.state = QUEUED
+                tm.below_since = t - s.enter_duration_s
             self._tracks[track_id] = tm
         if tm.samples and t <= tm.samples[-1][0]:
             return tm.state  # duplicate/held observation: no new motion information
@@ -183,5 +204,12 @@ class MotionStateClassifier:
         ttl = self.settings.track_ttl_s
         dead = [tid for tid, tm in self._tracks.items() if now_t - tm.last_t > ttl]
         for tid in dead:
+            tm = self._tracks[tid]
+            if tm.state == QUEUED and tm.samples:
+                last_sample = tm.samples[-1]
+                self._recent_queued.append((last_sample[1], last_sample[2], last_sample[3], tm.last_t))
             del self._tracks[tid]
+        # Clean up entries older than 5 seconds from recent queued
+        while self._recent_queued and now_t - self._recent_queued[0][3] > 5.0:
+            self._recent_queued.popleft()
         return len(dead)

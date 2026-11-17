@@ -360,6 +360,24 @@ class TestRunPlan(unittest.TestCase):
         self.assertEqual(names, ["north", "south", "east", "west", "northeast"])
         self.assertEqual(len(sources), 5)
 
+    def test_upstream_corridor_camera_is_opt_in(self):
+        from run_multi_camera import resolve_run_plan
+        names, _, _ = resolve_run_plan(self.parse("--cameras", "all"))
+        self.assertNotIn("north_upstream", names)
+        names, configs, _ = resolve_run_plan(self.parse("--cameras", "north", "north_upstream"))
+        self.assertEqual(names, ["north", "north_upstream"])
+        self.assertTrue(configs[1].endswith("config_north_upstream.json"))
+
+    def test_bundled_gate_ids_unique_across_all_cameras(self):
+        import json
+        from run_multi_camera import DEFAULT_CONFIGS, REPO_ROOT
+        seen = {}
+        for name, rel in DEFAULT_CONFIGS.items():
+            with open(os.path.join(REPO_ROOT, rel), encoding="utf-8") as f:
+                for g in json.load(f).get("gates", []):
+                    self.assertNotIn(g["gate_id"], seen, f"{g['gate_id']} in {name} and {seen.get(g['gate_id'])}")
+                    seen[g["gate_id"]] = name
+
     def test_source_count_must_match(self):
         from run_multi_camera import resolve_run_plan
         with self.assertRaises(ValueError):

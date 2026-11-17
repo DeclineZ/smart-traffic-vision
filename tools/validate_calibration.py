@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
             "config_east.json",
             "config_west.json",
             "config_northeast.json",
+            "config_north_upstream.json",  # opt-in corridor camera; checked so its gate IDs stay unique
         ]
         config_paths = [str(repo_root / "config" / name) for name in default_names]
 

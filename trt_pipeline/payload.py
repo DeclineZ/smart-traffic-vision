@@ -254,11 +254,17 @@ class PayloadBuilder:
             "meta": merged_meta,
             "lanes": [lane if "valid" in lane else {**lane, "valid": True, "invalidReason": None}
                       for lane in lanes_snapshot],
+            "outgoingfull": {"N": False, "E": False, "S": False, "W": False},
         }
         if cameras is not None:
             payload["cameras"] = cameras
         if traffic_flow:
             payload["traffic_flow"] = traffic_flow
+            if isinstance(traffic_flow.get("outgoingfull"), dict):
+                payload["outgoingfull"] = {
+                    d: bool(traffic_flow["outgoingfull"].get(d, False))
+                    for d in ("N", "E", "S", "W")
+                }
 
         return payload
 
